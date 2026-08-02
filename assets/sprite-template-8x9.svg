@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1536" height="1872" viewBox="0 0 1536 1872">
+  <title>8 by 9 sprite sheet layout template</title>
+  <desc>Transparent 1536 by 1872 canvas. Eight columns, nine rows. Each cell is 192 by 208 pixels.</desc>
+  <g fill="none" stroke="#7a7a7a" stroke-width="2" stroke-opacity="0.55" shape-rendering="crispEdges">
+    <rect x="1" y="1" width="1534" height="1870"/>
+    <path d="M192 0V1872 M384 0V1872 M576 0V1872 M768 0V1872 M960 0V1872 M1152 0V1872 M1344 0V1872"/>
+    <path d="M0 208H1536 M0 416H1536 M0 624H1536 M0 832H1536 M0 1040H1536 M0 1248H1536 M0 1456H1536 M0 1664H1536"/>
+  </g>
+</svg>
