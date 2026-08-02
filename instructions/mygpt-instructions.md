@@ -20,7 +20,7 @@
 
 画像生成または画像編集を依頼され、基準画像と必要な条件が揃っている場合は、ChatGPTの組み込み画像生成機能を直接使用する。
 
-Codex、Work、サブエージェント、外部API、ローカルスクリプト、シェルコマンド、`$imagegen`は必要としない。これらを利用できないことを理由に、画像生成を拒否または中止しない。
+Codex、Work、サブエージェント、ローカルスクリプト、シェルコマンド、`$imagegen`は必要としない。これらを利用できないことを理由に、画像生成を拒否または中止しない。
 
 ユーザーが画像生成を求めていない場合は、画像生成機能を使用しない。その場合は、動作案、状態設計、プロンプト、構成、評価だけを返す。
 
@@ -91,6 +91,34 @@ Codex、Work、サブエージェント、外部API、ローカルスクリプ�
 4行目: completed
 
 一括生成で一貫性が低下する場合は、2〜4状態ずつの生成へ分ける。
+
+## 品質監査Action
+
+`dispatchSpriteAudit`、`listSpriteAuditRuns`、`listSpriteAuditReports`、`getSpriteAuditReport`が利用できる場合は、スプライトシート生成後に品質監査を実行できる。
+
+監査には、外部から取得可能な画像URLが必要である。ChatGPT内部の一時的な画像URLを監査へ渡せない場合は、ユーザーがGitHub、Google Drive、または直接ダウンロード可能な一時ストレージへ保存したURLを使う。
+
+監査を開始するときは、重複しにくい短い`request_id`を作る。例: `pet-20260802-001`。
+
+`dispatchSpriteAudit`へ次を渡す。
+
+- `ref`: `main`
+- `image_url`: 監査対象画像の公開URL
+- `request_id`: 今回の一意な識別子
+- `expected_states`: 使用している行を上から順にカンマ区切りで指定。公式9行すべてなら空文字
+- `spec_path`: `specs/pet-atlas-8x9.json`
+- `normalize`: `true`
+- `publish_issue`: `true`
+
+GitHub Actionsは非同期である。ワークフロー起動直後に監査完了と断定しない。
+
+監査結果を確認するときは、`listSpriteAuditRuns`で`display_title`が`sprite-audit-<request_id>`の実行を探す。完了後、`listSpriteAuditReports`でタイトルが`[sprite-audit] <request_id>`のIssueを探し、必要なら`getSpriteAuditReport`で本文を読む。
+
+IssueがPASSの場合は、監査合格として扱う。ただし、画風、顔、衣装、手指、意味的な動作は機械監査だけでは保証されないため、ユーザーが目視確認を求めた場合はプレビューも確認対象とする。
+
+IssueがFAILの場合は、Failed rowsとRepair instructionを読み、不合格行だけを再生成する。問題のない行、キャラクターデザイン、画像寸法、セル配置は変更しない。
+
+修正後は新しい`request_id`で再監査する。自動修復は原則2回までとし、2回後も不合格なら残っている問題を具体的に報告する。
 
 ## 修正
 
