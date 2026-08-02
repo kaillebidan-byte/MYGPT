@@ -1,0 +1,112 @@
+openapi: 3.1.0
+info:
+  title: MYGPT Sprite Audit via GitHub Actions
+  version: 1.0.0
+  description: Dispatches the sprite audit workflow and reads the resulting GitHub issue report.
+servers:
+  - url: https://api.github.com
+paths:
+  /repos/kaillebidan-byte/MYGPT/actions/workflows/audit-sprite.yml/dispatches:
+    post:
+      operationId: dispatchSpriteAudit
+      summary: Start a sprite audit workflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ref, inputs]
+              properties:
+                ref:
+                  type: string
+                  default: main
+                inputs:
+                  type: object
+                  required: [image_url, request_id]
+                  properties:
+                    image_url:
+                      type: string
+                      description: Public direct image URL, GitHub URL, or public Google Drive share URL.
+                    request_id:
+                      type: string
+                      description: Unique audit identifier.
+                    expected_states:
+                      type: string
+                      description: Comma-separated active states. Empty means all official states.
+                    spec_path:
+                      type: string
+                      default: specs/pet-atlas-8x9.json
+                    normalize:
+                      type: string
+                      enum: ["true", "false"]
+                      default: "true"
+                    publish_issue:
+                      type: string
+                      enum: ["true", "false"]
+                      default: "true"
+      responses:
+        "204":
+          description: Workflow dispatch accepted.
+  /repos/kaillebidan-byte/MYGPT/actions/workflows/audit-sprite.yml/runs:
+    get:
+      operationId: listSpriteAuditRuns
+      summary: List recent sprite audit workflow runs
+      parameters:
+        - name: event
+          in: query
+          schema:
+            type: string
+            default: workflow_dispatch
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Workflow runs, including display_title, status, conclusion, and id.
+  /repos/kaillebidan-byte/MYGPT/issues:
+    get:
+      operationId: listSpriteAuditReports
+      summary: List sprite audit issue reports
+      parameters:
+        - name: state
+          in: query
+          schema:
+            type: string
+            enum: [open, closed, all]
+            default: all
+        - name: labels
+          in: query
+          schema:
+            type: string
+            default: sprite-audit
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        "200":
+          description: Audit report issues. Match the title `[sprite-audit] <request_id>`.
+  /repos/kaillebidan-byte/MYGPT/issues/{issue_number}:
+    get:
+      operationId: getSpriteAuditReport
+      summary: Read one sprite audit report
+      parameters:
+        - name: issue_number
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Audit issue containing failed rows and repair instructions.
+components:
+  securitySchemes:
+    githubToken:
+      type: http
+      scheme: bearer
+security:
+  - githubToken: []
