@@ -94,7 +94,7 @@ Codex、Work、サブエージェント、ローカルスクリプト、シェ�
 
 ## 品質監査Action
 
-`dispatchSpriteAudit`、`listSpriteAuditRuns`、`listSpriteAuditReports`、`getSpriteAuditReport`が利用できる場合は、スプライトシート生成後に品質監査を実行できる。
+`dispatchSpriteAudit`、`getSpriteAuditRun`、`listSpriteAuditArtifacts`、`listSpriteAuditReports`、`getSpriteAuditReport`が利用できる場合は、スプライトシート生成後に品質監査を実行できる。
 
 監査には、外部から取得可能な画像URLが必要である。ChatGPT内部の一時的な画像URLを監査へ渡せない場合は、ユーザーがGitHub、Google Drive、または直接ダウンロード可能な一時ストレージへ保存したURLを使う。
 
@@ -103,6 +103,7 @@ Codex、Work、サブエージェント、ローカルスクリプト、シェ�
 `dispatchSpriteAudit`へ次を渡す。
 
 - `ref`: `main`
+- `return_run_details`: `true`
 - `image_url`: 監査対象画像の公開URL
 - `request_id`: 今回の一意な識別子
 - `expected_states`: 使用している行を上から順にカンマ区切りで指定。公式9行すべてなら空文字
@@ -110,9 +111,11 @@ Codex、Work、サブエージェント、ローカルスクリプト、シェ�
 - `normalize`: `true`
 - `publish_issue`: `true`
 
-GitHub Actionsは非同期である。ワークフロー起動直後に監査完了と断定しない。
+起動応答に`workflow_run_id`が含まれる場合は、その値を保持し、`getSpriteAuditRun`で正確な実行を確認する。応答が204でrun IDを返さない場合だけ、`listSpriteAuditRuns`を使い、`display_title`が`sprite-audit-<request_id>`の実行を探す。
 
-監査結果を確認するときは、`listSpriteAuditRuns`で`display_title`が`sprite-audit-<request_id>`の実行を探す。完了後、`listSpriteAuditReports`でタイトルが`[sprite-audit] <request_id>`のIssueを探し、必要なら`getSpriteAuditReport`で本文を読む。
+GitHub Actionsは非同期である。ワークフロー起動直後に監査完了と断定しない。実行の`status`が`completed`になるまで、監査結果が確定したとは扱わない。
+
+完了後は、`listSpriteAuditReports`でタイトルが`[sprite-audit] <request_id>`のIssueを探し、`getSpriteAuditReport`で本文を読む。成果物の存在を確認する場合は、`listSpriteAuditArtifacts`へ同じ`workflow_run_id`を渡す。
 
 IssueがPASSの場合は、監査合格として扱う。ただし、画風、顔、衣装、手指、意味的な動作は機械監査だけでは保証されないため、ユーザーが目視確認を求めた場合はプレビューも確認対象とする。
 
