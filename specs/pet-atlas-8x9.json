@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "name": "Codex-compatible pet atlas 8x9",
+  "canvas": {
+    "width": 1536,
+    "height": 1872,
+    "columns": 8,
+    "rows": 9,
+    "cell_width": 192,
+    "cell_height": 208
+  },
+  "states": [
+    "idle",
+    "running-right",
+    "running-left",
+    "waving",
+    "jumping",
+    "failed",
+    "waiting",
+    "running",
+    "review"
+  ],
+  "animation": {
+    "frames_per_state": 8,
+    "fps": 8,
+    "loop": true
+  },
+  "audit": {
+    "alpha_threshold": 8,
+    "transparent_rgb_tolerance": 2,
+    "transparent_rgb_failure_ratio": 0.005,
+    "edge_margin_px": 2,
+    "baseline_tolerance_px": 6,
+    "height_cv_tolerance": 0.1,
+    "width_cv_tolerance": 0.15,
+    "near_duplicate_mad": 0.35,
+    "low_motion_mad_warning": 2.0,
+    "target_cell_occupancy": 0.78,
+    "normalization_padding_px": 8
+  }
+}
