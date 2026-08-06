@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MYGPT Sprite Audit via GitHub Actions
-  version: 1.1.1
+  version: 1.1.2
   description: Dispatches the sprite audit workflow, tracks its exact run, and reads the resulting GitHub issue report.
 servers:
   - url: https://api.github.com
@@ -134,6 +134,7 @@ paths:
         "200":
           description: Audit issue containing failed rows and repair instructions.
 components:
+  schemas: {}
   securitySchemes:
     githubToken:
       type: http
