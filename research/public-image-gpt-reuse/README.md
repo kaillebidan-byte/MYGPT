@@ -20,7 +20,6 @@ MYGPTは一から設計し直す必要はない。
 ## 資料
 
 - [source-matrix.md](source-matrix.md) — 公開資料とライセンス、流用価値
-- [source-extracts.md](source-extracts.md) — 公開Instructionsの要点とMYGPTへの変換
 - [reusable-components.md](reusable-components.md) — 採用する設計部品と不採用部分
 - [current-repository-findings.md](current-repository-findings.md) — 現行MYGPTの構造上の問題
 - [target-structure.md](target-structure.md) — 次段階で作るリポジトリ構成
