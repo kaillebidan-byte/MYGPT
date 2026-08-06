@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "name": "motion-keypose-2x2",
+  "input": {
+    "columns": 2,
+    "rows": 2,
+    "keypose_order": [
+      "rest",
+      "anticipation",
+      "peak",
+      "return"
+    ],
+    "inbetween_order": [
+      "rest-to-anticipation",
+      "anticipation-to-peak",
+      "peak-to-return",
+      "return-to-rest"
+    ],
+    "alpha_threshold": 8,
+    "edge_margin_px": 12
+  },
+  "output": {
+    "cell_width": 256,
+    "cell_height": 320,
+    "padding_px": 16,
+    "max_upscale": 1.25,
+    "format": "PNG"
+  }
+}

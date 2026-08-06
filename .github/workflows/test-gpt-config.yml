@@ -7,6 +7,8 @@ on:
       - "README.md"
       - "PRIVACY.md"
       - "audit/docs/**"
+      - "audit/scripts/build_motion_strip.py"
+      - "audit/specs/motion-keypose-2x2.json"
       - ".github/workflows/audit-sprite.yml"
       - ".github/workflows/test-gpt-config.yml"
   pull_request:
@@ -15,6 +17,8 @@ on:
       - "README.md"
       - "PRIVACY.md"
       - "audit/docs/**"
+      - "audit/scripts/build_motion_strip.py"
+      - "audit/specs/motion-keypose-2x2.json"
       - ".github/workflows/audit-sprite.yml"
       - ".github/workflows/test-gpt-config.yml"
 
@@ -42,6 +46,7 @@ jobs:
       - name: Validate reconstructed GPT configuration
         run: |
           python - <<'PY'
+          import json
           from pathlib import Path
           from urllib.parse import urlparse
 
@@ -62,6 +67,9 @@ jobs:
               "gpt/experimental-audit/instructions-addon.md",
               "gpt/experimental-audit/github-audit-openapi.yaml",
               "gpt/experimental-audit/test-cases.md",
+              "audit/scripts/build_motion_strip.py",
+              "audit/specs/motion-keypose-2x2.json",
+              "audit/docs/keypose-motion-pipeline.md",
               ".github/workflows/audit-sprite.yml",
           ]
 
@@ -79,9 +87,10 @@ jobs:
           for required_phrase in [
               "画像生成機能を直接使用する",
               "単一画像モード",
-              "モーションモード",
+              "モーション素材モード",
+              "4つの大きなキーポーズを2×2配置",
+              "同じ画像の複製や単純な水増しで8フレームにしない",
               "character-identity-reference.md",
-              "motion-vocabulary.md",
               "sprite-output-spec.md",
           ]:
               assert required_phrase in instructions, f"Production instruction missing: {required_phrase}"
@@ -96,6 +105,29 @@ jobs:
               assert forbidden_phrase not in instructions, (
                   f"Production instructions contain audit or internal-path detail: {forbidden_phrase}"
               )
+
+          assert "モーションのフレーム数が未指定なら8フレーム" not in Path(
+              "gpt/production/README.md"
+          ).read_text(encoding="utf-8")
+
+          motion_spec = json.loads(
+              Path("audit/specs/motion-keypose-2x2.json").read_text(encoding="utf-8")
+          )
+          assert motion_spec["input"]["columns"] == 2
+          assert motion_spec["input"]["rows"] == 2
+          assert len(motion_spec["input"]["keypose_order"]) == 4
+          assert len(motion_spec["input"]["inbetween_order"]) == 4
+          assert motion_spec["output"]["cell_width"] > 0
+          assert motion_spec["output"]["cell_height"] > 0
+
+          builder_text = Path("audit/scripts/build_motion_strip.py").read_text(encoding="utf-8")
+          for required_phrase in [
+              "--inbetween-board",
+              "common_scale",
+              "must contain transparent background pixels",
+              "too close to cell edges",
+          ]:
+              assert required_phrase in builder_text, f"Motion builder missing: {required_phrase}"
 
           spec_path = Path("gpt/experimental-audit/github-audit-openapi.yaml")
           spec = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
