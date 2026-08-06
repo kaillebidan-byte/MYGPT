@@ -4,7 +4,7 @@
 
 GPT Builderで新しいGPTを作成し、画像生成機能を有効にします。
 
-アクションの追加は不要です。
+このプロジェクトの自動品質監査を使う場合は、`actions/github-audit-openapi.yaml`をActionsへ追加します。画像生成だけを試す場合はActionなしでも動作しますが、監査は実行されません。
 
 ## 2. Knowledgeへアップロードする
 
@@ -20,7 +20,20 @@ OpenAI公式の生の`hatch-pet-SKILL.md`は同時に入れません。Codex専�
 
 `instructions/mygpt-instructions.md`の本文を、GPT BuilderのInstructions欄へ貼り付けます。
 
-## 4. テンプレートを使う
+## 4. Actionを設定する
+
+1. `actions/github-audit-openapi.yaml`をActionsへ読み込みます。
+2. AuthenticationはAPI Keyを選びます。
+3. Auth typeはBearerにします。
+4. `MYGPT`リポジトリだけを対象にしたGitHub fine-grained personal access tokenを登録します。
+5. Repository permissionsは次の通りです。
+
+- Contents: Read and write
+- Actions: Read-only
+- Issues: Read-only
+- Metadata: Read-only（自動付与）
+
+## 5. テンプレートを使う
 
 `assets/sprite-template-8x9.svg`は次の仕様です。
 
@@ -33,7 +46,7 @@ OpenAI公式の生の`hatch-pet-SKILL.md`は同時に入れません。Codex専�
 
 テンプレートは配置だけの基準です。最終画像には枠線を残さないよう指示します。
 
-## 5. 最初の試験
+## 6. 最初の試験
 
 新しいチャットで基準画像を添付し、単一状態から試します。
 
@@ -49,7 +62,7 @@ OpenAI公式の生の`hatch-pet-SKILL.md`は同時に入れません。Codex専�
 各行8フレームの独立した自然なループ。残りの行は透過のまま。テンプレートの枠線は最終画像へ残さない。
 ```
 
-## 6. 修正
+## 7. 修正
 
 一部だけ崩れた場合は、対象行を指定します。
 
