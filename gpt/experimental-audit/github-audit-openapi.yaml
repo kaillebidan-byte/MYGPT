@@ -8,7 +8,8 @@ info:
     and returning a stable audit identifier. This schema requires a separately deployed
     receiver service. Do not point it directly at api.github.com.
 servers:
-  - url: https://REPLACE_WITH_AUDIT_RECEIVER
+  - url: https://audit-receiver.example.com
+    description: Replace with the deployed audit receiver HTTPS origin before importing.
 paths:
   /audits:
     post:
