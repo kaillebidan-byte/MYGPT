@@ -2,10 +2,11 @@
 
 生成後のGitHub監査連携を、本番の画像生成設定から分離して検証する領域。
 
-予定ファイル:
+## ファイル
 
-- `instructions-addon.md` — 監査を明示された場合だけ使う追加指示
-- `github-audit-openapi.yaml` — 検証用Actionスキーマ
-- `test-cases.md` — ファイル受け渡しと失敗時処理の実機試験
+- `README.md` — この領域の目的と境界
+- `test-cases.md` — ファイル受け渡しと失敗状態の検証項目
+- `instructions-addon.md` — 次段階で作成
+- `github-audit-openapi.yaml` — 次段階で作成
 
 再編前のActionスキーマは`legacy/actions/`に保存している。安定性を確認するまでは本番GPTへ接続しない。
