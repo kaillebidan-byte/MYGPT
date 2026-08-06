@@ -32,14 +32,27 @@ GitHub Actionsは`.github/workflows/`に置く必要があるため、次のwork
 - `.github/workflows/audit-sprite.yml`
 - `.github/workflows/test-audit-scripts.yml`
 
-両workflowの依存先は`audit/requirements.txt`、`audit/scripts/`、`audit/specs/`へ変更した。
+`audit-sprite.yml`は配置だけを維持し、実装内容は監査受付APIから`image_url`を受け取る方式へ再構築した。OpenAIのファイル参照をGitHub workflowが直接解釈する旧処理は削除した。
 
-`PRIVACY.md`はAction公開時に参照しやすいようルートへ残し、監査連携が実験段階であることを追記した。
+`test-audit-scripts.yml`の依存先は`audit/requirements.txt`、`audit/scripts/`、`audit/specs/`へ変更した。
 
-## 新設領域
+## 新規追加したworkflow
 
-- `gpt/production/` — 新しい本番GPT設定
-- `gpt/knowledge/` — 新しい参照Knowledge
-- `gpt/experimental-audit/` — 監査連携の実験設定
+- `.github/workflows/test-gpt-config.yml` — 本番GPTファイル、Knowledge、OpenAPI、監査workflow構造を検証
+
+## ルートへ残したファイル
+
+`PRIVACY.md`はAction公開時に参照しやすいようルートへ残し、監査受付API方式に合わせて全面更新した。
+
+## 白紙から新設した領域
+
+- `gpt/production/` — 本番Instructions、説明、会話例、Builder設定
+- `gpt/knowledge/` — キャラクター同一性、動作語彙、スプライト仕様
+- `gpt/experimental-audit/` — 監査用追加指示、受付API契約、実機試験
+
+これらは旧ファイルの移動先ではない。再編前の本文をコピーせず新規作成した。
+
+## 既存資産を整理した領域
+
 - `audit/` — GPTから独立した監査サブシステム
 - `legacy/` — 再編前設定の保存領域
