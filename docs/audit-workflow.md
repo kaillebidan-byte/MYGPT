@@ -5,9 +5,11 @@
 ```text
 My GPTで画像生成
     ↓
-画像をGitHubまたはGoogle Driveへ公開共有
+生成画像をopenaiFileIdRefsでActionへ直接添付
     ↓
-My GPT ActionがGitHub Actionsを起動
+GitHub repository_dispatch
+    ↓
+GitHub Actionsが一時URLから画像を取得
     ↓
 Python監査スクリプトが検査・補正
     ↓
@@ -21,25 +23,7 @@ GitHub Issueに失敗行と修復指示を掲載
 My GPTが不合格行だけ再生成
 ```
 
-GitHub Actionsは非同期なので、同じ応答内で監査完了まで待てない場合がある。その場合は、後続のメッセージで同じ`request_id`のワークフロー実行または`[sprite-audit] <request_id>`Issueを確認する。
-
-## 手動テスト
-
-GitHubのActionsタブから`Audit sprite atlas`を選び、`Run workflow`を押す。
-
-入力:
-
-- `image_url`: 公開画像URL。GitHubのblob/raw URLと公開Google Drive共有URLに対応
-- `request_id`: `test-001`など一意な値
-- `expected_states`: 部分シートの場合のみ、上から順にカンマ区切りで指定
-- `normalize`: 補正版WebPを作るか
-- `publish_issue`: 結果をIssueへ掲載するか
-
-完全な公式9行なら`expected_states`は空欄でよい。4行だけ使う場合は、例として次のように入力する。
-
-```text
-searching,validating,confused,completed
-```
+生成画像をユーザーがダウンロード、GitHubへアップロード、Google Driveへ共有する工程はない。
 
 ## My GPT Action設定
 
@@ -47,19 +31,49 @@ searching,validating,confused,completed
 2. AuthenticationはAPI Keyを選ぶ。
 3. Auth typeはBearerにする。
 4. GitHubのfine-grained personal access tokenを登録する。
-5. トークンはこのリポジトリだけを対象にし、ActionsのRead and write、IssuesのRead and write、MetadataのRead-onlyだけを付与する。
+5. トークンは`MYGPT`リポジトリだけを対象にする。
+6. Repository permissionsを次のように設定する。
 
-広い`repo`権限を持つclassic PATは避ける。
+- Contents: Read and write
+- Actions: Read-only
+- Issues: Read-only
+- Metadata: Read-only（自動付与）
 
-## 画像URL
+`repository_dispatch`の起動にはContents write、実行状態とArtifactの取得にはActions read、監査Issueの取得にはIssues readを使う。
 
-ChatGPT内部の生成画像URLは短時間で無効になる可能性がある。監査入力には次のいずれかを使う。
+## 自動送信
 
-- GitHubへアップロードした画像のURL
-- 公開Google Drive共有URL
-- 一時ストレージの直接ダウンロードURL
+Actionの`dispatchSpriteAudit`は、会話内で生成された画像を`client_payload.openaiFileIdRefs`として1枚受け取る。
 
-非公開画像を扱う場合は、公開URL方式ではなく、認証付きの専用監査APIへ移行する。
+送信内容:
+
+- `event_type`: `sprite_audit`
+- `client_payload.openaiFileIdRefs`: 今回生成した画像1枚
+- `client_payload.request_id`: `pet-20260806-001`など一意な値
+- `client_payload.expected_states`: 部分シートで使う状態を上から順にカンマ区切り
+- `client_payload.spec_path`: `specs/pet-atlas-8x9.json`
+- `client_payload.normalize`: `true`
+- `client_payload.publish_issue`: `true`
+
+完全な公式9行なら`expected_states`は空欄でよい。4行だけ使う場合の例:
+
+```text
+searching,validating,confused,completed
+```
+
+OpenAIのActionランタイムは`openaiFileIdRefs`を、`name`、`id`、`mime_type`、5分有効の`download_link`を持つオブジェクト配列へ変換する。ワークフローは開始直後にこのURLを取得する。
+
+## 結果確認
+
+repository dispatchは起動時にrun IDを返さない。
+
+1. `listSpriteAuditRuns`で`display_title`が`sprite-audit-<request_id>`の実行を探す。
+2. `getSpriteAuditRun`で`status=completed`になるまで確認する。
+3. `listSpriteAuditReports`で`[sprite-audit] <request_id>`というIssueを探す。
+4. `getSpriteAuditReport`でFailed rowsとRepair instructionを読む。
+5. 必要なら`listSpriteAuditArtifacts`で成果物を確認する。
+
+GitHub Actionsは非同期なので、同じ応答内で完了しない場合は後続メッセージで確認する。
 
 ## 出力
 
@@ -86,3 +100,7 @@ ChatGPT内部の生成画像URLは短時間で無効になる可能性がある�
 - 動きが小さすぎる可能性
 
 画風、顔、衣装、手指、意味的な動作の正しさは画素監査だけでは完全に判定できない。`contact-sheet.png`と`preview.gif`による目視確認を併用する。
+
+## ファイル参照が失敗した場合
+
+生成画像の`openaiFileIdRefs`受け渡しが失敗した場合は、手動アップロードへ切り替えない。監査Actionへ直接渡せなかったことを報告し、監査未実施として扱う。
