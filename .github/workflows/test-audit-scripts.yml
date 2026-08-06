@@ -3,15 +3,15 @@ name: Test sprite audit scripts
 on:
   push:
     paths:
-      - "scripts/**"
-      - "specs/**"
-      - "requirements.txt"
+      - "audit/scripts/**"
+      - "audit/specs/**"
+      - "audit/requirements.txt"
       - ".github/workflows/test-audit-scripts.yml"
   pull_request:
     paths:
-      - "scripts/**"
-      - "specs/**"
-      - "requirements.txt"
+      - "audit/scripts/**"
+      - "audit/specs/**"
+      - "audit/requirements.txt"
       - ".github/workflows/test-audit-scripts.yml"
 
 permissions:
@@ -29,8 +29,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: audit/requirements.txt
 
-      - run: python -m pip install -r requirements.txt
+      - run: python -m pip install -r audit/requirements.txt
 
       - name: Create synthetic 8x9 atlas
         run: |
@@ -54,9 +55,9 @@ jobs:
 
       - name: Run audit pipeline
         run: |
-          python scripts/audit_sprite.py \
+          python audit/scripts/audit_sprite.py \
             test-output/synthetic-atlas.png \
-            --spec specs/pet-atlas-8x9.json \
+            --spec audit/specs/pet-atlas-8x9.json \
             --output-dir test-output/audit
 
       - name: Verify outputs
