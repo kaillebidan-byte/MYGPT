@@ -2,34 +2,39 @@
 
 ## 到着点
 
-公開画像生成GPTの動作を生成コアとして流用し、MYGPT固有部分を薄い追加層にする。再編前の設定は削除せず`legacy/`へ退避し、監査実装は`audit/`へ分離する。
+公開画像生成GPTからは、画像生成を直接実行する、参照画像の特徴を維持する、変更範囲を限定する、軽微な不足を補完する、という設計原則だけを流用する。
+
+現行の本番Instructions、Knowledge、監査連携は、再編前MYGPTの本文をコピーせず白紙から再構築する。再編前の設定は`legacy/`へ退避し、既存監査ロジックは`audit/`へ分離する。
 
 ```text
 MYGPT/
 ├─ gpt/
 │  ├─ production/
 │  │  ├─ README.md
-│  │  ├─ instructions.md              # 次段階で作成
-│  │  ├─ description.md               # 次段階で作成
-│  │  ├─ conversation-starters.md     # 次段階で作成
-│  │  └─ builder-settings.md          # 次段階で作成
+│  │  ├─ instructions.md
+│  │  ├─ description.md
+│  │  ├─ conversation-starters.md
+│  │  └─ builder-settings.md
 │  ├─ knowledge/
 │  │  ├─ README.md
-│  │  ├─ character-identity-reference.md  # 次段階で作成
-│  │  ├─ motion-vocabulary.md             # 次段階で作成
-│  │  └─ sprite-output-spec.md            # 次段階で作成
+│  │  ├─ character-identity-reference.md
+│  │  ├─ motion-vocabulary.md
+│  │  └─ sprite-output-spec.md
 │  └─ experimental-audit/
 │     ├─ README.md
-│     ├─ instructions-addon.md         # 次段階で作成
-│     ├─ github-audit-openapi.yaml     # 次段階で作成
-│     └─ test-cases.md                 # 次段階で作成
+│     ├─ instructions-addon.md
+│     ├─ github-audit-openapi.yaml
+│     └─ test-cases.md
 ├─ audit/
 │  ├─ README.md
 │  ├─ assets/
 │  ├─ docs/
 │  ├─ scripts/
 │  ├─ specs/
+│  ├─ templates/
 │  └─ requirements.txt
+├─ research/
+│  └─ public-image-gpt-reuse/
 ├─ legacy/
 │  ├─ README.md
 │  ├─ instructions/
@@ -37,27 +42,27 @@ MYGPT/
 │  ├─ actions/
 │  ├─ docs/
 │  └─ examples/
-├─ research/
-│  └─ public-image-gpt-reuse/
 ├─ .github/
 │  └─ workflows/
-│     └─ audit-sprite.yml
+│     ├─ audit-sprite.yml
+│     └─ test-audit-scripts.yml
+├─ PRIVACY.md
 └─ README.md
 ```
 
 ## `gpt/production`
 
-My GPTエディターへ実際に設定する内容だけを置く。
+My GPTエディターへ実際に設定する本番内容だけを置く。
 
-含める内容:
+実装済み:
 
 - 画像生成依頼では画像生成Capabilityを直接使う
 - 添付画像をキャラクターデザインの正本にする
 - 指定された動作、ポーズ、表情だけを変える
 - 明示されていない要素を維持する
 - 軽微な不足は合理的に補う
-- 単発依頼は一枚の差分画像として扱う
-- スプライト指定がある場合だけKnowledgeを参照する
+- 静止画とモーションを依頼語から分ける
+- 「モーション」「アニメーション」「フレーム」「スプライト」がある場合だけ複数フレーム仕様を使う
 - 修正時は指定部分だけを変更する
 
 含めない内容:
@@ -72,49 +77,70 @@ My GPTエディターへ実際に設定する内容だけを置く。
 
 参照資料だけを置く。
 
-- `character-identity-reference.md`: キャラクター同一性の比較観点
+- `character-identity-reference.md`: 顔、髪、衣装、体格、画風などの比較観点
 - `motion-vocabulary.md`: 状態名と視覚的な動作例
-- `sprite-output-spec.md`: フレーム数、透明背景、セル、ループ要件
+- `sprite-output-spec.md`: モーションのフレーム数、透明背景、セル、ループ要件
 
 実行命令とAction手順は置かない。
 
 ## `gpt/experimental-audit`
 
-生成後監査を本番生成版から隔離して検証する。
+生成後監査を本番画像生成版から隔離して検証する。
 
-旧Actionスキーマは`legacy/actions/`に保存した。検証版では次の2案を比較する。
+採用した設計:
 
-### 案A: GitHub APIへ直接dispatch
+```text
+実験GPT
+  → 監査受付API
+  → 短期ストレージ
+  → GitHub repository_dispatch
+  → GitHub Actions
+```
 
-構成は少ないが、`openaiFileIdRefs`を`client_payload`へ入れ子にする必要があり、生成画像参照の安定性に問題がある。
+GitHub APIへ直接`openaiFileIdRefs`を入れ子で送る旧案は採用しない。旧スキーマは`legacy/actions/`へ保存する。
 
-### 案B: 監査受付API
+実装済み:
 
-GPT Actionはトップレベルの`openaiFileIdRefs`、`request_id`、`expected_states`を受付APIへ送る。受付APIが画像取得、保存、GitHub dispatch、runとの関連付けを行う。
+- 監査用Instructions add-on
+- 受付APIのOpenAPI契約
+- 実機テスト項目
+- 受付APIからの`image_url`を受けるGitHub workflow
+
+未実装:
+
+- 監査受付API本体
+- 一時画像ストレージ
+- GPTエディター上のAction実機試験
 
 ## `audit`
 
-画像生成GPTから独立した通常の監査ソフトウェアとして扱う。
+画像生成GPTから独立した監査ソフトウェアとして扱う。
 
-移動済み:
+既存資産として維持したもの:
 
-- `scripts/` → `audit/scripts/`
-- `specs/` → `audit/specs/`
-- `assets/` → `audit/assets/`
-- `requirements.txt` → `audit/requirements.txt`
-- `docs/audit-workflow.md` → `audit/docs/audit-workflow.md`
+- `audit/scripts/`
+- `audit/specs/`
+- `audit/assets/`
+- `audit/templates/`
+- `audit/requirements.txt`
 
-GitHub Actionsの配置要件により、workflow本体は`.github/workflows/audit-sprite.yml`へ残している。内部参照は新しい`audit/`配下へ変更済み。
+接続部分は再構築した。`.github/workflows/audit-sprite.yml`は受付APIが作成した許可済みHTTPS URLから画像を取得する。
 
 ## `legacy`
 
-再編前のInstructions、Knowledge、Action、導入文書、プロンプト例を保存する。履歴確認用であり、本番設定へ使わない。
+再編前のInstructions、Knowledge、Action、導入文書、プロンプト例を保存する。
 
-## 実装順
+- 比較と履歴確認だけに使う
+- 現行GPTへ設定しない
+- 新しい本番文書へ本文をコピーしない
 
-1. フォルダ再編と旧構成の退避。完了。
-2. `gpt/production/`へ公開GPT流用版の短いInstructionsを作る。
-3. 単発画像でPreviewテストする。
-4. 同一性、動作語彙、スプライト仕様を`gpt/knowledge/`へ分離する。
-5. `gpt/experimental-audit/`でファイル受け渡しを再検証する。
-6. 安定した場合だけ監査を本番GPTへ追加する。
+## 実装状況
+
+1. フォルダ再編と旧構成の退避: 完了
+2. 本番Instructions、説明、会話例、Builder設定の新規作成: 完了
+3. Knowledgeの新規作成: 完了
+4. 監査受付API方式の契約とworkflow再設計: 完了
+5. 本番GPTのPreview試験: 未実施
+6. 監査受付API本体の実装: 未実施
+7. 監査Actionの実機試験: 未実施
+8. 監査を本番GPTへ統合するかの判断: 未実施
