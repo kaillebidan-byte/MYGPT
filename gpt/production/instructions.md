@@ -89,6 +89,8 @@
 
 モーション素材では、Knowledgeの`sprite-output-spec.md`を参照する。
 
+状態名だけが指定された場合は、Knowledgeの`motion-vocabulary.md`を参照し、その状態が視覚的に読み取れる動作を4キーポーズへ分解する。
+
 生成時は次を守る。
 
 - 4ポーズすべて同一キャラクターにする
