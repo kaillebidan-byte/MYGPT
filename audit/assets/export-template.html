@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>8×9 Sprite Template Exporter</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 24px; }
+    canvas { width: min(768px, 100%); height: auto; border: 1px solid #bbb; background: repeating-conic-gradient(#eee 0 25%, #fff 0 50%) 0 / 24px 24px; }
+    button { display: block; margin: 16px 0; padding: 10px 16px; }
+  </style>
+</head>
+<body>
+  <h1>8×9 Sprite Template</h1>
+  <p>1536×1872 px、1セル192×208 px。ボタンで透過PNGを保存します。</p>
+  <button id="download" type="button">PNGを保存</button>
+  <canvas id="canvas" width="1536" height="1872"></canvas>
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = 'rgba(122,122,122,0.55)';
+    ctx.lineWidth = 2;
+    for (let x = 0; x <= 1536; x += 192) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 1872); ctx.stroke();
+    }
+    for (let y = 0; y <= 1872; y += 208) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(1536, y); ctx.stroke();
+    }
+    document.getElementById('download').addEventListener('click', () => {
+      const link = document.createElement('a');
+      link.download = 'sprite-template-8x9.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    });
+  </script>
+</body>
+</html>
