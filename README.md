@@ -12,6 +12,7 @@
 - 本番Knowledgeは`gpt/knowledge/`へ新規作成済み
 - 監査試験設定は`gpt/experimental-audit/`へ新規作成済み
 - GitHub Actionsは`audit/`配下のコードを参照するよう更新済み
+- GPT構成、OpenAPI、workflow構造のCIを追加済み
 - 監査受付API本体は未実装
 
 `legacy/`の内容は比較と履歴確認用であり、現行のMy GPTへそのまま設定しない。
@@ -45,8 +46,9 @@ legacy/
 .github/workflows/
   audit-sprite.yml        実験監査workflow
   test-audit-scripts.yml  監査コードのスモークテスト
+  test-gpt-config.yml     GPT構成とOpenAPIの検証
 
-PRIVACY.md                監査Actionのプライバシー説明
+PRIVACY.md                実験監査のプライバシー説明
 ```
 
 ## 本番GPT
