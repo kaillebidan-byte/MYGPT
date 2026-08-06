@@ -1,43 +1,46 @@
 openapi: 3.1.0
 info:
   title: MYGPT Sprite Audit via GitHub Actions
-  version: 1.1.2
-  description: Dispatches the sprite audit workflow, tracks its exact run, and reads the resulting GitHub issue report.
+  version: 2.0.0
+  description: Sends one image generated in the current GPT conversation directly to GitHub Actions for sprite quality auditing.
 servers:
   - url: https://api.github.com
 paths:
-  /repos/kaillebidan-byte/MYGPT/actions/workflows/audit-sprite.yml/dispatches:
+  /repos/kaillebidan-byte/MYGPT/dispatches:
     post:
       operationId: dispatchSpriteAudit
-      summary: Start a sprite audit workflow and return its run details
+      summary: Audit the generated sprite image from this conversation
+      description: Send exactly one PNG, WebP, or JPEG image generated in the current conversation. Do not ask the user to upload the image to GitHub or another storage service.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [ref, inputs]
+              required: [event_type, client_payload]
               properties:
-                ref:
+                event_type:
                   type: string
-                  default: main
-                return_run_details:
-                  type: boolean
-                  default: true
-                  description: Return workflow run ID and URLs in the dispatch response.
-                inputs:
+                  enum: [sprite_audit]
+                  default: sprite_audit
+                client_payload:
                   type: object
-                  required: [image_url, request_id]
+                  required: [openaiFileIdRefs, request_id]
                   properties:
-                    image_url:
-                      type: string
-                      description: Public direct image URL, GitHub URL, or public Google Drive share URL.
+                    openaiFileIdRefs:
+                      type: array
+                      minItems: 1
+                      maxItems: 1
+                      items:
+                        type: string
+                      description: Exactly one sprite image generated in the current conversation. PNG, WebP, and JPEG are accepted. Use the generated image directly; do not request a manual upload.
                     request_id:
                       type: string
+                      pattern: ^[A-Za-z0-9._-]{1,80}$
                       description: Unique audit identifier.
                     expected_states:
                       type: string
-                      description: Comma-separated active states. Empty means all official states.
+                      description: Comma-separated active states in row order. Empty means all official nine states.
                     spec_path:
                       type: string
                       default: specs/pet-atlas-8x9.json
@@ -48,10 +51,27 @@ paths:
                       type: boolean
                       default: true
       responses:
-        "200":
-          description: Workflow dispatch accepted. Includes workflow_run_id, run_url, and html_url.
         "204":
-          description: Workflow dispatch accepted without run details when return_run_details is omitted or unsupported.
+          description: Audit event accepted by GitHub.
+  /repos/kaillebidan-byte/MYGPT/actions/workflows/audit-sprite.yml/runs:
+    get:
+      operationId: listSpriteAuditRuns
+      summary: List recent sprite audit workflow runs
+      parameters:
+        - name: event
+          in: query
+          schema:
+            type: string
+            enum: [repository_dispatch]
+            default: repository_dispatch
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Workflow runs including display_title, status, conclusion, and id.
   /repos/kaillebidan-byte/MYGPT/actions/runs/{run_id}:
     get:
       operationId: getSpriteAuditRun
@@ -78,24 +98,6 @@ paths:
       responses:
         "200":
           description: Artifact metadata including artifact ID, name, expiry, and download URL.
-  /repos/kaillebidan-byte/MYGPT/actions/workflows/audit-sprite.yml/runs:
-    get:
-      operationId: listSpriteAuditRuns
-      summary: List recent sprite audit workflow runs as a fallback
-      parameters:
-        - name: event
-          in: query
-          schema:
-            type: string
-            default: workflow_dispatch
-        - name: per_page
-          in: query
-          schema:
-            type: integer
-            default: 20
-      responses:
-        "200":
-          description: Workflow runs, including display_title, status, conclusion, and id.
   /repos/kaillebidan-byte/MYGPT/issues:
     get:
       operationId: listSpriteAuditReports
