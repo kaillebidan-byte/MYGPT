@@ -92,23 +92,48 @@ jobs:
               "同じ画像の複製や単純な水増しで8フレームにしない",
               "character-identity-reference.md",
               "sprite-output-spec.md",
+              "画像表示の成功条件",
+              "画像が会話画面へ実際に表示された場合だけ成功",
+              "同じ依頼で画像生成機能を一度だけ再実行する",
+              "画像を会話内に表示できませんでした。もう一度生成を依頼してください。",
           ]:
               assert required_phrase in instructions, f"Production instruction missing: {required_phrase}"
+
+          for failure_marker in [
+              "/mnt/data/...",
+              "sandbox:/...",
+              "ファイル名だけが返った",
+              "内部パスをMarkdownリンクへ変換して代用しない",
+          ]:
+              assert failure_marker in instructions, (
+                  f"Production instructions do not cover path-only failure: {failure_marker}"
+              )
 
           for forbidden_phrase in [
               "openaiFileIdRefs",
               "repository_dispatch",
               "dispatchSpriteAudit",
-              "/mnt/data",
-              "sandbox:/",
           ]:
               assert forbidden_phrase not in instructions, (
-                  f"Production instructions contain audit or internal-path detail: {forbidden_phrase}"
+                  f"Production instructions contain audit detail: {forbidden_phrase}"
               )
 
-          assert "モーションのフレーム数が未指定なら8フレーム" not in Path(
-              "gpt/production/README.md"
-          ).read_text(encoding="utf-8")
+          production_readme = Path("gpt/production/README.md").read_text(encoding="utf-8")
+          assert "モーションのフレーム数が未指定なら8フレーム" not in production_readme
+          assert "画像本体が会話画面へ表示された場合だけ成功" in production_readme
+          assert "内部パスだけが返らないことを回帰確認する" in production_readme
+
+          builder_settings = Path("gpt/production/builder-settings.md").read_text(encoding="utf-8")
+          for required_phrase in [
+              "画像表示の回帰試験",
+              "/mnt/data/...だけが表示された",
+              "ファイル名だけが表示された",
+              "Image generationがON",
+              "Code Interpreter & Data AnalysisがOFF",
+          ]:
+              assert required_phrase in builder_settings, (
+                  f"Builder settings missing output regression check: {required_phrase}"
+              )
 
           motion_spec = json.loads(
               Path("audit/specs/motion-keypose-2x2.json").read_text(encoding="utf-8")
