@@ -23,9 +23,10 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: audit/requirements.txt
 
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        run: python -m pip install -r audit/requirements.txt
 
       - name: Receive generated image from GPT Action
         shell: bash
@@ -75,7 +76,9 @@ jobs:
           if not request_id:
               raise SystemExit("request_id is required")
           expected_states = str(payload.get("expected_states") or "")
-          spec_path = str(payload.get("spec_path") or "specs/pet-atlas-8x9.json")
+          spec_path = str(payload.get("spec_path") or "audit/specs/pet-atlas-8x9.json")
+          if spec_path == "specs/pet-atlas-8x9.json":
+              spec_path = "audit/specs/pet-atlas-8x9.json"
           normalize = str(payload.get("normalize", True)).lower()
           publish_issue = str(payload.get("publish_issue", True)).lower()
 
@@ -107,7 +110,7 @@ jobs:
           if [[ "$NORMALIZE" == "false" ]]; then
             args+=(--no-normalize)
           fi
-          python scripts/audit_sprite.py "${args[@]}"
+          python audit/scripts/audit_sprite.py "${args[@]}"
           exit_code=$?
           echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
           exit 0
