@@ -33,14 +33,17 @@ jobs:
 
       - run: python -m pip install -r audit/requirements.txt
 
-      - name: Create synthetic 8x9 atlas
+      - name: Create synthetic 8x9 atlas and 2x2 pose boards
         run: |
           python - <<'PY'
           from pathlib import Path
           from PIL import Image, ImageDraw
 
-          image = Image.new("RGBA", (1536, 1872), (0, 0, 0, 0))
-          draw = ImageDraw.Draw(image)
+          output = Path("test-output")
+          output.mkdir(exist_ok=True)
+
+          atlas = Image.new("RGBA", (1536, 1872), (0, 0, 0, 0))
+          draw = ImageDraw.Draw(atlas)
           for row in range(9):
               for column in range(8):
                   left = column * 192 + 64 + column * 4
@@ -49,18 +52,75 @@ jobs:
                       (left, top, left + 56, top + 84),
                       fill=(70 + row * 12, 130, 220, 255),
                   )
-          Path("test-output").mkdir(exist_ok=True)
-          image.save("test-output/synthetic-atlas.png")
+          atlas.save(output / "synthetic-atlas.png")
+
+          def make_pose_board(path: Path, offset: int) -> None:
+              image = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
+              board = ImageDraw.Draw(image)
+              for index, (row, column) in enumerate(((0, 0), (0, 1), (1, 0), (1, 1))):
+                  left = column * 512 + 160 + offset + index * 4
+                  top = row * 512 + 120 + index * 6
+                  board.ellipse(
+                      (left, top, left + 150, top + 250),
+                      fill=(245, 180 - index * 10, 45 + index * 20, 255),
+                  )
+                  board.rectangle(
+                      (left + 112, top - 36 + index * 9, left + 142, top + 110),
+                      fill=(245, 180 - index * 10, 45 + index * 20, 255),
+                  )
+              image.save(path)
+
+          make_pose_board(output / "keyposes.png", 0)
+          make_pose_board(output / "inbetweens.png", 8)
           PY
 
-      - name: Run audit pipeline
+      - name: Build four-frame motion strip
+        run: |
+          python audit/scripts/build_motion_strip.py \
+            test-output/keyposes.png \
+            --spec audit/specs/motion-keypose-2x2.json \
+            --output test-output/motion-4f.png \
+            --debug-dir test-output/debug-4f
+
+      - name: Build eight-frame motion strip
+        run: |
+          python audit/scripts/build_motion_strip.py \
+            test-output/keyposes.png \
+            --inbetween-board test-output/inbetweens.png \
+            --spec audit/specs/motion-keypose-2x2.json \
+            --output test-output/motion-8f.png \
+            --debug-dir test-output/debug-8f
+
+      - name: Verify motion strip outputs
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from PIL import Image
+
+          four = Image.open("test-output/motion-4f.png").convert("RGBA")
+          eight = Image.open("test-output/motion-8f.png").convert("RGBA")
+          assert four.size == (1024, 320), four.size
+          assert eight.size == (2048, 320), eight.size
+          assert four.getchannel("A").getextrema()[0] == 0
+          assert eight.getchannel("A").getextrema()[0] == 0
+
+          four_meta = json.loads(Path("test-output/motion-4f.json").read_text(encoding="utf-8"))
+          eight_meta = json.loads(Path("test-output/motion-8f.json").read_text(encoding="utf-8"))
+          assert four_meta["frame_count"] == 4, four_meta
+          assert eight_meta["frame_count"] == 8, eight_meta
+          assert len(list(Path("test-output/debug-4f").glob("keypose-*.png"))) == 4
+          assert len(list(Path("test-output/debug-8f").glob("inbetween-*.png"))) == 4
+          PY
+
+      - name: Run 8x9 audit pipeline
         run: |
           python audit/scripts/audit_sprite.py \
             test-output/synthetic-atlas.png \
             --spec audit/specs/pet-atlas-8x9.json \
             --output-dir test-output/audit
 
-      - name: Verify outputs
+      - name: Verify audit outputs
         run: |
           test -s test-output/audit/audit.json
           test -s test-output/audit/contact-sheet.png
