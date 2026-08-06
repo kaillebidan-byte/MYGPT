@@ -4,13 +4,14 @@
 
 ## 構成
 
-- `scripts/` — 監査、正規化、コンタクトシート、GIFプレビュー生成
+- `scripts/` — 入力取得、監査、正規化、コンタクトシート、GIFプレビュー生成
 - `specs/` — キャンバス、セル、状態順、監査閾値
-- `assets/` — スプライト配置テンプレート
+- `assets/` — スプライト配置画像とPNG書き出し補助
+- `templates/` — 機械可読なアトラス配置資料
 - `docs/` — 監査フローの説明
 - `requirements.txt` — Python依存関係
 
-GitHub Actionsの実行用workflowは、GitHubの配置要件により`.github/workflows/audit-sprite.yml`に残している。workflow内の実処理はこの`audit/`配下を参照する。
+GitHub Actionsの実行用workflowは、GitHubの配置要件により`.github/workflows/`に残している。workflow内の実処理はこの`audit/`配下を参照する。
 
 ## ローカル実行
 
@@ -20,6 +21,16 @@ python audit/scripts/audit_sprite.py INPUT_IMAGE \
   --spec audit/specs/pet-atlas-8x9.json \
   --output-dir audit-output
 ```
+
+URLから監査入力を取得する補助:
+
+```bash
+python audit/scripts/download_input.py IMAGE_URL work/input-image.png
+```
+
+## CI
+
+`.github/workflows/test-audit-scripts.yml`が合成スプライトを作り、監査成果物が正常に生成されることを確認する。
 
 ## 境界
 
