@@ -1,0 +1,138 @@
+name: Test GPT configuration
+
+on:
+  push:
+    paths:
+      - "gpt/**"
+      - "README.md"
+      - "PRIVACY.md"
+      - "audit/docs/**"
+      - ".github/workflows/audit-sprite.yml"
+      - ".github/workflows/test-gpt-config.yml"
+  pull_request:
+    paths:
+      - "gpt/**"
+      - "README.md"
+      - "PRIVACY.md"
+      - "audit/docs/**"
+      - ".github/workflows/audit-sprite.yml"
+      - ".github/workflows/test-gpt-config.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install validation dependencies
+        run: >-
+          python -m pip install
+          openapi-spec-validator==0.7.2
+          PyYAML==6.0.2
+
+      - name: Validate reconstructed GPT configuration
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from urllib.parse import urlparse
+
+          import yaml
+          from openapi_spec_validator import validate_spec
+
+          required = [
+              "gpt/production/README.md",
+              "gpt/production/instructions.md",
+              "gpt/production/description.md",
+              "gpt/production/conversation-starters.md",
+              "gpt/production/builder-settings.md",
+              "gpt/knowledge/README.md",
+              "gpt/knowledge/character-identity-reference.md",
+              "gpt/knowledge/motion-vocabulary.md",
+              "gpt/knowledge/sprite-output-spec.md",
+              "gpt/experimental-audit/README.md",
+              "gpt/experimental-audit/instructions-addon.md",
+              "gpt/experimental-audit/github-audit-openapi.yaml",
+              "gpt/experimental-audit/test-cases.md",
+              ".github/workflows/audit-sprite.yml",
+          ]
+
+          for item in required:
+              path = Path(item)
+              assert path.is_file(), f"Missing required file: {item}"
+              assert path.read_text(encoding="utf-8").strip(), f"Empty required file: {item}"
+
+          for path in Path("gpt").rglob("*.md"):
+              text = path.read_text(encoding="utf-8")
+              assert "次段階で作成" not in text, f"Unfinished placeholder in {path}"
+              assert "作成予定" not in text, f"Unfinished placeholder in {path}"
+
+          instructions = Path("gpt/production/instructions.md").read_text(encoding="utf-8")
+          for required_phrase in [
+              "画像生成機能を直接使用する",
+              "単一画像モード",
+              "モーションモード",
+              "character-identity-reference.md",
+              "motion-vocabulary.md",
+              "sprite-output-spec.md",
+          ]:
+              assert required_phrase in instructions, f"Production instruction missing: {required_phrase}"
+
+          for forbidden_phrase in [
+              "openaiFileIdRefs",
+              "repository_dispatch",
+              "dispatchSpriteAudit",
+              "/mnt/data",
+              "sandbox:/",
+          ]:
+              assert forbidden_phrase not in instructions, (
+                  f"Production instructions contain audit or internal-path detail: {forbidden_phrase}"
+              )
+
+          spec_path = Path("gpt/experimental-audit/github-audit-openapi.yaml")
+          spec = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
+          validate_spec(spec)
+
+          operations = {
+              operation.get("operationId")
+              for path_item in spec["paths"].values()
+              for method, operation in path_item.items()
+              if method.lower() in {"get", "post", "put", "patch", "delete"}
+          }
+          assert operations == {"submitSpriteAudit", "getSpriteAudit"}, operations
+
+          server_url = spec["servers"][0]["url"]
+          parsed = urlparse(server_url)
+          assert parsed.scheme == "https" and parsed.hostname, "Audit receiver must use HTTPS"
+          assert parsed.hostname != "api.github.com", "Do not point the receiver schema at GitHub API"
+
+          workflow = yaml.load(
+              Path(".github/workflows/audit-sprite.yml").read_text(encoding="utf-8"),
+              Loader=yaml.BaseLoader,
+          )
+          assert "on" in workflow, "Workflow trigger is missing"
+          assert "jobs" in workflow and "audit" in workflow["jobs"], "Audit job is missing"
+
+          workflow_text = Path(".github/workflows/audit-sprite.yml").read_text(encoding="utf-8")
+          for required_phrase in [
+              "AUDIT_IMAGE_HOST",
+              "image_url",
+              "audit/scripts/audit_sprite.py",
+              "audit/specs/pet-atlas-8x9.json",
+          ]:
+              assert required_phrase in workflow_text, f"Audit workflow missing: {required_phrase}"
+          assert "openaiFileIdRefs" not in workflow_text, (
+              "GitHub workflow must not consume OpenAI file references directly"
+          )
+
+          print("GPT configuration validation passed")
+          PY
