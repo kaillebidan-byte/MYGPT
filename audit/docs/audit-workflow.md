@@ -1,83 +1,137 @@
 # Experimental sprite audit workflow
 
-この文書は、再編前に実装したGitHub監査フローを、画像生成GPTから独立した実験機能として記録する。
+この文書は、画像生成GPTから独立したスプライト監査フローを定義する。
 
-`openaiFileIdRefs`による生成画像の受け渡しは安定性を再検証する必要がある。現時点では本番GPTの必須処理にしない。
+本番画像生成GPTは監査を行わない。監査は`gpt/experimental-audit/`の別設定と、別途配備する監査受付APIを使って検証する。
 
-## Flow
+## Architecture
 
 ```text
-My GPTで画像生成
+実験GPTで画像生成
     ↓
-生成画像をopenaiFileIdRefsでActionへ直接添付
+GPT ActionがopenaiFileIdRefsを監査受付APIへ送る
     ↓
-GitHub repository_dispatch
+受付APIが一時URLから画像を即時取得する
     ↓
-GitHub Actionsが一時URLから画像を取得
+受付APIの短期ストレージへ保存する
     ↓
-audit/scripts/のPython監査が検査・補正
+受付APIがGitHub repository_dispatchを起動する
+    ↓
+GitHub Actionsが許可済みホストから画像を取得する
+    ↓
+audit/scripts/のPython監査が検査・補正する
     ↓
 audit.json
 contact-sheet.png
 preview.gif
 normalized-spritesheet.webp
     ↓
-GitHub Issueに失敗行と修復指示を掲載
+GitHub Issueへ失敗行と修復指示を掲載する
 ```
 
-監査サブシステムは画像を生成しない。画像生成に成功したかどうかと、監査受付に成功したかどうかを別の状態として扱う。
+画像生成成功と監査成功は別の状態として扱う。監査受付または監査処理が失敗しても、生成済み画像を画像生成失敗へ戻さない。
 
-## Action設定の現在位置
+## Components
 
-再編前のOpenAPIスキーマは次へ退避した。
+### Production GPT
 
 ```text
-legacy/actions/github-audit-openapi.yaml
+gpt/production/
+gpt/knowledge/
 ```
 
-これは履歴確認用であり、本番GPTへそのまま設定しない。再検証版は次へ作る。
+画像生成だけを担当する。Actionを接続しない。
+
+### Experimental GPT configuration
 
 ```text
+gpt/experimental-audit/instructions-addon.md
 gpt/experimental-audit/github-audit-openapi.yaml
+gpt/experimental-audit/test-cases.md
 ```
 
-再検証では、`openaiFileIdRefs`をGitHub APIの`client_payload`へ直接入れ子にする方式と、受付APIを挟んでトップレベルで受け取る方式を比較する。
+生成画像を監査受付APIへ送る試験設定。
 
-## 現行workflow
+### Audit receiver API
 
-GitHub Actionsの配置要件により、実行用workflowは次に残している。
+このリポジトリにはまだ実装していない。
+
+受付APIの責務:
+
+1. Bearer tokenを検証する
+2. `openaiFileIdRefs`を1件だけ受け取る
+3. 一時URLから画像を即時取得する
+4. PNG、WebP、JPEGだけを許可する
+5. 画像を短期ストレージへ保存する
+6. 一意な`audit_id`を発行する
+7. GitHub `repository_dispatch`を起動する
+8. GitHub runと監査Issueを`audit_id`へ関連付ける
+9. `GET /audits/{audit_id}`で状態を返す
+10. 保存期限後に元画像を削除する
+
+### GitHub Actions
+
+実行用workflow:
 
 ```text
 .github/workflows/audit-sprite.yml
 ```
 
-workflowが参照する実装:
+監査実装:
 
 - 依存関係: `audit/requirements.txt`
 - 監査スクリプト: `audit/scripts/audit_sprite.py`
 - 既定仕様: `audit/specs/pet-atlas-8x9.json`
 
-旧Actionから`specs/pet-atlas-8x9.json`が送られた場合は、workflow内で新しいパスへ変換する。
+## Receiver to GitHub payload
 
-## 送信データ
+受付APIは次の`repository_dispatch`を送る。
 
-旧方式の送信内容:
-
-- `event_type`: `sprite_audit`
-- `client_payload.openaiFileIdRefs`: 今回生成した画像1枚
-- `client_payload.request_id`: 一意な値
-- `client_payload.expected_states`: 使用状態を上から順にカンマ区切り
-- `client_payload.spec_path`: `audit/specs/pet-atlas-8x9.json`
-- `client_payload.normalize`: `true`
-- `client_payload.publish_issue`: `true`
-
-完全な公式9行なら`expected_states`は空欄でよい。4行だけ使う例:
-
-```text
-searching,validating,confused,completed
+```json
+{
+  "event_type": "sprite_audit",
+  "client_payload": {
+    "audit_id": "audit-20260807-001",
+    "request_id": "pet-20260807-001",
+    "image_url": "https://AUDIT_IMAGE_HOST/path/to/short-lived-image",
+    "image_name": "generated-sprite.png",
+    "expected_states": "searching,validating,confused,completed",
+    "spec_name": "pet-atlas-8x9",
+    "normalize": true,
+    "publish_issue": true
+  }
+}
 ```
 
-## 結果
+GitHub payloadへ`openaiFileIdRefs`を入れない。OpenAIの一時URLをGitHub Actionsへ直接渡さない。
+
+## Repository configuration
+
+GitHub repository variableとして次を設定する。
+
+```text
+AUDIT_IMAGE_HOST
+```
+
+値は、受付APIが画像を保存するHTTPSホスト名だけにする。スキームやパスを含めない。
+
+例:
+
+```text
+audit-files.example.com
+```
+
+workflowは次を検証する。
+
+- `image_url`がHTTPSである
+- URLにユーザー名やパスワードが埋め込まれていない
+- URLのホストが`AUDIT_IMAGE_HOST`と一致する
+- リダイレクト後も同じホストである
+- 画像が50 MB以下である
+- 画像形式がPNG、WebP、JPEGのいずれかである
+- `request_id`、`audit_id`、状態名が安全な文字だけで構成される
+
+## Outputs
 
 workflow artifact `sprite-audit-<request_id>`に次が入る。
 
@@ -89,7 +143,7 @@ workflow artifact `sprite-audit-<request_id>`に次が入る。
 
 `publish_issue=true`の場合、`[sprite-audit] <request_id>`というIssueを作成または更新する。
 
-## 判定項目
+## Audit checks
 
 - キャンバス寸法
 - 透明画素のRGB残留
@@ -103,6 +157,31 @@ workflow artifact `sprite-audit-<request_id>`に次が入る。
 
 画風、顔、衣装、手指、動作の意味は画素監査だけでは保証できない。`contact-sheet.png`と`preview.gif`による目視確認を併用する。
 
-## 失敗時の扱い
+## Failure handling
 
-生成画像をActionへ渡せなかった場合は、画像生成失敗へ戻さない。監査未実施として扱う。手動アップロードを本番の既定経路にしない。
+### GPT to receiver failure
+
+- 画像生成成功は維持する
+- 監査未実施として扱う
+- 同じ画像を自動再生成しない
+
+### Receiver to GitHub failure
+
+- `status=error`として記録する
+- 監査不合格とシステム障害を区別する
+- GitHub tokenや画像URLをユーザー応答へ出さない
+
+### Audit failure
+
+- 不合格行だけを修正対象にする
+- 問題のない行、キャラクター、セル配置を維持する
+
+## Legacy
+
+GitHub APIへ直接接続していた旧Actionスキーマは次へ保存している。
+
+```text
+legacy/actions/github-audit-openapi.yaml
+```
+
+旧方式は履歴確認用であり、新しい試験設定へコピーしない。
