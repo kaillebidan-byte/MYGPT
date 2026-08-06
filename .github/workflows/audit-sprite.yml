@@ -28,70 +28,109 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r audit/requirements.txt
 
-      - name: Receive generated image from GPT Action
+      - name: Receive image from audit receiver
         shell: bash
+        env:
+          AUDIT_IMAGE_HOST: ${{ vars.AUDIT_IMAGE_HOST }}
         run: |
           python - <<'PY'
           import json
           import os
+          import re
+          import urllib.parse
           import urllib.request
           from pathlib import Path
 
+          from PIL import Image
+
+          MAX_IMAGE_BYTES = 50 * 1024 * 1024
+          SAFE_ID = re.compile(r"^[A-Za-z0-9._-]{1,120}$")
+          SAFE_STATES = re.compile(r"^(?:[A-Za-z0-9._-]+(?:,[A-Za-z0-9._-]+)*)?$")
+
           event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
           payload = event.get("client_payload") or {}
-          refs = payload.get("openaiFileIdRefs") or []
-          if len(refs) != 1:
-              raise SystemExit("Exactly one generated image is required in openaiFileIdRefs")
-
-          ref = refs[0]
-          if isinstance(ref, str):
-              ref = json.loads(ref)
-          if not isinstance(ref, dict):
-              raise SystemExit("Invalid openaiFileIdRefs item")
-
-          mime_type = str(ref.get("mime_type") or "").lower()
-          if mime_type not in {"image/png", "image/webp", "image/jpeg", "image/jpg"}:
-              raise SystemExit(f"Unsupported image MIME type: {mime_type}")
-
-          download_link = ref.get("download_link")
-          if not download_link:
-              raise SystemExit("Generated image file reference has no download_link")
-
-          suffix = {
-              "image/png": ".png",
-              "image/webp": ".webp",
-              "image/jpeg": ".jpg",
-              "image/jpg": ".jpg",
-          }[mime_type]
-          output = Path("work/input-image" + suffix)
-          output.parent.mkdir(parents=True, exist_ok=True)
-          request = urllib.request.Request(
-              download_link,
-              headers={"User-Agent": "MYGPT-sprite-auditor/1.0"},
-          )
-          with urllib.request.urlopen(request, timeout=90) as response:
-              output.write_bytes(response.read())
 
           request_id = str(payload.get("request_id") or "").strip()
-          if not request_id:
-              raise SystemExit("request_id is required")
-          expected_states = str(payload.get("expected_states") or "")
-          spec_path = str(payload.get("spec_path") or "audit/specs/pet-atlas-8x9.json")
-          if spec_path == "specs/pet-atlas-8x9.json":
-              spec_path = "audit/specs/pet-atlas-8x9.json"
-          normalize = str(payload.get("normalize", True)).lower()
-          publish_issue = str(payload.get("publish_issue", True)).lower()
+          audit_id = str(payload.get("audit_id") or request_id).strip()
+          if not SAFE_ID.fullmatch(request_id):
+              raise SystemExit("request_id must contain only letters, numbers, dot, underscore, or hyphen")
+          if not SAFE_ID.fullmatch(audit_id):
+              raise SystemExit("audit_id must contain only letters, numbers, dot, underscore, or hyphen")
 
+          expected_states = str(payload.get("expected_states") or "").strip()
+          if not SAFE_STATES.fullmatch(expected_states):
+              raise SystemExit("expected_states must be a comma-separated list of safe state names")
+
+          spec_name = str(payload.get("spec_name") or "pet-atlas-8x9").strip()
+          if spec_name != "pet-atlas-8x9":
+              raise SystemExit(f"Unsupported spec_name: {spec_name}")
+          spec_path = "audit/specs/pet-atlas-8x9.json"
+
+          image_url = str(payload.get("image_url") or "").strip()
+          parsed = urllib.parse.urlparse(image_url)
+          if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+              raise SystemExit("image_url must be an HTTPS URL without embedded credentials")
+
+          allowed_host = str(os.environ.get("AUDIT_IMAGE_HOST") or "").strip().lower()
+          if not allowed_host:
+              raise SystemExit("Repository variable AUDIT_IMAGE_HOST is required")
+          if parsed.hostname.lower() != allowed_host:
+              raise SystemExit("image_url host is not allowed")
+
+          source_name = str(payload.get("image_name") or "input-image").strip()
+          source_name = re.sub(r"[^A-Za-z0-9._-]+", "_", source_name)[:120] or "input-image"
+
+          request = urllib.request.Request(
+              image_url,
+              headers={
+                  "User-Agent": "MYGPT-sprite-auditor/2.0",
+                  "Accept": "image/png,image/webp,image/jpeg",
+              },
+          )
+          with urllib.request.urlopen(request, timeout=90) as response:
+              final_url = urllib.parse.urlparse(response.geturl())
+              if final_url.scheme != "https" or final_url.hostname.lower() != allowed_host:
+                  raise SystemExit("Image download redirected to a disallowed host")
+              payload_bytes = response.read(MAX_IMAGE_BYTES + 1)
+
+          if len(payload_bytes) > MAX_IMAGE_BYTES:
+              raise SystemExit("Image exceeds the 50 MB audit limit")
+
+          temp = Path("work/input-image.download")
+          temp.parent.mkdir(parents=True, exist_ok=True)
+          temp.write_bytes(payload_bytes)
+
+          try:
+              with Image.open(temp) as image:
+                  image.verify()
+                  image_format = str(image.format or "").upper()
+          except Exception as exc:
+              raise SystemExit(f"Downloaded payload is not a valid image: {exc}") from exc
+
+          suffixes = {"PNG": ".png", "WEBP": ".webp", "JPEG": ".jpg"}
+          if image_format not in suffixes:
+              raise SystemExit(f"Unsupported image format: {image_format}")
+
+          output = Path("work/input-image" + suffixes[image_format])
+          temp.replace(output)
+
+          normalize = str(bool(payload.get("normalize", True))).lower()
+          publish_issue = str(bool(payload.get("publish_issue", True))).lower()
+
+          values = {
+              "INPUT_IMAGE": str(output),
+              "REQUEST_ID": request_id,
+              "AUDIT_ID": audit_id,
+              "EXPECTED_STATES": expected_states,
+              "SPEC_PATH": spec_path,
+              "NORMALIZE": normalize,
+              "PUBLISH_ISSUE": publish_issue,
+              "SOURCE_FILE_NAME": source_name,
+          }
           env_path = Path(os.environ["GITHUB_ENV"])
           with env_path.open("a", encoding="utf-8") as handle:
-              handle.write(f"INPUT_IMAGE={output}\n")
-              handle.write(f"REQUEST_ID={request_id}\n")
-              handle.write(f"EXPECTED_STATES={expected_states}\n")
-              handle.write(f"SPEC_PATH={spec_path}\n")
-              handle.write(f"NORMALIZE={normalize}\n")
-              handle.write(f"PUBLISH_ISSUE={publish_issue}\n")
-              handle.write(f"SOURCE_FILE_ID={ref.get('id', '')}\n")
-              handle.write(f"SOURCE_FILE_NAME={ref.get('name', '')}\n")
+              for key, value in values.items():
+                  handle.write(f"{key}={value}\n")
           PY
 
       - name: Audit sprite atlas
@@ -136,9 +175,9 @@ jobs:
           lines = [
               f"# Sprite audit: {status}",
               "",
+              f"- Audit ID: `{os.environ['AUDIT_ID']}`",
               f"- Request ID: `{os.environ['REQUEST_ID']}`",
               f"- Source file: `{os.environ.get('SOURCE_FILE_NAME', '')}`",
-              f"- Source file ID: `{os.environ.get('SOURCE_FILE_ID', '')}`",
               f"- Run: {os.environ['RUN_URL']}",
               f"- Canvas: `{report['canvas']['actual']['width']}×{report['canvas']['actual']['height']}`",
               f"- Transparency check: `{'pass' if report['transparency']['passed'] else 'fail'}`",
