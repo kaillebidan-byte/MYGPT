@@ -9,7 +9,7 @@
 フォルダ再編と旧構成の退避が完了した段階。
 
 - 再編前のGPT設定は`legacy/`へ移動済み
-- 監査コードと仕様は`audit/`へ集約済み
+- 監査コード、テンプレート、仕様は`audit/`へ集約済み
 - GitHub Actionsは新しい`audit/`配下を参照するよう更新済み
 - 新しい本番GPT設定は`gpt/production/`へ作成予定
 - 監査Actionは`gpt/experimental-audit/`で分離検証する
@@ -25,9 +25,10 @@ gpt/
   experimental-audit/     生成後監査の実験設定
 
 audit/
-  scripts/                画像監査と補助成果物生成
+  scripts/                入力取得、画像監査、補助成果物生成
   specs/                  スプライト規格と監査閾値
-  assets/                 スプライト配置テンプレート
+  assets/                 配置テンプレートとPNG書き出し補助
+  templates/              機械可読な配置参照データ
   docs/                   監査フロー文書
   requirements.txt        Python依存関係
 
@@ -35,14 +36,17 @@ legacy/
   instructions/           再編前のInstructions
   knowledge/              再編前のKnowledge
   actions/                再編前のActionスキーマ
-  docs/                    再編前の導入文書
+  docs/                    再編前の導入文書と概要
   examples/                再編前のプロンプト例
 
 research/
   public-image-gpt-reuse/ 公開GPT流用調査と再編資料
 
 .github/workflows/
-  audit-sprite.yml        GitHub Actions実行用workflow
+  audit-sprite.yml        実験監査workflow
+  test-audit-scripts.yml  監査コードのスモークテスト
+
+PRIVACY.md                監査Actionのプライバシー説明
 ```
 
 詳細な移動先は[`research/public-image-gpt-reuse/migration-map.md`](research/public-image-gpt-reuse/migration-map.md)を参照。
