@@ -5,6 +5,7 @@ on:
     paths:
       - "project/**"
       - "research/PROJECT-HANDOFF.md"
+      - "research/hatch-pet-porting.md"
       - "legacy/custom-gpt/**"
       - "README.md"
       - "legacy/README.md"
@@ -13,6 +14,7 @@ on:
     paths:
       - "project/**"
       - "research/PROJECT-HANDOFF.md"
+      - "research/hatch-pet-porting.md"
       - "legacy/custom-gpt/**"
       - "README.md"
       - "legacy/README.md"
@@ -34,22 +36,25 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          required = [
+          required_text = [
               "project/README.md",
               "project/instructions/project-instructions.md",
               "project/sources/production/README.md",
               "project/sources/production/01-character-identity.md",
               "project/sources/production/02-motion-design.md",
               "project/sources/production/03-keypose-board-spec.md",
+              "project/sources/production/04-imagegen-workflow.md",
+              "project/sources/layout-guides/README.md",
               "project/sources/reference-images/README.md",
               "research/PROJECT-HANDOFF.md",
+              "research/hatch-pet-porting.md",
               "legacy/custom-gpt/README.md",
               "legacy/custom-gpt/production/instructions.md",
               "legacy/custom-gpt/knowledge/character-identity-reference.md",
               "legacy/custom-gpt/experimental-audit/README.md",
           ]
 
-          for item in required:
+          for item in required_text:
               path = Path(item)
               assert path.is_file(), f"Missing required file: {item}"
               assert path.read_text(encoding="utf-8").strip(), f"Empty required file: {item}"
@@ -66,22 +71,21 @@ jobs:
           instructions = Path("project/instructions/project-instructions.md").read_text(encoding="utf-8")
           for required_phrase in [
               "現在のチャットに直接添付された基準キャラクター画像",
-              "Project Sources内の画像",
               "前回生成した画像を新しい正本にせず",
-              "左上 → 右上 → 左下 → 右下",
+              "左上K1 → 右上K2 → 左下K3 → 右下K4",
+              "1 visual job = 1 motion board",
+              "モーション依頼1件につき画像生成は1回だけ",
+              "K1、K2、K3、K4を4枚の独立画像として生成しない",
+              "同一応答内で自動再生成しない",
               "portraitキャンバス",
               "幅:高さ = 2:3",
               "1024 × 1536 px",
-              "正方形キャンバスへ4体を詰め込まない",
               "negative space",
-              "頭頂から靴底まで完全に見える全身像",
-              "表情変更を指定されていない場合は、基準画像の表情を維持",
-              "ユーザーが明示していないモーションライン",
-              "キャンバス全体を横断する連続した透明帯",
-              "上段2ポーズは横方向中央線より完全に上",
-              "目で明確に確認できる透明余白",
-              "02-motion-design.md",
-              "03-keypose-board-spec.md",
+              "layout guide",
+              "均一な単色クロマキー背景",
+              "接地影",
+              "画像生成用の内部指示は短く状態固有",
+              "04-imagegen-workflow.md",
           ]:
               assert required_phrase in instructions, f"Project instructions missing: {required_phrase}"
 
@@ -101,6 +105,7 @@ jobs:
               "正面画像しか存在しない場合",
               "見えない背面や側面は未設定",
               "左右非対称",
+              "胸部を含む胴体のシルエット",
           ]:
               assert required_phrase in identity, f"Identity source missing: {required_phrase}"
 
@@ -122,36 +127,55 @@ jobs:
               "右上: K2",
               "左下: K3",
               "右下: K4",
+              "1つのmotion board内の4状態",
+              "画像生成結果が1枚だけ",
               "幅:高さ = 2:3",
-              "1024 × 1536 px",
               "512 × 768 px",
-              "正方形キャンバスへ4体を詰め込まない",
-              "negative space",
-              "頭頂から靴底まで完全に見える全身像",
-              "キャンバス全体を横断する連続した透明帯",
-              "上段2ポーズは横方向中央線より完全に上",
-              "各ポーズは割り当てられた象限の内部だけに存在",
-              "目で明確に確認できる透明余白",
+              "layout guide",
+              "中央safe gap",
+              "均一な単色クロマキー",
+              "remove_chroma_key.py",
               "build_motion_strip.py",
-              "背景は完全透過",
-              "最終的な切り出し、倍率統一、位置合わせ",
+              "4枚個別画像入力は過去実験との互換用",
           ]:
               assert required_phrase in board, f"Keypose board source missing: {required_phrase}"
 
+          workflow = Path("project/sources/production/04-imagegen-workflow.md").read_text(encoding="utf-8")
+          for required_phrase in [
+              "1 visual job = 1 motion board",
+              "K1、K2、K3、K4を4つの別画像生成ジョブへ分解しない",
+              "canonical identity reference",
+              "job isolation",
+              "layout guide",
+              "chroma-key background",
+              "concise generation prompt",
+              "同一応答内で自動再生成しない",
+              "remove_chroma_key.py",
+          ]:
+              assert required_phrase in workflow, f"Imagegen workflow missing: {required_phrase}"
+
           handoff = Path("research/PROJECT-HANDOFF.md").read_text(encoding="utf-8")
           for required_phrase in [
-              "基準画像をGitHubへ手動アップロードして次工程へ渡す構成ではない",
-              "Project Sourcesだけに置く方式",
-              "2:3 portrait",
               "このキャラクターが手を振るモーションを作ってください。",
               "既知の成功事項を未検証扱いへ戻さない",
           ]:
               assert required_phrase in handoff, f"Handoff missing: {required_phrase}"
 
+          porting = Path("research/hatch-pet-porting.md").read_text(encoding="utf-8")
+          for required_phrase in [
+              "1モーションボード全体を1 visual job",
+              "canonical identity reference",
+              "layout guide",
+              "chroma",
+          ]:
+              assert required_phrase in porting, f"hatch-pet porting note missing: {required_phrase}"
+
           root = Path("README.md").read_text(encoding="utf-8")
           assert "01-character-identity.md" in root
           assert "02-motion-design.md" in root
           assert "03-keypose-board-spec.md" in root
+          assert "04-imagegen-workflow.md" in root
+          assert "remove_chroma_key.py" in root
           assert "legacy/custom-gpt/" in root
           assert "gpt/production/" not in root
 
