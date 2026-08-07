@@ -105,8 +105,18 @@ def main() -> None:
         help="Explicit chroma color as RRGGBB. If omitted, detect the most common border color.",
     )
     parser.add_argument("--border-width", type=int, default=12)
-    parser.add_argument("--threshold", type=float, default=24.0)
-    parser.add_argument("--feather", type=float, default=24.0)
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=42.0,
+        help="RGB-distance cleared to alpha=0. Tuned for small chroma variation in generated boards.",
+    )
+    parser.add_argument(
+        "--feather",
+        type=float,
+        default=18.0,
+        help="Additional RGB-distance range used for soft alpha falloff beyond --threshold.",
+    )
     parser.add_argument("--metadata", type=Path)
     args = parser.parse_args()
 
