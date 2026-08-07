@@ -1,58 +1,22 @@
 # MYGPT調整プロジェクト 引継ぎ
 
-この文書は、MYGPT調整の新しい会話を開始するときに冒頭へ貼るための作業コンテキストである。
+この文書は、MYGPT調整の新しい会話を開始するときに冒頭へ貼る作業コンテキストである。
 
-本番のChatGPT Projectへ投入するProject Instructionsではない。調整作業そのものの引継ぎ用。
+本番のChatGPT Projectへ投入するProject Instructionsではない。
 
 ## 目的
 
 基準キャラクター画像から、同一キャラクターを維持した静止画・モーション用キーポーズ素材をChatGPT Projectで生成する。
 
-最終スプライトの切り出し・正規化・組み立てはGitHub側の`audit/`で行い、画像生成モデルへ最終8フレームや巨大アトラスを一発生成させない。
+画像生成モデルには1動作の主要4キーポーズまでを担当させ、クロマ除去、切り出し、共通倍率、最終ストリップ、8フレーム化、アトラス化はGitHubの`audit/`側で行う。
 
-## 現在の本番経路
+## GitHub
 
-```text
-GitHub
-  └─ Project Instructions / テキストSources / audit / research の正本
+Repository:
 
-ChatGPT Project
-  ├─ Project Instructions
-  ├─ 01-character-identity.md
-  ├─ 02-motion-design.md
-  └─ 03-keypose-board-spec.md
+`kaillebidan-byte/MYGPT`
 
-各画像生成チャット
-  ├─ 正本の正面基準画像をそのチャットへ直接添付
-  └─ Thinking + 組み込み画像生成
-```
-
-### 重要
-
-- 基準画像をGitHubへ手動アップロードして次工程へ渡す構成ではない。
-- 基準画像は生成時にChatGPTの現在のチャットへ直接添付する。
-- Project Sources内の画像だけを正本としてモーション生成しない。
-- GitHubにはInstructions、テキストSources、後処理コード、調査記録を置く。
-- 前回生成画像を次の生成の正本にせず、毎回元の基準画像へ戻る。
-- character sheetは現在存在せず、必須にしない。
-
-## Custom GPTについて
-
-Custom GPTは本番経路から外した。
-
-2026年にCustom GPT + Thinkingで、画像生成が`/mnt/data/...`の内部パスだけを返したり生成を拒否したりする既知問題を確認した。Instantは一時回避として機能したが、本番は通常のChatGPT Projectへ移行した。
-
-したがって、Projectへ次を持ち込まない。
-
-- Custom GPT Builder設定
-- Thinking/Instant切替回避策
-- `/mnt/data`や`sandbox:/`対策
-- Custom GPT Actions/OpenAPI
-- 旧固定エラーメッセージ
-
-ProjectではThinkingを使用してよい。
-
-## 現在のProject本番ファイル
+本番構成:
 
 ```text
 project/
@@ -63,179 +27,244 @@ project/
       01-character-identity.md
       02-motion-design.md
       03-keypose-board-spec.md
+      04-imagegen-workflow.md
+    layout-guides/
+      four-pose-portrait.png
+      README.md
     reference-images/
       README.md
+
+audit/
+  scripts/
+    build_motion_layout_guide.py
+    remove_chroma_key.py
+    build_motion_strip.py
+  specs/
+    motion-keypose-2x2.json
+
+research/
+  hatch-pet-porting.md
+  PROJECT-HANDOFF.md
 ```
 
-役割:
+## ChatGPT Project
 
-- `project-instructions.md`: 毎回守る実行規則
-- `01-character-identity.md`: 基準画像から何を同一性として維持するか
-- `02-motion-design.md`: 動作を時間順の4キーポーズへどう分解するか
-- `03-keypose-board-spec.md`: 画像生成段階の2×2ボードの条件
-- `audit/`: 切り出し、共通倍率、最終ストリップ、監査
+Projectには次を投入する。
+
+- Project Instructions: `project/instructions/project-instructions.md`
+- Source: `01-character-identity.md`
+- Source: `02-motion-design.md`
+- Source: `03-keypose-board-spec.md`
+- Source: `04-imagegen-workflow.md`
+- layout-only Source: `four-pose-portrait.png`
+
+正本のキャラクター画像はProject Sourcesへ置くだけの方式に戻さない。
+
+画像生成する各チャットへ元の正面基準画像を直接添付する。
 
 ## 基準画像について確定したこと
 
-### 不採用
+- Project Sourcesだけに置いた基準画像は静止画では参照できたが、モーションでは参照が切れて別キャラクターになった実機結果がある。
+- したがってidentityのcanonical referenceは、現在の画像生成チャットへ直接添付された元画像。
+- 前回生成したmotion boardを次のmotionの正本にしない。
+- character sheetは存在しないので前提にしない。
+- 正面から見えない側面・背面へ新しい固有設定を勝手に正本化しない。
 
-基準画像をProject Sourcesだけに置く方式。
+## これまで成功した事項
 
-実機結果:
+portrait 2×2へ変更後、次は実機で成立した。
 
-- 静止画では基準画像を使えた。
-- モーションでは基準画像の参照自体が切れ、別キャラクターが生成された。
+- 1024×1536の2:3 portrait
+- 4体とも全身
+- 中央境界から本体が離れる
+- キャンバス外周から本体が離れる
+- 以前の笑顔・口開け・キラキラ追加は一度改善
+- キャラクター全体の同一性は概ね維持
 
-したがって、Project Sources内の画像だけを正本経路として信用しない。
+これらを失敗のたびに未検証扱いへ戻さない。
 
-### 採用
+## 残ったidentity問題
 
-正本の正面基準画像を画像生成チャットへ直接添付する。
+portrait 2×2でも次のdriftを確認した。
 
-正面しか存在しないので、未設定の側面・背面へ新しい固有模様、装飾、色、パーツを勝手に正本化しない。
+- 胸部を含む上半身が正本より小さく・平坦になる
+- 胸から腰までが細身になる
+- 胸紋が簡略化する
+- 腰の房・紐・留め具の個数や接続が変わる
+- 袖口や細い衣装構造が簡略化する
 
-## モーション生成方式
+`01-character-identity.md`へ胸部・胴体シルエットと小さな固有ディテールの維持規則を追加したが、2×2生成では完全には改善しなかった。
 
-1動作につき4つの主要キーポーズを1枚の2×2ボードとして生成する。
+## 床影
 
-時間順:
+一部テストで、禁止済みなのに4体の足元へ接地影が生成された。
+
+同じ禁止文をInstructionsへ重ねる方向ではなく、画像生成段階を均一な単色クロマキー背景へ変更し、背景・影の後処理境界を明確化する方針へ移った。
+
+## 4枚個別生成実験
+
+identity driftの主因が2×2縮小かを調べるため、K1〜K4を4枚の独立画像として1ユーザー依頼内で生成させる実験を行った。
+
+結果:
+
+- K1〜K4個別画像とは別に、2×2や横4枚の複数ポーズ画像が複数生成された。
+- 1ユーザー依頼で出力系列が増え、visual job境界を制御できなかった。
+- 個別K1〜K4は共通ベースへの局所編集に近かった。
+- K1とK4はピクセル単位で完全一致した。
+- K2/K3は主に片腕周辺だけが変更された。
+- identity保持自体は強かったが、motion semanticsと独立job制御が失敗した。
+
+したがって、**K1〜K4を4 visual jobsへ分解する方式は本番不採用**。
+
+`build_motion_strip.py`の4枚個別入力は過去実験との互換用に残してよいが、ChatGPT Project本番経路では使用しない。
+
+## hatch-pet調査から採用した設計
+
+詳細は`research/hatch-pet-porting.md`。
+
+OpenAI公式hatch-petから、次の構造をMYGPTへ移植する。
+
+- canonical imageへ毎回再アンカーする
+- identity referenceとlayout referenceを分離する
+- 1 visual jobの範囲を明確にする
+- 画像生成promptを短く状態固有にする
+- 単色chroma backgroundを使い、後処理でalpha化する
+- deterministicな切り出し・正規化を後段へ置く
+- 失敗時は最小単位だけrepairする
+
+hatch-petのworker/subagentそのものはChatGPT Projectから作れない。
+
+MYGPTでは、**新しいチャット + 元の正本直接添付 + 1モーションだけ**をjob isolationとして使う。
+
+## 現在の本番モーション生成
+
+1 motion = 1 visual job = 1 image generation = 1 motion board。
+
+ユーザーは1回だけ依頼する。
+
+例:
+
+> このキャラクターが手を振るモーションを作ってください。
+
+Project側は1回の画像生成で、portrait 2×2ボード1枚だけを返す。
 
 ```text
 左上 K1 → 右上 K2 → 左下 K3 → 右下 K4
 ```
 
-すべての動作へ`rest / anticipation / peak / return`を固定適用しない。
-
-例えば手振りは現在:
+手振りの現在の位相:
 
 - K1: 腕を自然に下ろした開始姿勢
 - K2: 肩と肘を使って腕を上げ始める
 - K3: 手が最も高い、または最も外側へ振れた姿勢
 - K4: 腕を下げ始め、K1へ戻れる姿勢
 
-8フレームが必要な場合も最初から8体を生成しない。主要4ポーズとは別に4つの中割りを生成し、後段で交互に組み立てる。
+K1〜K4を4枚の別画像として生成しない。
 
-## 実機テスト履歴
+同じ応答で横4枚版、別案、追加2×2、summary sheetを生成しない。
 
-### 初回Projectテスト
+失敗しても同じ応答内で自動再生成しない。
 
-テスト依頼:
+## layout guide
 
-> このキャラクターが手を振るモーションを作ってください。
+`project/sources/layout-guides/four-pose-portrait.png`はキャラクター画像ではない。
 
-依頼文には2×2、4キーポーズ、透明背景などを書かなかった。Project InstructionsとSourcesが自力で機能するかを確認するため。
+用途:
 
-結果:
+- 4スロット
+- 中央safe gap
+- 外周safe margin
 
-- 基準キャラ認識: 成功
-- 4ポーズ2×2: 成功
-- 透明背景: 成功
-- 全身: 失敗。腰・脚が切れた
-- 表情: 未指定の笑顔・口開けを追加
-- 演出: 未指定のキラキラ等を追加
+だけ。
 
-対策:
+ガイドのラベル、枠線、灰色領域、色を最終生成へコピーしない。
 
-- 全4ポーズを頭頂から靴底まで表示
-- 収まらなければcropではなく4体同倍率で縮小
-- 動作だけの依頼では基準表情を維持
-- 未指定のモーションライン、記号、粒子、発光等を禁止
+Project側でlayout guideが視覚入力として効くかは次の実機で検証する。
 
-### 2回目
+効かなくても、生成ごとにユーザーへlayout guide添付を要求しない。`03-keypose-board-spec.md`をfallbackにする。
 
-改善:
+## 背景方式
 
-- 4体とも全身になった
-- 表情維持できた
-- 不要エフェクトが消えた
+真の透明背景を画像生成モデルへ完成させる方式から、均一な単色クロマキーへ変更した。
 
-残った問題:
+既定候補はmagenta。キャラクター本体に衝突する場合はcyan、blue、greenなどへ変更する。
 
-- 上段の靴が水平中央線を数px越えた
-- 単純な4分割で足先が切れる
-
-対策:
-
-- 2×2中央の縦横に連続透明帯
-- 各ポーズを割当象限の完全な内側へ配置
-- キャンバス外周にも透明余白
-
-### 3回目
-
-改善:
-
-- 縦方向の中央透明帯は明確に成立
-- 同一性、表情、不要エフェクトは概ね維持
-
-残った問題:
-
-- 水平中央境界には画素が残った
-- 下段ポーズがキャンバス最下端へ接触した
-
-原因として、1024×1024の正方形2×2では各象限が512×512になり、縦長の全身キャラと上げた腕、上下余白、中央透明帯を同時に確保する縦方向の余裕が不足していると判断した。
-
-## 現在の最新方針
-
-モーション用2×2ボードは正方形ではなくportraitの縦長キャンバスを既定にする。
-
-目安:
+raw board:
 
 ```text
-board: 2:3 portrait
-例: 1024 × 1536
-
-2×2なら各セル相当:
-512 × 768
+portrait 2x2
+flat chroma background
+no floor
+no shadow
+no gradient
 ```
 
-画像生成では厳密なピクセル値より、次を優先する。
+後処理:
 
-- 正方形ボードへ4体を詰め込まない
-- 各象限が縦長になるキャンバスを使う
-- 4体を象限いっぱいまで拡大せず、小さめの全身像として配置する
-- キャラクター周囲に明確なnegative spaceを残す
-- 中央の縦横透明帯を維持する
-- 外周4辺にも明確な透明余白を維持する
+```text
+raw board
+  -> audit/scripts/remove_chroma_key.py
+  -> transparent 2x2 board
+  -> audit/scripts/build_motion_strip.py
+  -> normalized transparent strip
+```
 
-`audit/scripts/build_motion_strip.py`は入力サイズを1024×1024へ固定していない。幅・高さが2×2で割り切れる任意のボードを分割できるため、portrait boardへ変更しても後処理方式と矛盾しない。
+`remove_chroma_key.py`は既定で画像外周の最頻色をクロマ色として自動検出する。
 
-## 次のテスト
+## 次の実機テスト
 
-Project Instructionsと`03-keypose-board-spec.md`を最新化した後、正本画像を新しい画像生成チャットへ直接添付し、依頼文は引き続き同じものを使う。
+新しい画像生成チャットを使う。
+
+元の正面正本を直接添付する。
+
+依頼文は変えない。
 
 > このキャラクターが手を振るモーションを作ってください。
 
-依頼文に仕様を書き足さない。
+最初の評価順:
 
-確認順:
+1. **画像生成結果が1枚だけか**
+2. その1枚に4ポーズだけあるか
+3. portrait 2×2か
+4. 背景が均一な単色クロマキーか
+5. 4体とも全身か
+6. 中央safe gapと外周余白があるか
+7. K1→K2→K3→K4が動作として読めるか
+8. 基準表情を維持したか
+9. 床影、文字、ラベル、未指定effectがないか
+10. 最後に顔、頭身、胸部・胴体、胸紋、腰飾り、袖などidentity driftを見る
 
-1. 2×2が縦長キャンバスになったか
-2. 4体すべて頭頂～靴底まで見えるか
-3. 上げた手も含めて外周へ接触していないか
-4. 中央の縦横透明帯が成立しているか
-5. 表情が基準画像から勝手に変わっていないか
-6. 未指定エフェクトがないか
-7. 4ポーズが同一キャラクターとして読めるか
-8. 最後に衣装・腰飾り・袖・胸紋など細部のidentity driftを評価する
+最初の「1枚だけ」が失敗した場合は、identity細部のprompt追加へ進まず、Projectで1 visual jobをどこまで保証できるかを再評価する。
 
-切り出し条件が成立するまでは、手振り位相や細部同一性を同時に大幅変更しない。
+## 8フレーム
+
+最初から8体を1画像へ描かせない。
+
+まず主要K1〜K4のmotion boardを1 visual jobで生成する。
+
+中割りI1〜I4が必要なら、主要boardが合格した後の別visual jobとして2×2を生成する。
+
+主要boardと中割りboardを同じChatGPT応答内で自動連続生成しない。
 
 ## やらないこと
 
 - 基準画像をGitHubへ毎回手動アップロードするワークフロー
-- Project Sources内画像だけを正本にする
-- 存在しないcharacter sheetを当然の前提にする
-- 前回生成画像を次の正本にして世代を重ねる
-- 最終8フレームや8×9アトラスを画像モデルへ一発生成させる
-- 失敗のたびにProject Instructionsへ無関係な規則を大量追加する
-- Custom GPT固有の不具合回避をProjectへ持ち込む
+- Project Sources内画像だけをidentity正本にする
+- 前回生成motionを次のmotionの正本にする
+- 存在しないcharacter sheetを前提にする
+- K1〜K4を4回の画像生成へ分解する
+- 最終8フレームや巨大アトラスを画像モデルへ一発生成させる
+- 失敗のたびに同じ意味の禁止文をInstructionsへ追加する
+- Custom GPT固有の`/mnt/data`、Instant回避、Builder設定をProjectへ戻す
 
-## 調整時の進め方
+## 調整の進め方
 
-失敗画像が出たら、まず画像そのものを評価し、必要ならα境界やbboxを数値確認する。
+失敗したらまず出力画像を評価し、必要ならalpha、bbox、pixel diffを数値確認する。
 
-一度に複数の仮説を直さず、確認できた失敗原因だけをGitHubへ反映する。
+一度に複数の仮説を変更しない。
+
+確認できた失敗だけGitHubへ反映する。
 
 既知の成功事項を未検証扱いへ戻さない。
 
-外部仕様やChatGPT側の挙動が疑わしい場合は、同じ失敗をプロンプトだけでループさせる前に、OpenAI公式資料・Developer Community・実運用例を調査する。
+プラットフォーム挙動が疑わしい場合は、同じprompt修正を繰り返す前にOpenAI公式資料、公式Skills、Developer Community、実運用例を調べる。
