@@ -4,6 +4,21 @@
 
 MYGPTの目的に近い「同じキャラクターを複数回生成する」用途へ絞った調査メモ。
 
+## 実機結果: Project Sourcesだけの基準画像は本番不採用
+
+2026-08-07、正面の基準キャラクター画像をChatGPT ProjectのSourcesへ置き、Project Sourcesだけを画像参照経路にした試験を実施した。
+
+結果:
+
+- 静止画: 基準キャラクターを参照して生成できた
+- モーション: 基準画像の参照自体が成立せず、全く別のキャラクターが生成された
+
+この結果から、本番ではProject Sources内の画像だけをキャラクター正本の受け渡し経路として使わない。
+
+基準画像は、画像生成を行う現在のチャットへ直接添付する。Project Sourcesは同一性判断、動作設計、2×2出力条件などのテキスト資料へ使う。
+
+この試験は「Project Sourcesの画像が常に視覚参照不能」という一般仕様を証明するものではない。静止画では参照できたため、現時点のモーション生成経路に本番信頼性がないという判断として記録する。
+
 ## 1. Project filesへ置いたPNGが必ず視覚参照されるとは限らない
 
 Redditの2025-04-16の実験では、キャラクター参照PNGをProject filesへ保存した状態では、期待した画像分析が行われず、同じ画像をチャットへ直接添付すると認識されたという報告がある。
@@ -11,7 +26,7 @@ Redditの2025-04-16の実験では、キャラクター参照PNGをProject files
 Source:
 https://www.reddit.com/r/ChatGPT/comments/1k0juti/is_there_anyway_for_chatgpt_to_be_able_to_see_and/
 
-これは古いバージョンの報告であり、2026年現在も同じとは断定しない。Project版MYGPTでは実機比較が必要。
+これは古いバージョンの報告であり、2026年現在も同じとは断定しない。今回の実機結果では静止画とモーションで挙動が分かれた。
 
 ## 2. キャラクターシートをProject filesへ置く実践例
 
@@ -24,15 +39,15 @@ Christy TuckerのChatGPT画像生成に関するLinkedIn議論で、利用者Sco
 Source:
 https://www.linkedin.com/posts/christytucker_like-many-ld-folks-ive-been-experimenting-activity-7333144599097417729-Ksso
 
-これは公式推奨ではなく個人の実践例。
+これは公式推奨ではなく個人の実践例。MYGPTには現時点で正面正本しかなく、未設定の別角度を新規作成して正本化する理由はないため、本番要件には採用しない。
 
 ## 3. 各生成でreference imageを再添付する実践例
 
 同じLinkedIn議論で、別の実践者は各新規promptへキャラクターのreference headshotを添付する方法を勧めている。
 
-Project Sourcesへ置くだけで済ませるより手数は増えるが、生成ツールへ視覚入力が確実に渡ったことを確認しやすい。
+Project Sourcesへ置くだけで済ませるより手数は増えるが、生成ツールへ視覚入力が渡る経路を明確にできる。
 
-MYGPTでは、全身デザインが重要なのでheadshotだけではなく、基準全身画像またはcharacter master sheetを直接添付する比較試験が必要。
+MYGPTでは正面の基準全身画像を現在の生成チャットへ直接添付する方式を本番前提とする。
 
 ## 4. 世代をまたぐ連続編集でドリフトする報告
 
@@ -50,21 +65,19 @@ https://www.reddit.com/r/ChatGPT/comments/1tspsm2/character_consistency_suddenly
 
 ## 5. 基準画像へ毎回戻る方式
 
-実践例から見える候補ワークフロー:
+本番候補ワークフロー:
 
 ```text
 Project Instructions
   + text Sources
-  + baseline character image / character sheet
-            ↓
-生成チャットへbaselineを直接添付
+  + 現在のチャットへ直接添付した正面基準画像
             ↓
 その1回の目的だけを指定
             ↓
 生成
 ```
 
-次の画像では直前の生成物を正本にせず、再びbaselineへ戻る。
+次の画像では直前の生成物を正本にせず、再び元の基準画像へ戻る。
 
 ```text
 baseline → waving
@@ -77,29 +90,6 @@ baseline → surprised expression
 
 ## 6. 2×2キーポーズとの関係
 
-現在のリポジトリには2×2キーポーズ方式の後処理資産がある。Projectへ移行しても、画像生成モデルへ厳密な最終ストリップを直接描かせない方針は別問題として残せる。
+Projectへ移行しても、画像生成モデルへ厳密な最終ストリップを直接描かせず、4つの主要キーポーズを2×2で生成し、後段で分離・正規化する方針は維持する。
 
-ただし、Project版の指示を作る前に次を比較する。
-
-### Test A
-Project Sourcesへ基準PNGを置くだけで2×2キーポーズ生成。
-
-### Test B
-同じProjectで、基準PNGを生成チャットへ直接添付して2×2キーポーズ生成。
-
-### Test C
-character sheetをProject Sourcesに置き、さらに最重要の基準全身PNGをチャットへ直接添付して生成。
-
-比較項目:
-
-- 顔
-- 髪
-- 衣装模様
-- 装飾
-- 頭身
-- 4象限間の同一性
-- 手足の切れ
-- 背景透過
-- ポーズ差の読みやすさ
-
-この比較で、Project Sourcesの画像を本番経路に含めるか、テキスト資料だけをSourcesへ置き、基準画像は毎回チャットへ直接添付するかを決める。
+画像参照の実機結果と、2×2キーポーズ自体の品質問題は分けて扱う。
