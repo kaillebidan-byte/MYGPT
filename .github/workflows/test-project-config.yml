@@ -1,0 +1,78 @@
+name: Test Project configuration
+
+on:
+  push:
+    paths:
+      - "project/**"
+      - "legacy/custom-gpt/**"
+      - "README.md"
+      - "legacy/README.md"
+      - ".github/workflows/test-project-config.yml"
+  pull_request:
+    paths:
+      - "project/**"
+      - "legacy/custom-gpt/**"
+      - "README.md"
+      - "legacy/README.md"
+      - ".github/workflows/test-project-config.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Project layout
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          required = [
+              "project/README.md",
+              "project/instructions/project-instructions.md",
+              "project/sources/production/README.md",
+              "project/sources/production/character-identity.md",
+              "project/sources/production/motion-vocabulary.md",
+              "project/sources/production/sprite-output-spec.md",
+              "project/sources/reference-images/README.md",
+              "legacy/custom-gpt/README.md",
+              "legacy/custom-gpt/production/instructions.md",
+              "legacy/custom-gpt/knowledge/character-identity-reference.md",
+              "legacy/custom-gpt/experimental-audit/README.md",
+          ]
+
+          for item in required:
+              path = Path(item)
+              assert path.is_file(), f"Missing required file: {item}"
+              assert path.read_text(encoding="utf-8").strip(), f"Empty required file: {item}"
+
+          assert not Path("gpt").exists(), "Active gpt/ directory must be removed"
+
+          project_readme = Path("project/README.md").read_text(encoding="utf-8")
+          assert "ChatGPT Project" in project_readme
+          assert "legacy/custom-gpt/" in project_readme
+
+          instructions = Path("project/instructions/project-instructions.md").read_text(encoding="utf-8")
+          assert "次段階で作成" in instructions
+          assert "Builder設定" in instructions
+
+          for item in [
+              "project/sources/production/character-identity.md",
+              "project/sources/production/motion-vocabulary.md",
+              "project/sources/production/sprite-output-spec.md",
+          ]:
+              text = Path(item).read_text(encoding="utf-8")
+              assert "本文は次段階で作成" in text, f"Production source should still be a placeholder: {item}"
+
+          root = Path("README.md").read_text(encoding="utf-8")
+          assert "project/" in root
+          assert "legacy/custom-gpt/" in root
+          assert "gpt/production/" not in root
+
+          print("Project layout validation passed")
+          PY

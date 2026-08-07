@@ -1,15 +1,16 @@
 # Legacy configuration
 
-再編前のMYGPT設定を保存する退避領域。
-
-ここにあるInstructions、Knowledge、Action、セットアップ文書、プロンプト例は、履歴確認と比較検証のために残している。現行のMy GPTへそのまま設定しない。
+現行経路から外した過去設定を保存する退避領域。
 
 ## 内容
 
-- `instructions/` — 再編前の長いCustom GPT Instructions
-- `knowledge/` — 再編前のKnowledge文書
+- `custom-gpt/` — 2026-08-07まで本番候補として構築していたCustom GPT設定一式
+- `instructions/` — さらに以前の長いCustom GPT Instructions
+- `knowledge/` — さらに以前のKnowledge文書
 - `actions/` — GitHub APIへ直接接続する旧OpenAPIスキーマ
 - `docs/` — 旧構成のセットアップ手順
 - `examples/` — 旧構成向けプロンプト例
 
-新しい本番設定は`gpt/production/`、新しいKnowledgeは`gpt/knowledge/`、監査実験は`gpt/experimental-audit/`へ置く。
+現行の本番候補は`../project/`に置く。
+
+`legacy/`内の文章は比較・履歴確認・構造参考には使えるが、ChatGPT Projectへそのまま投入しない。
