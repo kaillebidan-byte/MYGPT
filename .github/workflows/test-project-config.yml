@@ -36,9 +36,9 @@ jobs:
               "project/README.md",
               "project/instructions/project-instructions.md",
               "project/sources/production/README.md",
-              "project/sources/production/character-identity.md",
-              "project/sources/production/motion-vocabulary.md",
-              "project/sources/production/sprite-output-spec.md",
+              "project/sources/production/01-character-identity.md",
+              "project/sources/production/02-motion-design.md",
+              "project/sources/production/03-keypose-board-spec.md",
               "project/sources/reference-images/README.md",
               "legacy/custom-gpt/README.md",
               "legacy/custom-gpt/production/instructions.md",
@@ -51,28 +51,72 @@ jobs:
               assert path.is_file(), f"Missing required file: {item}"
               assert path.read_text(encoding="utf-8").strip(), f"Empty required file: {item}"
 
-          assert not Path("gpt").exists(), "Active gpt/ directory must be removed"
-
-          project_readme = Path("project/README.md").read_text(encoding="utf-8")
-          assert "ChatGPT Project" in project_readme
-          assert "legacy/custom-gpt/" in project_readme
-
-          instructions = Path("project/instructions/project-instructions.md").read_text(encoding="utf-8")
-          assert "次段階で作成" in instructions
-          assert "Builder設定" in instructions
-
-          for item in [
+          for obsolete in [
               "project/sources/production/character-identity.md",
               "project/sources/production/motion-vocabulary.md",
               "project/sources/production/sprite-output-spec.md",
           ]:
-              text = Path(item).read_text(encoding="utf-8")
-              assert "本文は次段階で作成" in text, f"Production source should still be a placeholder: {item}"
+              assert not Path(obsolete).exists(), f"Obsolete Project source remains: {obsolete}"
+
+          assert not Path("gpt").exists(), "Active gpt/ directory must be removed"
+
+          instructions = Path("project/instructions/project-instructions.md").read_text(encoding="utf-8")
+          for required_phrase in [
+              "現在のチャットに直接添付された基準キャラクター画像",
+              "Project Sources内の画像",
+              "前回生成した画像を新しい正本にせず",
+              "左上 → 右上 → 左下 → 右下",
+              "02-motion-design.md",
+              "03-keypose-board-spec.md",
+          ]:
+              assert required_phrase in instructions, f"Project instructions missing: {required_phrase}"
+
+          for forbidden_phrase in [
+              "/mnt/data",
+              "sandbox:/",
+              "Builder設定",
+              "Recommended model",
+              "repository_dispatch",
+              "openaiFileIdRefs",
+          ]:
+              assert forbidden_phrase not in instructions, f"Custom GPT/runtime detail leaked into Project instructions: {forbidden_phrase}"
+
+          identity = Path("project/sources/production/01-character-identity.md").read_text(encoding="utf-8")
+          for required_phrase in [
+              "基準画像そのものより、この文書を優先してはいけない",
+              "正面画像しか存在しない場合",
+              "見えない背面や側面は未設定",
+              "左右非対称",
+          ]:
+              assert required_phrase in identity, f"Identity source missing: {required_phrase}"
+
+          motion = Path("project/sources/production/02-motion-design.md").read_text(encoding="utf-8")
+          for required_phrase in [
+              "rest / anticipation / peak / return をすべての動作へ固定適用しない",
+              "waving / 手を振る",
+              "idle / 待機",
+              "running-right / running-left / 走る",
+              "jumping / 跳ぶ",
+          ]:
+              assert required_phrase in motion, f"Motion source missing: {required_phrase}"
+
+          board = Path("project/sources/production/03-keypose-board-spec.md").read_text(encoding="utf-8")
+          for required_phrase in [
+              "左上: K1",
+              "右上: K2",
+              "左下: K3",
+              "右下: K4",
+              "背景は完全透過",
+              "最終的な切り出し、倍率統一、位置合わせ",
+          ]:
+              assert required_phrase in board, f"Keypose board source missing: {required_phrase}"
 
           root = Path("README.md").read_text(encoding="utf-8")
-          assert "project/" in root
+          assert "01-character-identity.md" in root
+          assert "02-motion-design.md" in root
+          assert "03-keypose-board-spec.md" in root
           assert "legacy/custom-gpt/" in root
           assert "gpt/production/" not in root
 
-          print("Project layout validation passed")
+          print("Project production configuration validation passed")
           PY
