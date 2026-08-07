@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a normalized motion strip from one or two transparent 2x2 pose boards."""
+"""Build a normalized motion strip from transparent pose boards or individual pose images."""
 
 from __future__ import annotations
 
@@ -18,10 +18,7 @@ def alpha_bbox(image: Image.Image, threshold: int) -> tuple[int, int, int, int] 
 
 
 def load_spec(path: Path) -> dict[str, Any]:
-    spec = json.loads(path.read_text(encoding="utf-8"))
-    if int(spec["input"]["columns"]) != 2 or int(spec["input"]["rows"]) != 2:
-        raise ValueError("This builder currently supports only a 2x2 pose board")
-    return spec
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def split_board(
@@ -53,7 +50,47 @@ def split_board(
     return cells
 
 
-def extract_sprites(
+def extract_sprite(
+    image: Image.Image,
+    *,
+    alpha_threshold: int,
+    edge_margin: int,
+    source_name: str,
+    pose_index: int,
+) -> tuple[Image.Image, dict[str, Any]]:
+    rgba = image.convert("RGBA")
+    alpha_min, _ = rgba.getchannel("A").getextrema()
+    if alpha_min > alpha_threshold:
+        raise ValueError(f"{source_name} pose {pose_index} must contain transparent background pixels")
+
+    bbox = alpha_bbox(rgba, alpha_threshold)
+    if bbox is None:
+        raise ValueError(f"{source_name} pose {pose_index} is empty")
+
+    left, top, right, bottom = bbox
+    touching = {
+        "left": left < edge_margin,
+        "top": top < edge_margin,
+        "right": right > rgba.width - edge_margin,
+        "bottom": bottom > rgba.height - edge_margin,
+    }
+    touched = [name for name, value in touching.items() if value]
+    if touched:
+        raise ValueError(
+            f"{source_name} pose {pose_index} is too close to image edges: {', '.join(touched)}"
+        )
+
+    sprite = rgba.crop(bbox).convert("RGBA")
+    report = {
+        "pose": pose_index,
+        "bbox": [left, top, right, bottom],
+        "input_size": [rgba.width, rgba.height],
+        "source_size": [sprite.width, sprite.height],
+    }
+    return sprite, report
+
+
+def extract_sprites_from_board(
     board: Image.Image,
     *,
     spec: dict[str, Any],
@@ -62,47 +99,73 @@ def extract_sprites(
     input_spec = spec["input"]
     columns = int(input_spec["columns"])
     rows = int(input_spec["rows"])
+    if columns != 2 or rows != 2:
+        raise ValueError("Board input currently supports only a 2x2 pose board")
+
+    alpha_threshold = int(input_spec.get("alpha_threshold", 8))
+    edge_margin = int(input_spec.get("edge_margin_px", 8))
+    cells = split_board(board.convert("RGBA"), columns=columns, rows=rows)
+
+    sprites: list[Image.Image] = []
+    reports: list[dict[str, Any]] = []
+    for index, cell in enumerate(cells, start=1):
+        sprite, report = extract_sprite(
+            cell,
+            alpha_threshold=alpha_threshold,
+            edge_margin=edge_margin,
+            source_name=board_name,
+            pose_index=index,
+        )
+        sprites.append(sprite)
+        reports.append(report)
+    return sprites, reports
+
+
+def extract_sprites_from_images(
+    paths: list[Path],
+    *,
+    spec: dict[str, Any],
+    source_name: str,
+) -> tuple[list[Image.Image], list[dict[str, Any]]]:
+    input_spec = spec["input"]
     alpha_threshold = int(input_spec.get("alpha_threshold", 8))
     edge_margin = int(input_spec.get("edge_margin_px", 8))
 
-    rgba = board.convert("RGBA")
-    alpha_min, _ = rgba.getchannel("A").getextrema()
-    if alpha_min > alpha_threshold:
-        raise ValueError(f"{board_name} must contain transparent background pixels")
-
-    cells = split_board(rgba, columns=columns, rows=rows)
     sprites: list[Image.Image] = []
     reports: list[dict[str, Any]] = []
-
-    for index, cell in enumerate(cells, start=1):
-        bbox = alpha_bbox(cell, alpha_threshold)
-        if bbox is None:
-            raise ValueError(f"{board_name} pose {index} is empty")
-
-        left, top, right, bottom = bbox
-        touching = {
-            "left": left < edge_margin,
-            "top": top < edge_margin,
-            "right": right > cell.width - edge_margin,
-            "bottom": bottom > cell.height - edge_margin,
-        }
-        touched = [name for name, value in touching.items() if value]
-        if touched:
-            raise ValueError(
-                f"{board_name} pose {index} is too close to cell edges: {', '.join(touched)}"
+    for index, path in enumerate(paths, start=1):
+        with Image.open(path) as image:
+            sprite, report = extract_sprite(
+                image,
+                alpha_threshold=alpha_threshold,
+                edge_margin=edge_margin,
+                source_name=source_name,
+                pose_index=index,
             )
-
-        sprite = cell.crop(bbox).convert("RGBA")
+        report["file"] = path.name
         sprites.append(sprite)
-        reports.append(
-            {
-                "pose": index,
-                "bbox": [left, top, right, bottom],
-                "source_size": [sprite.width, sprite.height],
-            }
-        )
-
+        reports.append(report)
     return sprites, reports
+
+
+def load_pose_source(
+    *,
+    board_path: Path | None,
+    image_paths: list[Path] | None,
+    spec: dict[str, Any],
+    source_name: str,
+) -> tuple[list[Image.Image], list[dict[str, Any]]]:
+    if (board_path is None) == (image_paths is None):
+        raise ValueError(f"{source_name} requires exactly one board or four individual images")
+
+    if image_paths is not None:
+        if len(image_paths) != 4:
+            raise ValueError(f"{source_name} requires exactly four individual images")
+        return extract_sprites_from_images(image_paths, spec=spec, source_name=source_name)
+
+    assert board_path is not None
+    with Image.open(board_path) as board:
+        return extract_sprites_from_board(board, spec=spec, board_name=source_name)
 
 
 def normalize_sprites(
@@ -173,39 +236,65 @@ def save_debug_cells(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("keypose_board", type=Path)
+    parser.add_argument(
+        "keypose_board",
+        type=Path,
+        nargs="?",
+        help="Legacy transparent 2x2 key-pose board.",
+    )
+    parser.add_argument(
+        "--keypose-images",
+        type=Path,
+        nargs=4,
+        metavar=("K1", "K2", "K3", "K4"),
+        help="Four separate transparent key-pose images in K1 K2 K3 K4 order.",
+    )
     parser.add_argument("--spec", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
         "--inbetween-board",
         type=Path,
-        help="Optional second 2x2 board. Its poses are interleaved with the key poses.",
+        help="Optional legacy 2x2 in-between board.",
+    )
+    parser.add_argument(
+        "--inbetween-images",
+        type=Path,
+        nargs=4,
+        metavar=("I1", "I2", "I3", "I4"),
+        help="Optional four separate transparent in-between images.",
     )
     parser.add_argument("--metadata", type=Path)
     parser.add_argument("--debug-dir", type=Path)
     args = parser.parse_args()
 
+    if (args.keypose_board is None) == (args.keypose_images is None):
+        parser.error("provide exactly one of keypose_board or --keypose-images")
+    if args.inbetween_board is not None and args.inbetween_images is not None:
+        parser.error("provide at most one of --inbetween-board or --inbetween-images")
+
     spec = load_spec(args.spec)
-    key_board = Image.open(args.keypose_board).convert("RGBA")
-    key_sprites, key_reports = extract_sprites(
-        key_board,
+    key_sprites, key_reports = load_pose_source(
+        board_path=args.keypose_board,
+        image_paths=args.keypose_images,
         spec=spec,
-        board_name="keypose board",
+        source_name="keypose source",
     )
 
     sequence = key_sprites
     sequence_labels = list(spec["input"]["keypose_order"])
     reports: dict[str, Any] = {"keyposes": key_reports}
 
-    if args.inbetween_board:
-        inbetween_board = Image.open(args.inbetween_board).convert("RGBA")
-        inbetween_sprites, inbetween_reports = extract_sprites(
-            inbetween_board,
+    has_inbetweens = args.inbetween_board is not None or args.inbetween_images is not None
+    inbetween_sprites: list[Image.Image] | None = None
+    if has_inbetweens:
+        inbetween_sprites, inbetween_reports = load_pose_source(
+            board_path=args.inbetween_board,
+            image_paths=args.inbetween_images,
             spec=spec,
-            board_name="inbetween board",
+            source_name="inbetween source",
         )
         if len(inbetween_sprites) != len(key_sprites):
-            raise ValueError("Key-pose and in-between boards must contain the same pose count")
+            raise ValueError("Key-pose and in-between sources must contain the same pose count")
         sequence = [sprite for pair in zip(key_sprites, inbetween_sprites) for sprite in pair]
         sequence_labels = [
             label
@@ -242,7 +331,7 @@ def main() -> None:
 
     if args.debug_dir:
         save_debug_cells(key_sprites, directory=args.debug_dir, prefix="keypose")
-        if args.inbetween_board:
+        if inbetween_sprites is not None:
             save_debug_cells(
                 inbetween_sprites,
                 directory=args.debug_dir,
@@ -252,15 +341,17 @@ def main() -> None:
     metadata_path = args.metadata or args.output.with_suffix(".json")
     metadata_path.parent.mkdir(parents=True, exist_ok=True)
     metadata = {
-        "version": 1,
+        "version": 2,
         "spec": spec["name"],
         "frame_count": len(normalized),
         "frame_order": sequence_labels,
         "cell": {"width": cell_width, "height": cell_height},
         "output": args.output.name,
         "source": {
-            "keypose_board": args.keypose_board.name,
+            "keypose_board": args.keypose_board.name if args.keypose_board else None,
+            "keypose_images": [path.name for path in args.keypose_images] if args.keypose_images else None,
             "inbetween_board": args.inbetween_board.name if args.inbetween_board else None,
+            "inbetween_images": [path.name for path in args.inbetween_images] if args.inbetween_images else None,
         },
         "reports": reports,
     }
