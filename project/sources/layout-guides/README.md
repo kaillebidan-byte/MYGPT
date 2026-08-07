@@ -17,6 +17,8 @@ python audit/scripts/build_motion_layout_guide.py \
 
 ChatGPT Projectで利用する場合は、このPNGをProject Sourceへ一度追加する。
 
+**基準キャラクター画像と一緒に生成チャットへ直接添付しない。** 実機テストでは、layout guideを直接添付すると枠、K1〜K4ラベル、チェック柄などを完成画像の見本として模倣する結果が出た。
+
 用途は配置だけ。ガイド内のK1〜K4ラベル、枠線、灰色領域、色を最終画像へ描き写さない。キャラクターの顔、衣装、体格、画風、配色の判断には使わない。
 
 Project側がlayout guideを視覚入力として利用できない場合でも、生成ごとにユーザーへ追加添付を要求しない。テキストの`03-keypose-board-spec.md`をfallbackとして使う。
