@@ -1,14 +1,14 @@
 # Keypose Board Specification
 
-この資料は、画像生成段階の1枚の2×2モーションボードだけを定義する。
+この資料は、画像生成段階の1枚の2×2モーションボードと、その後続として必要になる中割りボードの幾何条件を定義する。
 
-最終フレーム画像、最終スプライトシート、アトラスのピクセル寸法や後処理方法は定義しない。
+最終スプライトシートやアトラスの厳密な組み立ては`audit/`側へ任せる。
 
 ## 基本構成
 
 1枚の画像に1動作だけを描く。
 
-4つの時間順キーポーズを2列×2行へ配置する。
+主要4キーポーズは2列×2行へ時間順に配置する。
 
 - 左上: K1
 - 右上: K2
@@ -17,7 +17,7 @@
 
 K1〜K4は4枚の別画像ではなく、1つのmotion board内の4状態とする。
 
-モーション依頼1件につき、この2×2ボードを1枚だけ生成する。横4枚版、別案、追加ボード、個別K1〜K4を同時に生成しない。
+モーション依頼1件につき、最初のvisual jobではこの2×2ボードを1枚だけ生成する。横4枚版、別案、追加ボード、個別K1〜K4を同時に生成しない。
 
 キャンバス上にグリッド線、枠、K1〜K4ラベルは描かない。位置関係だけを2×2として扱う。
 
@@ -41,7 +41,9 @@ K1〜K4は4枚の別画像ではなく、1つのmotion board内の4状態とす�
 
 ## layout guide
 
-`project/sources/layout-guides/four-pose-portrait.png`が利用可能な場合は、4スロット、中央safe gap、外周safe marginの幾何だけを参照する。
+`project/sources/layout-guides/four-pose-portrait.png`がProject Sourceとして利用可能な場合は、4スロット、中央safe gap、外周safe marginの幾何だけを参照する。
+
+layout guideはProject Sourceとして使い、基準キャラクター画像と一緒に生成チャットへ直接添付しない。直接添付されたlayout画像は、枠、ラベル、背景表現などを完成画像の見本として模倣される可能性がある。
 
 layout guideはキャラクター同一性や画風の参照画像ではない。
 
@@ -110,20 +112,20 @@ layout guideを画像生成側が参照できない場合でも、ユーザー�
 
 ## 時間順
 
-4ポーズの意味は`02-motion-design.md`で決める。
+K1〜K4の意味は`02-motion-design.md`で作るmotion contractによって決める。
 
-この資料では、K1 → K2 → K3 → K4が時間順であることだけを固定する。
+この資料ではK1 → K2 → K3 → K4が時間順であることだけを固定する。
 
 ## audit入力
 
-本番の後処理は次の順で行う。
+主要ボードの本番後処理は次の順で行う。
 
 ```text
-raw chroma 2x2 board
+raw chroma 2x2 keypose board
   -> remove_chroma_key.py
-  -> transparent 2x2 board
+  -> transparent 2x2 keypose board
   -> build_motion_strip.py
-  -> normalized transparent motion strip
+  -> normalized transparent 4f strip
 ```
 
 `audit/scripts/build_motion_strip.py`へ渡す前に、`remove_chroma_key.py`で背景をalphaへ変換する。
@@ -132,15 +134,52 @@ raw chroma 2x2 board
 
 4枚個別画像入力は過去実験との互換用としてコードに残してよいが、新しいChatGPT Projectの本番画像生成経路では使わない。
 
-## 8フレーム化
+## 中割りと8フレーム化
 
 最終8フレームが必要でも、最初のvisual jobへ8体を直接描かない。
 
-まず4つの主要キーポーズをこの2×2ボード1枚として生成する。
+まずK1〜K4の主要ボードを生成し、内容が合格したことを確認する。
 
-必要な中割り4ポーズは、主要キーポーズとは別の後続visual jobとして2×2ボード1枚を生成する。同一応答内で主要ボードと中割りボードを自動的に連続生成しない。
+その後の別visual jobで、中割り・補助フレームI1〜I4を1枚のportrait 2×2ボードとして生成する。I1〜I4も左上→右上→左下→右下の時間順とするが、各Iを特定のK間へ固定対応させない。
 
-最終的な切り出し、倍率統一、位置合わせ、フレーム配置は画像生成後の処理へ任せる。
+どの区間へ何枚置くかは`02-motion-design.md`のmotion contractとtiming planで決める。
+
+### loop
+
+loopでは通常、4区間が存在する。
+
+- K1→K2
+- K2→K3
+- K3→K4
+- K4→K1
+
+8フレームなら各区間へ1枚ずつ中割りを置く構成を基本にできる。
+
+### one-shot
+
+one-shotの基本区間はK1→K2、K2→K3、K3→K4の3区間だけである。
+
+8フレーム化のためにK4→K1を捏造しない。4枚目の中割りは、3区間のうち変化量が大きい区間、接触・離地・着地・反転を含む区間、速度変化が大きい区間、またはsettleを丁寧に見せる必要がある区間へ追加する。
+
+したがってone-shotでは、同じK間に2枚の中割りが入る場合がある。
+
+### frame plan
+
+I1〜I4は時間順に並べる。最終的なKとIの配置順はmotion contractからframe planとして決める。
+
+例:
+
+```text
+loop:
+K1,I1,K2,I2,K3,I3,K4,I4
+
+one-shotでK2→K3を細かくする例:
+K1,I1,K2,I2,I3,K3,I4,K4
+```
+
+最終組み立てでは`build_motion_strip.py --frame-plan`へこの順序を渡す。
+
+主要ボードと中割りボードを同一応答内で自動連続生成しない。
 
 ## 生成段階の合格条件
 
@@ -149,8 +188,10 @@ raw chroma 2x2 board
 - ボード全体がportraitで、各象限が縦長である
 - 4象限に1ポーズずつある
 - K1 → K2 → K3 → K4の順に動作が読める
+- motion contractの開始状態、終了状態、loop / one-shot条件と一致する
 - 4ポーズが同じキャラクターとして読める
 - 顔、髪、衣装、配色、模様、装飾、体格が共通している
+- 表情変更の指定がなければ基準表情を維持している
 - カメラ角度と見かけの縮尺が揃っている
 - 4ポーズすべてで頭頂から靴底まで見える
 - 全身と付随物が切れていない
