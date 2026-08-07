@@ -5,12 +5,14 @@ on:
     paths:
       - "audit/scripts/**"
       - "audit/specs/**"
+      - "audit/docs/**"
       - "audit/requirements.txt"
       - ".github/workflows/test-audit-scripts.yml"
   pull_request:
     paths:
       - "audit/scripts/**"
       - "audit/specs/**"
+      - "audit/docs/**"
       - "audit/requirements.txt"
       - ".github/workflows/test-audit-scripts.yml"
 
@@ -33,8 +35,13 @@ jobs:
 
       - run: python -m pip install -r audit/requirements.txt
 
-      - name: Create synthetic 8x9 atlas and 2x2 pose boards
+      - name: Create layout guide and synthetic chroma boards
         run: |
+          mkdir -p test-output
+          python audit/scripts/build_motion_layout_guide.py \
+            --output test-output/four-pose-portrait.png \
+            --metadata test-output/four-pose-portrait.json
+
           python - <<'PY'
           from pathlib import Path
           from PIL import Image, ImageDraw
@@ -54,24 +61,57 @@ jobs:
                   )
           atlas.save(output / "synthetic-atlas.png")
 
-          def make_pose_board(path: Path, offset: int) -> None:
-              image = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
+          def make_chroma_board(path: Path, offset: int) -> None:
+              image = Image.new("RGB", (1024, 1536), (255, 0, 255))
               board = ImageDraw.Draw(image)
               for index, (row, column) in enumerate(((0, 0), (0, 1), (1, 0), (1, 1))):
-                  left = column * 512 + 160 + offset + index * 4
-                  top = row * 512 + 120 + index * 6
+                  left = column * 512 + 150 + offset + index * 4
+                  top = row * 768 + 170 + index * 8
                   board.ellipse(
-                      (left, top, left + 150, top + 250),
-                      fill=(245, 180 - index * 10, 45 + index * 20, 255),
+                      (left, top, left + 160, top + 330),
+                      fill=(245, 180 - index * 10, 45 + index * 20),
                   )
                   board.rectangle(
-                      (left + 112, top - 36 + index * 9, left + 142, top + 110),
-                      fill=(245, 180 - index * 10, 45 + index * 20, 255),
+                      (left + 118, top - 54 + index * 7, left + 148, top + 120),
+                      fill=(245, 180 - index * 10, 45 + index * 20),
                   )
               image.save(path)
 
-          make_pose_board(output / "keyposes.png", 0)
-          make_pose_board(output / "inbetweens.png", 8)
+          make_chroma_board(output / "keyposes-raw.png", 0)
+          make_chroma_board(output / "inbetweens-raw.png", 8)
+          PY
+
+      - name: Remove chroma backgrounds
+        run: |
+          python audit/scripts/remove_chroma_key.py \
+            test-output/keyposes-raw.png \
+            --output test-output/keyposes.png \
+            --metadata test-output/keyposes-chroma.json
+
+          python audit/scripts/remove_chroma_key.py \
+            test-output/inbetweens-raw.png \
+            --output test-output/inbetweens.png \
+            --metadata test-output/inbetweens-chroma.json
+
+      - name: Verify layout guide and chroma removal
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from PIL import Image
+
+          guide = Image.open("test-output/four-pose-portrait.png")
+          assert guide.size == (1024, 1536), guide.size
+
+          raw = Image.open("test-output/keyposes-raw.png").convert("RGBA")
+          clean = Image.open("test-output/keyposes.png").convert("RGBA")
+          assert raw.getchannel("A").getextrema() == (255, 255)
+          assert clean.getchannel("A").getextrema()[0] == 0
+          assert clean.getchannel("A").getextrema()[1] == 255
+
+          chroma = json.loads(Path("test-output/keyposes-chroma.json").read_text(encoding="utf-8"))
+          assert chroma["key_rgb"] == [255, 0, 255], chroma
+          assert chroma["pixels"]["cleared"] > 0, chroma
           PY
 
       - name: Build four-frame motion strip
@@ -108,7 +148,9 @@ jobs:
           four_meta = json.loads(Path("test-output/motion-4f.json").read_text(encoding="utf-8"))
           eight_meta = json.loads(Path("test-output/motion-8f.json").read_text(encoding="utf-8"))
           assert four_meta["frame_count"] == 4, four_meta
+          assert four_meta["frame_order"] == ["K1", "K2", "K3", "K4"], four_meta
           assert eight_meta["frame_count"] == 8, eight_meta
+          assert eight_meta["frame_order"] == ["K1", "I1", "K2", "I2", "K3", "I3", "K4", "I4"], eight_meta
           assert len(list(Path("test-output/debug-4f").glob("keypose-*.png"))) == 4
           assert len(list(Path("test-output/debug-8f").glob("inbetween-*.png"))) == 4
           PY
