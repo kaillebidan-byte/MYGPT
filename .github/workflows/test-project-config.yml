@@ -66,6 +66,9 @@ jobs:
               "Project Sources内の画像",
               "前回生成した画像を新しい正本にせず",
               "左上 → 右上 → 左下 → 右下",
+              "頭頂から靴底まで完全に見える全身像",
+              "表情変更を指定されていない場合は、基準画像の表情を維持",
+              "未指定のエフェクト",
               "02-motion-design.md",
               "03-keypose-board-spec.md",
           ]:
@@ -93,6 +96,8 @@ jobs:
           motion = Path("project/sources/production/02-motion-design.md").read_text(encoding="utf-8")
           for required_phrase in [
               "rest / anticipation / peak / return をすべての動作へ固定適用しない",
+              "4ポーズすべてで基準画像の表情を維持",
+              "手を振ること自体を笑顔や口開けで説明しない",
               "waving / 手を振る",
               "idle / 待機",
               "running-right / running-left / 走る",
@@ -106,6 +111,9 @@ jobs:
               "右上: K2",
               "左下: K3",
               "右下: K4",
+              "頭頂から靴底まで完全に見える全身像",
+              "各象限の上下左右すべてに透明な余白",
+              "未指定エフェクト",
               "背景は完全透過",
               "最終的な切り出し、倍率統一、位置合わせ",
           ]:
