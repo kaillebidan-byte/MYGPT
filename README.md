@@ -8,10 +8,15 @@ Custom GPTは本番経路から外し、過去設定として`legacy/custom-gpt/
 
 ```text
 project/
-  instructions/            ChatGPT ProjectのProject Instructions
+  instructions/
+    project-instructions.md
   sources/
-    production/            Projectへ追加する本番用読み物
-    reference-images/      基準画像の管理方針
+    production/
+      01-character-identity.md
+      02-motion-design.md
+      03-keypose-board-spec.md
+    reference-images/
+      README.md
 
 audit/                     スプライト組み立て・監査コード
 research/                  公開資料調査・設計記録
@@ -26,18 +31,23 @@ legacy/
 .github/workflows/
   audit-sprite.yml          実験監査workflow
   test-audit-scripts.yml    組み立て・監査コードのスモークテスト
-  test-project-config.yml   Project用フォルダ構成の検証
+  test-project-config.yml   Project用本番構成の検証
 ```
 
 ## ChatGPT Project
 
-本番でChatGPTへ渡すものは`project/`だけを基準にする。
+本番でChatGPTへ渡す現行ファイルは`project/`を基準にする。
 
 - `project/instructions/project-instructions.md` — Project Instructions欄
-- `project/sources/production/` — Project sourcesへ追加する読み物
-- 基準キャラクター画像 — ChatGPT Projectへ直接追加
+- `project/sources/production/01-character-identity.md` — 同一性判断
+- `project/sources/production/02-motion-design.md` — 4キーポーズ設計
+- `project/sources/production/03-keypose-board-spec.md` — 2×2画像仕様
 
-`project/sources/production/`の本文は現在プレースホルダーで、次段階で再構築する。`legacy/custom-gpt/`の文章をそのままコピーしない。
+基準キャラクター画像はProject Sourcesへ置くだけの経路に依存せず、画像生成を行う現在のチャットへ直接添付する。
+
+新しい生成では前回生成画像を正本にせず、元の基準画像へ戻る。前回生成画像を使うのは、その画像自体を修正する場合だけとする。
+
+Projectが担当するのは静止画と組み立て用2×2キーポーズ画像まで。最終ストリップの切り出し、倍率統一、位置合わせ、8フレーム化、アトラス化、監査はリポジトリ側で扱う。
 
 ## Audit
 
@@ -50,10 +60,14 @@ python audit/scripts/build_motion_strip.py keyposes.png \
   --output motion-4f.png
 ```
 
-既存の監査コードや仕様は、Project側の生成方針が固まった後で必要に応じて接続する。
+画像生成段階のProject仕様と、後処理のピクセル規格・Python処理を分離する。
+
+## Research
+
+Projectsの実運用例、Sourcesの参照特性、キャラクター画像参照の試験結果は`research/`へ保存する。
 
 ## Legacy
 
-`legacy/custom-gpt/`には、今回廃止するCustom GPT向けの本番設定、Knowledge、監査実験設定をそのまま保存する。
+`legacy/custom-gpt/`には廃止したCustom GPT向け本番設定、Knowledge、監査実験設定を保存する。
 
 参照や比較には使えるが、ChatGPT Projectへ直接投入する現行ファイルではない。
