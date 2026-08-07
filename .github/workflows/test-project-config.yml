@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - "project/**"
+      - "research/PROJECT-HANDOFF.md"
       - "legacy/custom-gpt/**"
       - "README.md"
       - "legacy/README.md"
@@ -11,6 +12,7 @@ on:
   pull_request:
     paths:
       - "project/**"
+      - "research/PROJECT-HANDOFF.md"
       - "legacy/custom-gpt/**"
       - "README.md"
       - "legacy/README.md"
@@ -40,6 +42,7 @@ jobs:
               "project/sources/production/02-motion-design.md",
               "project/sources/production/03-keypose-board-spec.md",
               "project/sources/reference-images/README.md",
+              "research/PROJECT-HANDOFF.md",
               "legacy/custom-gpt/README.md",
               "legacy/custom-gpt/production/instructions.md",
               "legacy/custom-gpt/knowledge/character-identity-reference.md",
@@ -66,6 +69,11 @@ jobs:
               "Project Sources内の画像",
               "前回生成した画像を新しい正本にせず",
               "左上 → 右上 → 左下 → 右下",
+              "portraitキャンバス",
+              "幅:高さ = 2:3",
+              "1024 × 1536 px",
+              "正方形キャンバスへ4体を詰め込まない",
+              "negative space",
               "頭頂から靴底まで完全に見える全身像",
               "表情変更を指定されていない場合は、基準画像の表情を維持",
               "ユーザーが明示していないモーションライン",
@@ -114,15 +122,31 @@ jobs:
               "右上: K2",
               "左下: K3",
               "右下: K4",
+              "幅:高さ = 2:3",
+              "1024 × 1536 px",
+              "512 × 768 px",
+              "正方形キャンバスへ4体を詰め込まない",
+              "negative space",
               "頭頂から靴底まで完全に見える全身像",
               "キャンバス全体を横断する連続した透明帯",
               "上段2ポーズは横方向中央線より完全に上",
               "各ポーズは割り当てられた象限の内部だけに存在",
               "目で明確に確認できる透明余白",
+              "build_motion_strip.py",
               "背景は完全透過",
               "最終的な切り出し、倍率統一、位置合わせ",
           ]:
               assert required_phrase in board, f"Keypose board source missing: {required_phrase}"
+
+          handoff = Path("research/PROJECT-HANDOFF.md").read_text(encoding="utf-8")
+          for required_phrase in [
+              "基準画像をGitHubへ手動アップロードして次工程へ渡す構成ではない",
+              "Project Sourcesだけに置く方式",
+              "2:3 portrait",
+              "このキャラクターが手を振るモーションを作ってください。",
+              "既知の成功事項を未検証扱いへ戻さない",
+          ]:
+              assert required_phrase in handoff, f"Handoff missing: {required_phrase}"
 
           root = Path("README.md").read_text(encoding="utf-8")
           assert "01-character-identity.md" in root
