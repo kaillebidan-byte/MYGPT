@@ -168,6 +168,47 @@ def load_pose_source(
         return extract_sprites_from_board(board, spec=spec, board_name=source_name)
 
 
+def parse_frame_plan(
+    value: str,
+    *,
+    key_labels: list[str],
+    inbetween_labels: list[str],
+) -> list[str]:
+    labels = [item.strip() for item in value.split(",") if item.strip()]
+    expected = key_labels + inbetween_labels
+
+    if len(labels) != len(expected):
+        raise ValueError(
+            f"frame plan must contain exactly {len(expected)} labels: {', '.join(expected)}"
+        )
+    if len(set(labels)) != len(labels):
+        raise ValueError("frame plan must use each keypose and inbetween label exactly once")
+    if set(labels) != set(expected):
+        missing = sorted(set(expected) - set(labels))
+        unknown = sorted(set(labels) - set(expected))
+        details: list[str] = []
+        if missing:
+            details.append(f"missing: {', '.join(missing)}")
+        if unknown:
+            details.append(f"unknown: {', '.join(unknown)}")
+        raise ValueError("invalid frame plan (" + "; ".join(details) + ")")
+
+    key_order = [label for label in labels if label in key_labels]
+    if key_order != key_labels:
+        raise ValueError(
+            "frame plan must preserve keypose order: " + ", ".join(key_labels)
+        )
+
+    inbetween_order = [label for label in labels if label in inbetween_labels]
+    if inbetween_order != inbetween_labels:
+        raise ValueError(
+            "frame plan must preserve inbetween chronological order: "
+            + ", ".join(inbetween_labels)
+        )
+
+    return labels
+
+
 def normalize_sprites(
     sprites: list[Image.Image],
     *,
@@ -240,7 +281,7 @@ def main() -> None:
         "keypose_board",
         type=Path,
         nargs="?",
-        help="Legacy transparent 2x2 key-pose board.",
+        help="Transparent 2x2 key-pose board.",
     )
     parser.add_argument(
         "--keypose-images",
@@ -254,14 +295,23 @@ def main() -> None:
     parser.add_argument(
         "--inbetween-board",
         type=Path,
-        help="Optional legacy 2x2 in-between board.",
+        help="Optional transparent 2x2 in-between board containing I1 I2 I3 I4 in chronological order.",
     )
     parser.add_argument(
         "--inbetween-images",
         type=Path,
         nargs=4,
         metavar=("I1", "I2", "I3", "I4"),
-        help="Optional four separate transparent in-between images.",
+        help="Optional four separate transparent in-between images in chronological order.",
+    )
+    parser.add_argument(
+        "--frame-plan",
+        help=(
+            "Explicit comma-separated final frame order using K1..K4 and I1..I4. "
+            "Example loop: K1,I1,K2,I2,K3,I3,K4,I4. "
+            "Example one-shot: K1,I1,K2,I2,I3,K3,I4,K4. "
+            "If omitted with inbetweens, the legacy interleave order is used for compatibility."
+        ),
     )
     parser.add_argument("--metadata", type=Path)
     parser.add_argument("--debug-dir", type=Path)
@@ -280,12 +330,17 @@ def main() -> None:
         source_name="keypose source",
     )
 
+    key_labels = list(spec["input"]["keypose_order"])
     sequence = key_sprites
-    sequence_labels = list(spec["input"]["keypose_order"])
+    sequence_labels = key_labels
+    plan_source = "keyposes-only"
     reports: dict[str, Any] = {"keyposes": key_reports}
 
     has_inbetweens = args.inbetween_board is not None or args.inbetween_images is not None
     inbetween_sprites: list[Image.Image] | None = None
+    if args.frame_plan and not has_inbetweens:
+        parser.error("--frame-plan requires --inbetween-board or --inbetween-images")
+
     if has_inbetweens:
         inbetween_sprites, inbetween_reports = load_pose_source(
             board_path=args.inbetween_board,
@@ -295,15 +350,32 @@ def main() -> None:
         )
         if len(inbetween_sprites) != len(key_sprites):
             raise ValueError("Key-pose and in-between sources must contain the same pose count")
-        sequence = [sprite for pair in zip(key_sprites, inbetween_sprites) for sprite in pair]
-        sequence_labels = [
-            label
-            for pair in zip(
-                spec["input"]["keypose_order"],
-                spec["input"]["inbetween_order"],
+
+        inbetween_labels = list(spec["input"]["inbetween_order"])
+        if len(inbetween_labels) != len(inbetween_sprites):
+            raise ValueError("Spec inbetween_order must match the number of in-between poses")
+
+        sprite_by_label = {
+            **dict(zip(key_labels, key_sprites)),
+            **dict(zip(inbetween_labels, inbetween_sprites)),
+        }
+
+        if args.frame_plan:
+            sequence_labels = parse_frame_plan(
+                args.frame_plan,
+                key_labels=key_labels,
+                inbetween_labels=inbetween_labels,
             )
-            for label in pair
-        ]
+            plan_source = "explicit"
+        else:
+            sequence_labels = [
+                label
+                for pair in zip(key_labels, inbetween_labels)
+                for label in pair
+            ]
+            plan_source = "legacy-interleave"
+
+        sequence = [sprite_by_label[label] for label in sequence_labels]
         reports["inbetweens"] = inbetween_reports
 
     output_spec = spec["output"]
@@ -341,10 +413,11 @@ def main() -> None:
     metadata_path = args.metadata or args.output.with_suffix(".json")
     metadata_path.parent.mkdir(parents=True, exist_ok=True)
     metadata = {
-        "version": 2,
+        "version": 3,
         "spec": spec["name"],
         "frame_count": len(normalized),
         "frame_order": sequence_labels,
+        "frame_plan_source": plan_source,
         "cell": {"width": cell_width, "height": cell_height},
         "output": args.output.name,
         "source": {
@@ -365,6 +438,8 @@ def main() -> None:
                 "output": str(args.output),
                 "metadata": str(metadata_path),
                 "frame_count": len(normalized),
+                "frame_order": sequence_labels,
+                "frame_plan_source": plan_source,
             },
             ensure_ascii=False,
         )
