@@ -122,14 +122,25 @@ jobs:
             --output test-output/motion-4f.png \
             --debug-dir test-output/debug-4f
 
-      - name: Build eight-frame motion strip
+      - name: Build loop eight-frame motion strip
         run: |
           python audit/scripts/build_motion_strip.py \
             test-output/keyposes.png \
             --inbetween-board test-output/inbetweens.png \
+            --frame-plan K1,I1,K2,I2,K3,I3,K4,I4 \
             --spec audit/specs/motion-keypose-2x2.json \
-            --output test-output/motion-8f.png \
-            --debug-dir test-output/debug-8f
+            --output test-output/motion-8f-loop.png \
+            --debug-dir test-output/debug-8f-loop
+
+      - name: Build one-shot eight-frame motion strip
+        run: |
+          python audit/scripts/build_motion_strip.py \
+            test-output/keyposes.png \
+            --inbetween-board test-output/inbetweens.png \
+            --frame-plan K1,I1,K2,I2,I3,K3,I4,K4 \
+            --spec audit/specs/motion-keypose-2x2.json \
+            --output test-output/motion-8f-one-shot.png \
+            --debug-dir test-output/debug-8f-one-shot
 
       - name: Verify motion strip outputs
         run: |
@@ -139,20 +150,28 @@ jobs:
           from PIL import Image
 
           four = Image.open("test-output/motion-4f.png").convert("RGBA")
-          eight = Image.open("test-output/motion-8f.png").convert("RGBA")
+          loop = Image.open("test-output/motion-8f-loop.png").convert("RGBA")
+          one_shot = Image.open("test-output/motion-8f-one-shot.png").convert("RGBA")
           assert four.size == (1024, 320), four.size
-          assert eight.size == (2048, 320), eight.size
+          assert loop.size == (2048, 320), loop.size
+          assert one_shot.size == (2048, 320), one_shot.size
           assert four.getchannel("A").getextrema()[0] == 0
-          assert eight.getchannel("A").getextrema()[0] == 0
+          assert loop.getchannel("A").getextrema()[0] == 0
+          assert one_shot.getchannel("A").getextrema()[0] == 0
 
           four_meta = json.loads(Path("test-output/motion-4f.json").read_text(encoding="utf-8"))
-          eight_meta = json.loads(Path("test-output/motion-8f.json").read_text(encoding="utf-8"))
+          loop_meta = json.loads(Path("test-output/motion-8f-loop.json").read_text(encoding="utf-8"))
+          one_shot_meta = json.loads(Path("test-output/motion-8f-one-shot.json").read_text(encoding="utf-8"))
+
           assert four_meta["frame_count"] == 4, four_meta
           assert four_meta["frame_order"] == ["K1", "K2", "K3", "K4"], four_meta
-          assert eight_meta["frame_count"] == 8, eight_meta
-          assert eight_meta["frame_order"] == ["K1", "I1", "K2", "I2", "K3", "I3", "K4", "I4"], eight_meta
+          assert loop_meta["frame_order"] == ["K1", "I1", "K2", "I2", "K3", "I3", "K4", "I4"], loop_meta
+          assert one_shot_meta["frame_order"] == ["K1", "I1", "K2", "I2", "I3", "K3", "I4", "K4"], one_shot_meta
+          assert loop_meta["frame_plan_source"] == "explicit", loop_meta
+          assert one_shot_meta["frame_plan_source"] == "explicit", one_shot_meta
           assert len(list(Path("test-output/debug-4f").glob("keypose-*.png"))) == 4
-          assert len(list(Path("test-output/debug-8f").glob("inbetween-*.png"))) == 4
+          assert len(list(Path("test-output/debug-8f-loop").glob("inbetween-*.png"))) == 4
+          assert len(list(Path("test-output/debug-8f-one-shot").glob("inbetween-*.png"))) == 4
           PY
 
       - name: Run 8x9 audit pipeline
