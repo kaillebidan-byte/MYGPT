@@ -64,6 +64,13 @@ jobs:
           def make_chroma_board(path: Path, offset: int) -> None:
               image = Image.new("RGB", (1024, 1536), (255, 0, 255))
               board = ImageDraw.Draw(image)
+
+              # Reproduce the small chroma variation observed in generated boards.
+              # The old threshold left these center safe-gap pixels partially opaque,
+              # which made split-cell alpha bboxes touch their edges.
+              board.rectangle((502, 0, 521, 1535), fill=(240, 8, 225))
+              board.rectangle((0, 758, 1023, 777), fill=(240, 8, 225))
+
               for index, (row, column) in enumerate(((0, 0), (0, 1), (1, 0), (1, 1))):
                   left = column * 512 + 150 + offset + index * 4
                   top = row * 768 + 170 + index * 8
@@ -109,8 +116,18 @@ jobs:
           assert clean.getchannel("A").getextrema()[0] == 0
           assert clean.getchannel("A").getextrema()[1] == 255
 
+          # Generated chroma is not mathematically one RGB value. The central safe
+          # gaps must nevertheless become fully transparent before 2x2 splitting.
+          alpha = clean.getchannel("A")
+          vertical_gap = alpha.crop((502, 0, 522, 1536))
+          horizontal_gap = alpha.crop((0, 758, 1024, 778))
+          assert vertical_gap.getextrema() == (0, 0), vertical_gap.getextrema()
+          assert horizontal_gap.getextrema() == (0, 0), horizontal_gap.getextrema()
+
           chroma = json.loads(Path("test-output/keyposes-chroma.json").read_text(encoding="utf-8"))
           assert chroma["key_rgb"] == [255, 0, 255], chroma
+          assert chroma["threshold"] == 42.0, chroma
+          assert chroma["feather"] == 18.0, chroma
           assert chroma["pixels"]["cleared"] > 0, chroma
           PY
 
