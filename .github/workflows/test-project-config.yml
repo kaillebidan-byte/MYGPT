@@ -73,17 +73,20 @@ jobs:
               "現在のチャットに直接添付された基準キャラクター画像",
               "前回生成した画像を新しい正本にせず",
               "左上K1 → 右上K2 → 左下K3 → 右下K4",
+              "motion contract",
+              "loop / one-shot",
               "1 visual job = 1 motion board",
-              "モーション依頼1件につき画像生成は1回だけ",
-              "K1、K2、K3、K4を4枚の独立画像として生成しない",
+              "1つのvisual jobにつき画像生成は1回だけ",
               "同一応答内で自動再生成しない",
               "portraitキャンバス",
               "幅:高さ = 2:3",
               "1024 × 1536 px",
               "negative space",
-              "layout guide",
+              "layout guideはProject Source専用",
               "均一な単色クロマキー背景",
-              "接地影",
+              "中割り",
+              "I1〜I4",
+              "frame plan",
               "画像生成用の内部指示は短く状態固有",
               "04-imagegen-workflow.md",
           ]:
@@ -111,15 +114,24 @@ jobs:
 
           motion = Path("project/sources/production/02-motion-design.md").read_text(encoding="utf-8")
           for required_phrase in [
+              "モーション名の一覧へ依頼を当てはめる資料ではない",
+              "motion contract",
               "rest / anticipation / peak / return をすべての動作へ固定適用しない",
+              "loop / one-shot の判断",
+              "one-shotではK4を無理にK1へ戻す姿勢にしない",
               "4ポーズすべてで基準画像の表情を維持",
-              "手を振ること自体を笑顔や口開けで説明しない",
-              "waving / 手を振る",
-              "idle / 待機",
-              "running-right / running-left / 走る",
-              "jumping / 跳ぶ",
+              "中割り用timing plan",
+              "K4→K1",
           ]:
               assert required_phrase in motion, f"Motion source missing: {required_phrase}"
+
+          for forbidden_motion_catalog in [
+              "## waving / 手を振る",
+              "## idle / 待機",
+              "## running-right / running-left / 走る",
+              "## jumping / 跳ぶ",
+          ]:
+              assert forbidden_motion_catalog not in motion, f"Fixed motion catalog remains: {forbidden_motion_catalog}"
 
           board = Path("project/sources/production/03-keypose-board-spec.md").read_text(encoding="utf-8")
           for required_phrase in [
@@ -131,25 +143,31 @@ jobs:
               "画像生成結果が1枚だけ",
               "幅:高さ = 2:3",
               "512 × 768 px",
-              "layout guide",
+              "layout guideはProject Sourceとして使い",
               "中央safe gap",
               "均一な単色クロマキー",
               "remove_chroma_key.py",
               "build_motion_strip.py",
-              "4枚個別画像入力は過去実験との互換用",
+              "one-shotの基本区間",
+              "frame plan",
+              "--frame-plan",
           ]:
               assert required_phrase in board, f"Keypose board source missing: {required_phrase}"
 
           workflow = Path("project/sources/production/04-imagegen-workflow.md").read_text(encoding="utf-8")
           for required_phrase in [
               "1 visual job = 1 motion board",
-              "K1、K2、K3、K4を4つの別画像生成ジョブへ分解しない",
+              "natural-language motion request",
               "canonical identity reference",
               "job isolation",
-              "layout guide",
+              "layout guideはProject Source専用",
               "chroma-key background",
               "concise generation prompt",
+              "inbetween visual job",
+              "identity reference",
+              "motion reference",
               "同一応答内で自動再生成しない",
+              "frame plan",
               "remove_chroma_key.py",
           ]:
               assert required_phrase in workflow, f"Imagegen workflow missing: {required_phrase}"
