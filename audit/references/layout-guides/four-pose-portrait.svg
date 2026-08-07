@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1536" viewBox="0 0 1024 1536">
+  <rect width="1024" height="1536" fill="#f2f2f2"/>
+  <rect x="464" y="0" width="96" height="1536" fill="#d7d7d7"/>
+  <rect x="0" y="720" width="1024" height="96" fill="#d7d7d7"/>
+  <g fill="none" stroke="#404040" stroke-width="2">
+    <rect x="48" y="48" width="416" height="672"/>
+    <rect x="560" y="48" width="416" height="672"/>
+    <rect x="48" y="816" width="416" height="672"/>
+    <rect x="560" y="816" width="416" height="672"/>
+  </g>
+  <g stroke="#606060" stroke-width="2">
+    <path d="M246 384h20M256 374v20"/>
+    <path d="M758 384h20M768 374v20"/>
+    <path d="M246 1152h20M256 1142v20"/>
+    <path d="M758 1152h20M768 1142v20"/>
+  </g>
+  <g fill="#202020" font-family="sans-serif" font-size="24">
+    <text x="64" y="82">K1</text>
+    <text x="576" y="82">K2</text>
+    <text x="64" y="850">K3</text>
+    <text x="576" y="850">K4</text>
+  </g>
+</svg>
