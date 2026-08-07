@@ -1,20 +1,20 @@
 {
-  "version": 1,
+  "version": 2,
   "name": "motion-keypose-2x2",
   "input": {
     "columns": 2,
     "rows": 2,
     "keypose_order": [
-      "rest",
-      "anticipation",
-      "peak",
-      "return"
+      "K1",
+      "K2",
+      "K3",
+      "K4"
     ],
     "inbetween_order": [
-      "rest-to-anticipation",
-      "anticipation-to-peak",
-      "peak-to-return",
-      "return-to-rest"
+      "I1",
+      "I2",
+      "I3",
+      "I4"
     ],
     "alpha_threshold": 8,
     "edge_margin_px": 12
