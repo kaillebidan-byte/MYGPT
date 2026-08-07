@@ -72,11 +72,13 @@ layout guideを画像生成側が利用できない場合でも、ユーザー�
 
 1. 直接添付された基準画像がcanonical identity referenceであること
 2. layout guideがある場合は配置だけに使うこと
-3. motion contractから得た今回のK1〜K4
+3. motion contractから得た今回のK1〜K4、transitions、continuity invariants
 4. 顔、髪、体格、胸部・胴体シルエット、衣装、模様、装飾、表情を維持すること
 5. 2×2 portrait、全身、共通縮尺、中央と外周のsafe space
 6. 均一な単色クロマ背景
 7. 影、文字、ラベル、UI、モーションライン、未指定エフェクトを描かないこと
+
+`continuity invariants`は一般的な禁止文へ展開せず、今回の動作で時間をまたいで維持すべき手足、接地側、保持側、向き、接触対象などだけを短く具体化して渡す。
 
 `01`〜`04`の文書を画像生成用プロンプトへ逐語的に貼り付けない。
 
@@ -100,6 +102,8 @@ loopなら通常はK1→K2、K2→K3、K3→K4、K4→K1へ1枚ずつ置ける�
 
 one-shotではK4→K1を作らず、4枚目を必要な区間へ追加する。例えばK2→K3に2枚必要なら、I2とI3をその区間の早い時点・遅い時点として設計する。
 
+中割り用の内部指示にも、主要boardで使った`continuity invariants`のうち該当区間へ継続するものを含める。motion contractで役割変更が明示されていない手足、接地側、保持側、接触対象を中割りだけで入れ替えない。
+
 最終frame orderは後処理へ明示的に渡す。
 
 ## repair
@@ -116,7 +120,7 @@ repairも1 visual job = 1 motion boardとし、同一応答内で複数の再試
 
 - 1枚の2×2主要モーションボード、または後続の1枚の2×2中割りボード
 - キャラクター同一性
-- motion contractに沿った時間差
+- motion contractに沿った時間差とcontinuity invariants
 - portrait構図
 - 全身とsafe space
 - 均一なクロマ背景
