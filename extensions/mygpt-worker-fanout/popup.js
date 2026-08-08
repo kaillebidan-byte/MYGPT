@@ -4,7 +4,9 @@ const MSG = Object.freeze({
   START: "MYGPT_GATE0_START",
   RESET: "MYGPT_GATE0_RESET",
   GET_STATE: "MYGPT_GATE0_GET_STATE",
-  GET_IDENTITY: "MYGPT_GATE0_GET_IDENTITY"
+  GET_IDENTITY: "MYGPT_GATE0_GET_IDENTITY",
+  GATE1_INSERT: "MYGPT_GATE1_INSERT",
+  GATE1_RESET: "MYGPT_GATE1_RESET"
 });
 
 const statusEl = document.getElementById("status");
@@ -14,8 +16,25 @@ const tabIdEl = document.getElementById("tabId");
 const errorEl = document.getElementById("error");
 const startButton = document.getElementById("start");
 const resetButton = document.getElementById("reset");
+const packetEl = document.getElementById("packet");
+const gate1StatusEl = document.getElementById("gate1Status");
+const composerKindEl = document.getElementById("composerKind");
+const insertionMethodEl = document.getElementById("insertionMethod");
+const packetCharsEl = document.getElementById("packetChars");
+const gate1ErrorEl = document.getElementById("gate1Error");
+const gate1InsertButton = document.getElementById("gate1Insert");
+const gate1ResetButton = document.getElementById("gate1Reset");
+
+function formatError(error) {
+  if (!error) {
+    return "";
+  }
+  return `${error.code}${error.detail ? `: ${JSON.stringify(error.detail)}` : ""}`;
+}
 
 function renderState(state) {
+  const gate1 = state && state.gate1 ? state.gate1 : { status: "IDLE" };
+
   statusEl.textContent = state && state.status ? state.status : "UNKNOWN";
   expectedEl.textContent =
     state && state.expectedIdentity && state.expectedIdentity.workerPath
@@ -31,11 +50,23 @@ function renderState(state) {
   tabIdEl.textContent = Number.isInteger(state && state.openedTabId)
     ? String(state.openedTabId)
     : "-";
-  errorEl.textContent =
-    state && state.error
-      ? `${state.error.code}${state.error.detail ? `: ${JSON.stringify(state.error.detail)}` : ""}`
-      : "";
+  errorEl.textContent = formatError(state && state.error);
+
+  gate1StatusEl.textContent = gate1.status || "IDLE";
+  composerKindEl.textContent = gate1.composerKind || "-";
+  insertionMethodEl.textContent = gate1.insertionMethod || "-";
+  packetCharsEl.textContent = Number.isInteger(gate1.packetChars)
+    ? String(gate1.packetChars)
+    : "-";
+  gate1ErrorEl.textContent = formatError(gate1.error);
+
   startButton.disabled = Boolean(state && state.status !== "IDLE");
+  gate1InsertButton.disabled = !(
+    state &&
+    state.status === "PASS" &&
+    gate1.status === "IDLE"
+  );
+  gate1ResetButton.disabled = !(state && state.status === "PASS" && gate1.status !== "IDLE");
 }
 
 async function refreshState() {
@@ -90,6 +121,7 @@ startButton.addEventListener("click", async () => {
 
 resetButton.addEventListener("click", async () => {
   errorEl.textContent = "";
+  gate1ErrorEl.textContent = "";
   try {
     const response = await chrome.runtime.sendMessage({ type: MSG.RESET });
     if (!response || !response.ok) {
@@ -98,6 +130,37 @@ resetButton.addEventListener("click", async () => {
     renderState(response.state);
   } catch (error) {
     errorEl.textContent = error instanceof Error ? error.message : String(error);
+  }
+});
+
+gate1InsertButton.addEventListener("click", async () => {
+  gate1InsertButton.disabled = true;
+  gate1ErrorEl.textContent = "";
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MSG.GATE1_INSERT,
+      packet: packetEl.value
+    });
+    if (!response || !response.ok) {
+      throw new Error(response && response.error ? response.error : "GATE1_INSERT_FAILED");
+    }
+    renderState(response.state);
+  } catch (error) {
+    gate1ErrorEl.textContent = error instanceof Error ? error.message : String(error);
+    await refreshState().catch(() => {});
+  }
+});
+
+gate1ResetButton.addEventListener("click", async () => {
+  gate1ErrorEl.textContent = "";
+  try {
+    const response = await chrome.runtime.sendMessage({ type: MSG.GATE1_RESET });
+    if (!response || !response.ok) {
+      throw new Error(response && response.error ? response.error : "GATE1_RESET_FAILED");
+    }
+    renderState(response.state);
+  } catch (error) {
+    gate1ErrorEl.textContent = error instanceof Error ? error.message : String(error);
   }
 });
 
