@@ -8,11 +8,29 @@ const MSG = Object.freeze({
   RESET: "MYGPT_GATE0_RESET",
   GET_STATE: "MYGPT_GATE0_GET_STATE",
   ROUTE_REPORT: "MYGPT_GATE0_ROUTE_REPORT",
-  GET_IDENTITY: "MYGPT_GATE0_GET_IDENTITY"
+  GET_IDENTITY: "MYGPT_GATE0_GET_IDENTITY",
+  GATE1_INSERT: "MYGPT_GATE1_INSERT",
+  GATE1_RESET: "MYGPT_GATE1_RESET",
+  INSERT_PACKET: "MYGPT_GATE1_INSERT_PACKET"
 });
 
 const ACTIVE_STATUSES = new Set(["OPENING", "AWAITING_DESTINATION"]);
 const TERMINAL_STATUSES = new Set(["PASS", "FAIL"]);
+const GATE1_ACTIVE_STATUSES = new Set(["INSERTING"]);
+const GATE1_TERMINAL_STATUSES = new Set(["PASS", "FAIL"]);
+const MAX_PACKET_CHARS = 12000;
+
+function emptyGate1State() {
+  return {
+    status: "IDLE",
+    operationToken: null,
+    packetChars: null,
+    composerKind: null,
+    insertionMethod: null,
+    observedAt: null,
+    error: null
+  };
+}
 
 function emptyState() {
   return {
@@ -24,19 +42,34 @@ function emptyState() {
     expectedIdentity: null,
     destinationReport: null,
     error: null,
+    gate1: emptyGate1State(),
     startedAt: null,
     updatedAt: Date.now()
   };
 }
 
+function normalizeState(state) {
+  if (!state || typeof state !== "object") {
+    return emptyState();
+  }
+  return {
+    ...emptyState(),
+    ...state,
+    gate1: {
+      ...emptyGate1State(),
+      ...(state.gate1 || {})
+    }
+  };
+}
+
 async function getState() {
   const stored = await chrome.storage.session.get(STATE_KEY);
-  return stored[STATE_KEY] || emptyState();
+  return normalizeState(stored[STATE_KEY]);
 }
 
 async function setState(nextState) {
   const value = {
-    ...nextState,
+    ...normalizeState(nextState),
     updatedAt: Date.now()
   };
   await chrome.storage.session.set({ [STATE_KEY]: value });
@@ -50,6 +83,30 @@ async function transitionFailure(state, code, detail) {
     error: {
       code,
       detail: detail || null
+    }
+  });
+}
+
+async function transitionGate1Failure(state, operationToken, code, detail) {
+  const current = await getState();
+  if (
+    current.runToken !== state.runToken ||
+    current.openedTabId !== state.openedTabId ||
+    current.gate1.operationToken !== operationToken ||
+    current.gate1.status !== "INSERTING"
+  ) {
+    return current;
+  }
+
+  return setState({
+    ...current,
+    gate1: {
+      ...current.gate1,
+      status: "FAIL",
+      error: {
+        code,
+        detail: detail || null
+      }
     }
   });
 }
@@ -105,9 +162,19 @@ async function handleRouteReport(message, sender) {
   const passed = await setState({
     ...nextBase,
     status: "PASS",
-    error: null
+    error: null,
+    gate1: emptyGate1State()
   });
   return { ok: true, state: passed };
+}
+
+async function queryIdentity(tabId) {
+  try {
+    const report = await chrome.tabs.sendMessage(tabId, { type: MSG.GET_IDENTITY });
+    return report && report.identity ? report.identity : null;
+  } catch (_error) {
+    return null;
+  }
 }
 
 async function probeDestinationTab(tabId) {
@@ -120,8 +187,6 @@ async function probeDestinationTab(tabId) {
   try {
     report = await chrome.tabs.sendMessage(tabId, { type: MSG.GET_IDENTITY });
   } catch (_error) {
-    // A content script may not be ready yet. If the tab is still loading,
-    // onUpdated("complete") performs the single lifecycle-bound probe.
     return { ok: false, ignored: "CONTENT_NOT_READY" };
   }
 
@@ -198,10 +263,6 @@ async function startGate0(message) {
     openedTabId: openedTab.id
   });
 
-  // Close the race where document_idle / tabs.onUpdated("complete") can occur
-  // before openedTabId has finished persisting. If the tab is already complete,
-  // query the content script directly now; otherwise the complete event below
-  // performs that one lifecycle-bound query.
   armDestinationProbe(openedTab.id);
 
   return {
@@ -210,6 +271,140 @@ async function startGate0(message) {
     openedTabId: openedTab.id,
     state
   };
+}
+
+async function startGate1(message) {
+  const state = await getState();
+  if (state.status !== "PASS") {
+    return { ok: false, error: "GATE0_PASS_REQUIRED", state };
+  }
+  if (!Number.isInteger(state.openedTabId) || !state.expectedIdentity) {
+    return { ok: false, error: "OWNED_DESTINATION_MISSING", state };
+  }
+
+  if (state.gate1.status !== "IDLE") {
+    return {
+      ok: false,
+      error: GATE1_ACTIVE_STATUSES.has(state.gate1.status)
+        ? "GATE1_ALREADY_ACTIVE"
+        : "GATE1_RESET_REQUIRED",
+      state
+    };
+  }
+
+  const packet = typeof message.packet === "string" ? message.packet.replace(/\r\n?/g, "\n") : "";
+  if (!packet.trim()) {
+    return { ok: false, error: "PACKET_EMPTY", state };
+  }
+  if (packet.length > MAX_PACKET_CHARS) {
+    return { ok: false, error: "PACKET_TOO_LARGE", state };
+  }
+
+  const operationToken = crypto.randomUUID();
+  const inserting = await setState({
+    ...state,
+    gate1: {
+      ...emptyGate1State(),
+      status: "INSERTING",
+      operationToken,
+      packetChars: packet.length
+    }
+  });
+
+  const preflightIdentity = await queryIdentity(inserting.openedTabId);
+  if (!MYGPTWorkerRoute.sameWorkerIdentity(inserting.expectedIdentity, preflightIdentity)) {
+    const failed = await transitionGate1Failure(
+      inserting,
+      operationToken,
+      preflightIdentity ? "WORKER_IDENTITY_MISMATCH" : "DESTINATION_IDENTITY_UNAVAILABLE",
+      preflightIdentity || null
+    );
+    return { ok: false, error: failed.gate1.error.code, state: failed };
+  }
+
+  let result;
+  try {
+    result = await chrome.tabs.sendMessage(inserting.openedTabId, {
+      type: MSG.INSERT_PACKET,
+      packet,
+      runToken: inserting.runToken,
+      expectedWorkerKey: inserting.expectedIdentity.workerKey
+    });
+  } catch (error) {
+    const failed = await transitionGate1Failure(
+      inserting,
+      operationToken,
+      "CONTENT_MESSAGE_FAILED",
+      error instanceof Error ? error.message : String(error)
+    );
+    return { ok: false, error: failed.gate1.error.code, state: failed };
+  }
+
+  if (!result || result.ok !== true) {
+    const failed = await transitionGate1Failure(
+      inserting,
+      operationToken,
+      result && result.reason ? result.reason : "PACKET_INSERT_FAILED",
+      result || null
+    );
+    return { ok: false, error: failed.gate1.error.code, state: failed };
+  }
+
+  if (
+    result.runToken !== inserting.runToken ||
+    result.submitted !== false ||
+    result.exactMatch !== true ||
+    !MYGPTWorkerRoute.sameWorkerIdentity(inserting.expectedIdentity, result.identity)
+  ) {
+    const failed = await transitionGate1Failure(
+      inserting,
+      operationToken,
+      "PACKET_INSERT_EVIDENCE_INVALID",
+      {
+        exactMatch: result.exactMatch,
+        submitted: result.submitted,
+        runTokenMatches: result.runToken === inserting.runToken,
+        workerMatches: MYGPTWorkerRoute.sameWorkerIdentity(inserting.expectedIdentity, result.identity)
+      }
+    );
+    return { ok: false, error: failed.gate1.error.code, state: failed };
+  }
+
+  const current = await getState();
+  if (
+    current.runToken !== inserting.runToken ||
+    current.openedTabId !== inserting.openedTabId ||
+    current.gate1.operationToken !== operationToken ||
+    current.gate1.status !== "INSERTING"
+  ) {
+    return { ok: false, error: "STALE_GATE1_RESULT", state: current };
+  }
+
+  const passed = await setState({
+    ...current,
+    gate1: {
+      ...current.gate1,
+      status: "PASS",
+      composerKind: result.composerKind || null,
+      insertionMethod: result.method || null,
+      observedAt: result.observedAt || Date.now(),
+      error: null
+    }
+  });
+
+  return { ok: true, state: passed };
+}
+
+async function resetGate1() {
+  const state = await getState();
+  if (state.status !== "PASS") {
+    return { ok: false, error: "GATE0_PASS_REQUIRED", state };
+  }
+  const next = await setState({
+    ...state,
+    gate1: emptyGate1State()
+  });
+  return { ok: true, state: next };
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -226,6 +421,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     task = getState().then((state) => ({ ok: true, state }));
   } else if (message.type === MSG.ROUTE_REPORT) {
     task = handleRouteReport(message, sender);
+  } else if (message.type === MSG.GATE1_INSERT) {
+    task = startGate1(message);
+  } else if (message.type === MSG.GATE1_RESET) {
+    task = resetGate1();
   } else {
     return false;
   }
@@ -253,11 +452,20 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-  getState().then((state) => {
+  getState().then(async (state) => {
     if (state.openedTabId !== tabId || state.status === "IDLE") {
       return;
     }
-    if (TERMINAL_STATUSES.has(state.status)) {
+    if (state.status === "PASS") {
+      if (!GATE1_TERMINAL_STATUSES.has(state.gate1.status)) {
+        const operationToken = state.gate1.operationToken;
+        if (state.gate1.status === "INSERTING" && operationToken) {
+          await transitionGate1Failure(state, operationToken, "OWNED_TAB_CLOSED", { tabId });
+        }
+      }
+      return;
+    }
+    if (state.status === "FAIL") {
       return;
     }
     return transitionFailure(state, "OWNED_TAB_CLOSED", { tabId });
