@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "MYGPT Worker Fanout v3",
-  "version": "0.3.3",
-  "description": "Three-slot MYGPT Custom GPT preparer using AutoGPT upload/paste primitives plus Translation Loop runtime and send-readiness guards.",
+  "version": "0.3.4",
+  "description": "Three-slot MYGPT Custom GPT preparer using AutoGPT upload/paste plus visible attachment evidence and Translation Loop final send-readiness.",
   "permissions": [
     "storage",
     "tabs",
