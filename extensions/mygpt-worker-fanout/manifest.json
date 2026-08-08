@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "MYGPT Worker Fanout",
+  "version": "0.0.1",
+  "description": "Gate 0: verify that one newly opened ChatGPT tab preserves the current Custom GPT worker identity. No prompt, file attachment, or submit automation.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "MYGPT Worker Fanout",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": [
+        "route_adapter.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
