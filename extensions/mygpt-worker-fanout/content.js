@@ -4,7 +4,8 @@
   const MSG = Object.freeze({
     ROUTE_REPORT: "MYGPT_GATE0_ROUTE_REPORT",
     GET_IDENTITY: "MYGPT_GATE0_GET_IDENTITY",
-    FORCE_REPORT: "MYGPT_GATE0_FORCE_REPORT"
+    FORCE_REPORT: "MYGPT_GATE0_FORCE_REPORT",
+    INSERT_PACKET: "MYGPT_GATE1_INSERT_PACKET"
   });
 
   let lastReportedHref = null;
@@ -47,6 +48,43 @@
     });
   }
 
+  function insertGate1Packet(message) {
+    const identity = MYGPTWorkerRoute.normalizeCustomGptIdentity(location.href);
+    if (!identity.ok) {
+      return { ok: false, reason: identity.reason, identity };
+    }
+
+    if (
+      typeof message.expectedWorkerKey !== "string" ||
+      identity.workerKey !== message.expectedWorkerKey
+    ) {
+      return {
+        ok: false,
+        reason: "WORKER_IDENTITY_MISMATCH",
+        identity,
+        expectedWorkerKey: message.expectedWorkerKey || null
+      };
+    }
+
+    if (typeof message.runToken !== "string" || !message.runToken) {
+      return { ok: false, reason: "RUN_TOKEN_MISSING", identity };
+    }
+
+    const composer = MYGPTComposer.findComposer(document);
+    if (!composer) {
+      return { ok: false, reason: "COMPOSER_NOT_FOUND", identity };
+    }
+
+    const result = MYGPTComposer.insertPacket(composer, message.packet);
+    return {
+      ...result,
+      identity,
+      runToken: message.runToken,
+      submitted: false,
+      observedAt: Date.now()
+    };
+  }
+
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (!message || typeof message.type !== "string") {
       return false;
@@ -60,6 +98,20 @@
     if (message.type === MSG.FORCE_REPORT) {
       reportRoute("forced");
       sendResponse({ ok: true });
+      return false;
+    }
+
+    if (message.type === MSG.INSERT_PACKET) {
+      try {
+        sendResponse(insertGate1Packet(message));
+      } catch (error) {
+        sendResponse({
+          ok: false,
+          reason: "PACKET_INSERT_EXCEPTION",
+          detail: error instanceof Error ? error.message : String(error),
+          submitted: false
+        });
+      }
       return false;
     }
 
