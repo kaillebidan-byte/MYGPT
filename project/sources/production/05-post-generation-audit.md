@@ -6,16 +6,16 @@
 
 同時に参照する。
 
-- 現在のチャットへ直接添付されたcanonical identity reference
+- 現在チャットへ直接添付されたcanonical identity reference
 - motion contract、identity anchors、slot state plan、active/support limb、end
-- 実際に生成されたraw board
+- 実際のraw INITIAL_BOARD
 - 実行できた場合は`audit/scripts/machine_audit_board.py`結果
 
-計画が正しいことを生成画像が正しい根拠にしない。表示用コピーは監査・repair入力へ使わない。
+計画が正しいことを生成画像が正しい根拠にしない。
 
 ## 2. 7項目
 
-必ず独立して判定する。
+必ず独立判定する。
 
 - identity
 - motion_semantics
@@ -29,17 +29,18 @@
 
 ### identity
 canonical referenceを正本とする。
-顔、目、髪、頭部固有部品、体格、胴体シルエット、袖、襟、裾、靴、模様、縁取り、腰飾り、房、紐、留め具、左右非対称要素を比較する。
-4ポーズ間で同じ部品構成が維持されなければFAIL。
+単なる雰囲気一致ではPASSにしない。
+毎回、頭身、頭部/胴体/袖/下衣のsilhouette、固有部品の個数・接続位置・左右関係・重なり順、顔、髪、頭部固有部品、胸部意匠、腰飾り、房、紐、留め具、靴などを比較する。
+canonicalとの比較と4セル相互比較の両方を行う。
 
 ### motion_semantics
-左上→右上→左下→右下を時間順に読み、slot state planと照合する。
+左上→右上→左下→右下を時間順に読みslot state planと照合する。
 continuityまたはendpoint失敗で要求動作全体が成立しない場合もFAIL。
 
 ### continuity
 時間をまたいで同じ役割を持つ身体部位を追跡する。
-前に見える足だけで決めず、身体への接続関係を追う。
-motion contractにない途中の手足・接地側・保持側・接触対象の入れ替えはFAIL。
+前に見える足だけで決めず身体への接続関係を追う。
+motion contractにない手足・接地側・保持側・接触対象の入れ替えはFAIL。
 
 ### endpoint
 one-shotのK4は`end`を満たす。
@@ -70,36 +71,31 @@ machine flag:
 ## 3. repair preserve
 
 初回PASS項目は自由変更可能ではない。
-repair前に、PASS項目をraw INITIAL_BOARDで成立していた具体的状態へ変換する。
-
-```text
-repair_preserve:
-- <item>: <維持する具体的状態>
-```
-
+PASS項目をraw INITIAL_BOARDで成立していた具体的状態へ変換する。
 FAIL項目はpreserveへ混ぜない。
 
-## 4. repair基本方式
+## 4. repair基本方式: single-board edit + cell select
 
-FAIL後に2×2全体を1枚のrepair結果としてそのまま採用しない。
+4セルを4回独立生成しない。
+Python split cellを画像生成へ逆流させる経路も前提にしない。
 
-1. `split_repair_board.py`でraw INITIAL_BOARDをK1〜K4へ分割。
-2. FAILをセル単位の`CHANGE`と`LOCK`へ割り当てる。
-3. 必要なセルだけrepair jobを行う。
-4. repair job出力を`prepare_repair_cell.py`でcanonical 512×768 cellへ変換。
-5. KEEP_RAWセルも同じprepare処理でcanonical cellへ変換。
-6. `compose_repair_board.py`で1024×1536の2×2へ再合成。
+1. 初回FAILをセル単位の`CHANGE`と`LOCK`へ割り当てる。
+2. raw INITIAL_BOARDそのものを画像編集targetとして1回だけeditする。
+3. canonical identity referenceをidentity正本として同時参照する。
+4. edit結果をraw EDITED_BOARDとして保持する。
+5. `compose_repair_from_boards.py`で各slotをINITIALまたはEDITEDから選択する。
+6. 1024×1536へ決定論的に再合成する。
 7. 合成raw REPAIR_BOARDを再監査する。
 
 画像生成モデルへ最終2×2配置を任せない。
 
 ## 5. CELL_REPAIR_PLAN
 
-各セルを`KEEP_RAW`または`REPAIR`にする。
+各セルを`KEEP_RAW`または`USE_EDITED`にする。
 
 ```text
 K1:
-  action: KEEP_RAW / REPAIR
+  source: KEEP_RAW / USE_EDITED
   change:
   - <直す状態>
   lock:
@@ -107,62 +103,55 @@ K1:
 ```
 
 一般則:
-
 - identity FAIL: driftがあるセル。全セルなら全セル。
 - motion_semantics FAIL: 誤ったslot stateのセル。
-- continuity FAIL: 役割が切れた境界を特定し必要最小限。
+- continuity FAIL: 役割が崩れた境界の必要最小セル。
 - endpoint FAIL: 原則K4。
 - layout/chroma/unintended_outputの局所FAIL: 該当セル。
-- 問題のないセルを念のため再生成しない。
-- PASS項目に関係するセル状態はlockへ具体化する。
+- 問題のないセルはKEEP_RAW。
+- PASS状態はlockへ具体化する。
 
-## 6. 参照の役割
+## 6. 画像編集targetの条件
 
-- canonical identity reference: identity正本
-- raw INITIAL_BOARD: 4時点のmotion context
-- motion contract / 隣接slot: continuityと時間関係
-- split cell: 画像生成toolへ実画像として渡せる場合だけrepair target
+raw INITIAL_BOARDは、その会話で実際に生成された画像そのものをedit targetとして使う。
+path名や文章だけでtargetを見たことにしない。
+実画像targetを画像toolへ渡せない場合、新規2×2生成へ黙って切り替えず`REPAIR_EDIT_UNAVAILABLE`で終了する。
 
-Python出力pathを文章で書いただけでは画像生成toolの視覚参照にならない。実際に渡せていない場合は「split cellを参照した」と扱わない。
+KEEP_RAWセルはedit結果上で変化しても構わない。後段composeではINITIALセルを採用するため、その変化は捨てる。
 
-## 7. repair job出力の扱い
+## 7. CELL SELECT COMPOSE
 
-理想は1人物の単独portrait 2:3ポーズ。
-ただし画像生成側が2×2 boardを返しても、形式だけでrepair全体を失敗扱いにしない。
+GitHubの`audit/scripts/compose_repair_from_boards.py`を使う。
 
-実画像を見て次に分類する。
+```text
+python audit/scripts/compose_repair_from_boards.py \
+  --initial <raw INITIAL_BOARD> \
+  --edited <raw EDITED_BOARD> \
+  --use-edited <USE_EDITED labels> \
+  --target-key <INITIAL key_hex> \
+  --output raw_repair_board.png
+```
 
-- 1人物 → `mode: cell`
-- 4ポーズ2×2 → `mode: board`
-- その他 → invalid
+各slot:
+- KEEP_RAW → INITIAL_BOARDの同じ象限
+- USE_EDITED → EDITED_BOARDの同じ象限
 
-`prepare_repair_cell.py`へ対象slotとmodeを渡す。
-board modeでは対象K#の象限だけを抽出し、他の3象限は捨てる。
-
-prepared cellは512×768。縦横比を歪めずfitし、背景の近似key色だけ目標keyへ正規化する。
-影や大きな背景濃淡を自動削除して監査を回避してはいけない。
-
-## 8. canonical compose
-
-`compose_repair_board.py`の出力は初回board geometryに依存させない。
-既定:
-
+出力既定:
 - board: 1024×1536
 - cell: 512×768
 - key: INITIAL machine auditのkey色
 
-これにより初回`wrong_aspect`でもrepair後layoutを正規2:3へ戻せる。
+元boardがwrong_aspectでも誤geometryを継承しない。
+各source cellは縦横比を歪めずcanonical cellへfitする。
+近似key色は初回keyへ正規化してよいが、影や大きな背景濃淡を消して監査を回避してはいけない。
 
-KEEP_RAWセルも、元セルの縦横比を歪めずcanonical cellへfitしてから使う。
-repair済みセルとrawセルを直接サイズ強制変形してはいけない。
+## 8. 再監査
 
-## 9. 再監査
-
-合成raw REPAIR_BOARDを同じ7項目で視覚監査し、machine auditを再実行する。
+合成raw REPAIR_BOARDを同じ7項目で視覚監査しmachine auditを再実行する。
 初回JSONを再利用しない。
 追加repairは禁止。
 
-## 10. repair delta
+## 9. repair delta
 
 初回と修正版を比較する。
 
@@ -172,7 +161,6 @@ repair済みセルとrawセルを直接サイズ強制変形してはいけな�
 - PASS→PASSは省略
 
 採用規則:
-
 1. REPAIR overall PASS → REPAIR
 2. regressedが1件以上 → INITIAL
 3. regressionなし、fixedあり → REPAIR
