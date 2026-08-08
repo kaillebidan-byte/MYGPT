@@ -151,6 +151,75 @@ site:community.openai.com image generation storyboard multiple panels one prompt
 
 ---
 
+### R04 — 中国語圏の角色一致性 / 姿势控制 / 分镜 / 多图参考
+Status: DONE for first China-region sweep / PARTIAL for ChatGPT-specific pose-reference binding
+
+詳細:
+- `china-imagegen-practices.md`
+
+2026-08-08の主要検索語:
+
+```text
+GPT-4o 生图 角色一致性 参考图 姿势 动作 多轮 经验
+ChatGPT 项目 Projects 图片 参考图 文件 角色一致性 项目指令
+GPT Image 四宫格 分镜 多图 合成 单图 提示词 角色 一致性
+GPT-4o 生图 角色一致性 三视图 九宫格 参考图 动作
+角色一致性 姿势草图 参考图 动作 控制 多图参考
+GPT4o 多轮编辑 一致性 角色 图片 退化
+即梦 AI 图片4.0 多图参考 角色一致性 动作 草图
+Seedream 4.0 多图参考 角色一致性 动作 参考图
+可灵 AI 多图参考 角色一致性 姿势 动作
+Vidu 参考生图 / 参考生视频 一致性 动作
+```
+
+新しく確認した一次資料:
+
+1. ByteDance Seed — Seedream 4.0
+   - https://seed.bytedance.com/zh/seedream4_0
+2. 火山引擎 — Seedream 4.0 release / technical introduction
+   - https://developer.volcengine.com/articles/7599494661565005870
+3. 快手科技 — 可灵AI「多图参考」
+   - https://ir.kuaishou.com/zh-hans/news-releases/news-release-details/kuaishoukelingaituichuduotucankaogongneng/
+4. Vidu — 参考生视频
+   - https://www.vidu.com/zh/ai-reference-to-video
+5. GPT-ImgEval
+   - https://arxiv.org/abs/2504.02782
+6. I2EBench2.0
+   - https://arxiv.org/abs/2606.15570
+
+補助的な実務資料:
+- Bilibili / RunningHubの角色一致性、草图动作、姿势参考、ComfyUI workflow
+- 掘金 / 53AI / 知乎のGPT-4o / 国内画像モデル実践記事
+
+中国語圏で英語圏調査より目立った違い:
+
+- `identity / pose / scene / style / structure`を自然言語一つへ詰めず、**複数referenceやvisual control channelへ役割分離する**発想が強い。
+- Seedream 4.0公式は多图输入に加え、草图・涂鸦・辅助线をvisual control signalとして明示している。
+- 可灵 / Viduも複数referenceを角色、服装、场景、动作、构图等の制御に使うproduct architectureを前面に出している。
+- 中国の分镜 / 短剧 / ComfyUI実務では`草图动作`、`姿势参考`、OpenPose等を使い、角色一致性とpose controlを別工程として扱う例が多い。
+- 一方で`分镜 / 组图 / 四宫格 / 九宫格`は積極的な成功ユースケースでもあるため、これらの語彙をsingle-frame生成contextへ置くとmulti-panel表現へ寄る警告としても読める。
+- 中国研究チームもmulti-round editingをsingle-roundとは別のstability問題として評価しており、generated frameを次roundのidentity正本に連鎖させないMYGPT方針と整合する。
+
+MYGPTへの新候補仮説:
+
+- `H-CN1`: text poseだけで不安定なら、**canonical identity image + single-pose visual guide**を別referenceにする試験価値がある。
+- `H-CN2`: 複数referenceを使う場合はidentity / pose / color-material等の役割を明示的に分ける。ただしChatGPT Imageでrole bindingが成立するかは未検証。
+- `H-CN3`: multi-round generated-image chainはidentity pathにしない。各generationでcanonicalへ戻る。
+
+現在のM2b / M2cより前にH-CN1/H-CN2をproductionへ入れない。
+
+次に中国語圏だけで検索するなら:
+
+1. ChatGPT Images / GPT Image 2で`参考图 + 姿势图`を同時入力した実機例。
+2. `角色参考 + 动作参考`間のidentity/pose混線失敗例。
+3. 中国AIGC短剧で4 keyframesを独立生成する方式と一括分镜方式のproduction比較。
+4. 可灵 / Vidu / Seedreamのreference-role binding仕様。
+5. garment accessory topologyまで見るfine-grained identity consistency benchmark。
+
+同じ`GPT-4o角色一致性很强`という一般検索は繰り返さない。
+
+---
+
 ## Web調査運用ルール
 
 今後Web検索したturnでは、MYGPTの設計判断に使った情報だけをこの台帳かtopic noteへ追記する。
