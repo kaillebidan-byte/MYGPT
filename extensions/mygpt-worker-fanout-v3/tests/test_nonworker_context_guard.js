@@ -1,0 +1,13 @@
+"use strict";
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const source = fs.readFileSync(path.resolve(__dirname, "../content.js"), "utf8");
+assert.match(source, /function isWorkerContext\(\)/);
+assert.match(source, /if \(!isWorkerContext\(\)\) return;/);
+assert.match(source, /function safeRuntimeSendMessage/);
+assert.match(source, /try \{\s*const pending = chrome\.runtime\.sendMessage/);
+assert.match(source, /if \(!isWorkerContext\(\) \|\| monitorPort\) return;/);
+assert.match(source, /else disconnectMonitor\(\)/);
+assert.match(source, /if \(isWorkerContext\(\)\) connectMonitor\(\)/);
+console.log("Non-worker ChatGPT context guard: PASS");
