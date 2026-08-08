@@ -46,10 +46,10 @@ The first live run is sequential by slot to reduce Vivaldi hidden-tab contention
 6. Click `F2/F3/F4をREADYまで準備`.
 7. Expected final `Phase: READY`.
 8. Open each slot and verify:
-   - it is the same Custom GPT;
-   - canonical is attached;
-   - the correct distinct packet is present;
-   - nothing was submitted;
+   - same Custom GPT;
+   - canonical attached;
+   - correct distinct packet present;
+   - nothing submitted;
    - no generation started.
 
 Expected slot diagnostics:
