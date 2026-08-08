@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Translation Loop</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <h1>Translation Loop 0.5.1</h1>
+    <section class="status-card">
+      <div><span>状態</span><strong id="phase">読込中</strong></div>
+      <div><span>回答数</span><strong id="count">0 / 3</strong></div>
+      <div><span>チャット数</span><strong id="generation">1 / 2</strong></div>
+      <div><span>所有タブ</span><strong id="owner">なし</strong></div>
+      <div><span>会話ID</span><strong id="conversation">なし</strong></div>
+      <p id="error" hidden></p>
+    </section>
+
+    <section class="controls">
+      <button id="start" class="primary">Start</button>
+      <button id="pause">Pause</button>
+      <button id="reset" class="danger">Reset</button>
+    </section>
+
+    <section class="settings">
+      <label>
+        続行文
+        <input id="prompt" type="text" value="作業の続きを">
+      </label>
+      <label>
+        1チャットあたりの回答数
+        <input id="maxTurns" type="number" min="1" max="20" value="3">
+      </label>
+      <label>
+        最大チャット数（開始チャットを含む）
+        <input id="maxChats" type="number" min="1" max="50" value="2">
+      </label>
+      <label>
+        送信前待機 ms
+        <input id="sendDelay" type="number" min="0" max="30000" step="100" value="1200">
+      </label>
+      <label class="checkbox">
+        <input id="rotation" type="checkbox" checked>
+        上限後に同じプロジェクトで新規チャットを作成
+      </label>
+      <label class="checkbox">
+        <input id="continueAfterRotation" type="checkbox" checked>
+        新規チャットでも自動ループを続ける
+      </label>
+      <label>
+        プロジェクトURL
+        <input id="projectUrl" type="url" placeholder="https://chatgpt.com/g/g-p-.../project">
+      </label>
+      <button id="detectProject" type="button">現在のプロジェクトを設定</button>
+      <label>
+        新規チャット開始文
+        <input id="resumePrompt" type="text" value="現状把握して作業の続きを">
+      </label>
+      <label>
+        終了語（回答末尾）
+        <input id="phaseMarker" type="text" value="規定フェイズ完了">
+      </label>
+      <label class="checkbox">
+        <input id="fallback" type="checkbox">
+        VoiceBridge式補助判定を許可
+      </label>
+      <label class="checkbox">
+        <input id="debug" type="checkbox" checked>
+        判定ログを保存
+      </label>
+      <button id="save">設定を保存</button>
+    </section>
+
+    <section class="logs">
+      <div class="logs-head">
+        <h2>直近ログ</h2>
+        <button id="copyLogs">コピー</button>
+      </div>
+      <pre id="logPreview"></pre>
+    </section>
+
+    <p class="note">開始チャットを1として最大チャット数まで実行する。各チャットの規定回答数を終えると次へ移り、最終チャット完了時は正常終了する。終了語、Pause、Reset、安全条件も停止を優先する。</p>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

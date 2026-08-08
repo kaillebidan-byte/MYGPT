@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "ChatGPT Translation Loop Test",
+  "version": "0.5.1",
+  "description": "Oracle式完了判定と既存Prompt Stacker系runnerを組み合わせ、同一プロジェクト内で安全に自動継続する試験版。",
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Translation Loop",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": [
+        "loop_core.js",
+        "terminal_gate.js",
+        "prompt_stacker_runner.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
