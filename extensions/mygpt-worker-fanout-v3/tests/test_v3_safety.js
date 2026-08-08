@@ -17,7 +17,7 @@ assert.ok(source.includes("autogpt-upload-ready"));
 assert.ok(source.includes("autogpt-synthetic-paste"));
 assert.ok(source.includes("TranslationLoopRuntimeGuard"));
 assert.ok(source.includes("MYGPT_V3_PAGE_OBSERVED"));
-assert.ok(source.includes("/backend-api/conversation"));
+assert.ok(source.includes("/backend-api/conversation")); // passive observer only
 assert.ok(source.includes("ws.chatgpt.com"));
 assert.ok(source.includes("submitted: false"));
 
