@@ -1,50 +1,12 @@
 # MYGPT Worker Fanout
 
-Status: **Gate 0 v0.0.2 — Vivaldi LIVE PASS**
+Status: **Gate 0 Vivaldi PASS / Gate 1 v0.1.0 live Vivaldi verification pending**
 
-This is a separate Manifest V3 extension for the MYGPT project. Gate 0 deliberately implements only Custom GPT route identity capture and one-tab open/verify.
+This is a separate Manifest V3 extension for the MYGPT project.
 
-## Gate 0 contract
+## Accepted Gate 0
 
-Implemented:
-- derive a normalized worker root from the current `https://chatgpt.com/g/...` (or legacy `chat.openai.com`) Custom GPT route;
-- reject Project `g-p-...` routes;
-- create exactly one new tab at the same normalized worker root;
-- bind that tab ID to one ephemeral Gate 0 `runToken` in `chrome.storage.session`;
-- content script reports its destination route/worker identity to the background service worker;
-- after ownership is persisted, background also probes the owned tab directly with `GET_IDENTITY` when the tab is already complete or when its single `complete` lifecycle event arrives;
-- PASS only when the owned destination tab reports the same worker identity;
-- fail closed on invalid/mismatched destination identity or owned-tab close before verification;
-- observe SPA route changes with DOM mutation/popstate/hashchange/pageshow signals, without a one-second ping loop.
-
-Not implemented in Gate 0:
-- prompt insertion;
-- canonical/file attachment;
-- send/submit controls;
-- image generation invocation;
-- response parsing or output scraping;
-- download automation;
-- ChatGPT internal API access;
-- Bearer/token capture;
-- `fetch`/XHR/WebSocket interception;
-- CSP/security-header modification;
-- visibility/focus spoofing;
-- telemetry or external upload;
-- automatic retry loop.
-
-## Live result that led to v0.0.2
-
-The first Vivaldi run opened exactly one destination tab and preserved the expected worker path, but the popup stayed at `AWAITING_DESTINATION` with `Observed: -`.
-
-That showed `chrome.tabs.create()` was working without adding the `tabs` permission, while the destination report handshake could still be lost if `document_idle` and `tabs.onUpdated("complete")` both occurred before `openedTabId` finished persisting.
-
-v0.0.2 closes that race by querying the owned destination content script directly after ownership is persisted. It still has no periodic polling or automatic retry loop.
-
-## Vivaldi live acceptance — PASS
-
-Accepted on 2026-08-08 JST with v0.0.2.
-
-Observed popup state:
+Gate 0 is accepted in Vivaldi with v0.0.2:
 
 ```text
 Status: PASS
@@ -53,45 +15,107 @@ Observed: /g/g-6a76f033fc088191846913f86ba0625d-mygpt-single-frame-worker-test
 Tab: 22739685
 ```
 
-This confirms in the user's actual Vivaldi environment:
-- the owned destination tab can be created;
-- the normalized Custom GPT worker identity is preserved;
-- destination identity reaches the background handshake;
-- Expected and Observed are exactly equal;
-- the Gate 0 flow works without adding the `tabs` permission.
+The accepted Gate 0 behavior remains unchanged: one owned tab, same normalized Custom GPT identity, `storage` permission only, no periodic retry.
 
-Gate 0 is therefore accepted. Do not reopen Gate 0 unless a later regression produces concrete evidence.
+## Gate 1 contract
 
-## Historical Vivaldi test procedure
+Gate 1 adds only controlled packet insertion into the **owned destination tab** created and verified by Gate 0.
 
-1. Use the directory containing this `manifest.json` as an unpacked extension directory.
-2. Open `vivaldi://extensions`.
-3. Enable Developer mode.
-4. Choose **Load unpacked** and select the `extensions/mygpt-worker-fanout/` directory.
-5. If an older build is already loaded, replace/update the files and press the extension's **Reload** button in `vivaldi://extensions`.
-6. Manually open the existing `MYGPT Single Frame Worker Test` Custom GPT page.
-7. Reload that ChatGPT tab once after loading/updating the unpacked extension. This is required because Gate 0 intentionally does not request `scripting` permission for retroactive injection.
-8. Open the extension popup. Before starting, confirm the page is the intended Custom GPT and not a ChatGPT Project route.
-9. If an old run remains, click **Gate 0状態をリセット** once.
-10. Click **Gate 0を実行** once.
-11. Expected behavior: exactly one new tab opens at the normalized `/g/<same-worker>` root. The extension does not type, attach, or send anything.
-12. Visually confirm the opened page is `MYGPT Single Frame Worker Test`.
-13. Reopen the extension popup in that tab. `Status` must be `PASS`, and `Expected` and `Observed` must show the same `/g/...` worker root.
+Before changing the composer, background/content code verifies:
+- Gate 0 status is `PASS`;
+- the owned destination tab still exists and answers the identity query;
+- current worker identity still equals the Gate 0 expected worker;
+- the composer is visible and supported;
+- the composer contains no existing draft;
+- packet is non-empty and no more than 12,000 characters.
+
+After insertion, Gate 1 requires:
+- observed composer text equals the requested packet after newline normalization;
+- result comes back with the same Gate 0 `runToken`;
+- worker identity still matches;
+- content script explicitly reports `submitted: false`.
+
+Gate 1 does **not** contain code for:
+- send-button lookup;
+- click submission;
+- Enter/keyboard submission;
+- form submit/requestSubmit;
+- canonical/file attachment;
+- image-generation invocation;
+- response parsing/output scraping/download;
+- internal ChatGPT API/Bearer interception;
+- automatic retry/polling.
+
+If the composer already contains any draft, Gate 1 returns `COMPOSER_NOT_EMPTY` without altering it.
+
+## Vivaldi Gate 1 live test
+
+### Update/load
+
+1. Replace the unpacked extension with this v0.1.0 directory and press **Reload** in `vivaldi://extensions`.
+2. Because the extension still intentionally has no `scripting` permission, reload the ChatGPT tab(s) that will be used after the extension update.
+3. Open the popup.
+
+If the previous Gate 0 PASS state and owned tab survived the extension reload, reload that owned destination tab once and continue below.
+
+If Gate 0 state is no longer available, use **全状態をリセット**, manually open `MYGPT Single Frame Worker Test`, reload that source tab once, run Gate 0 again, and confirm Gate 0 `PASS` before Gate 1.
+
+### Gate 1 action
+
+1. Leave the owned destination ChatGPT composer completely empty.
+2. Keep the default test packet in the popup:
+
+```text
+[MYGPT_GATE1_TEST]
+mode=INSERT_ONLY
+submit=FORBIDDEN
+purpose=verify_composer_insertion
+```
+
+3. Click **Gate 1 packetをowned tabへ挿入** exactly once.
+4. Switch to the owned destination tab and visually inspect the composer.
+5. The packet must be present as an **unsent draft**. No user message may appear in chat history and no generation may start.
+6. Reopen the popup and inspect Gate 1 status.
+
+### Gate 1 PASS
+
+All must be true:
+- Gate 0 remains `PASS`;
+- Gate1 status is `PASS`;
+- the exact test packet is visibly present in the owned destination composer;
+- `Composer` and `Method` are populated;
+- no user turn was created;
+- no image generation or assistant response started;
+- no file was attached;
+- no extra tab was opened;
+- no Vivaldi extension/service-worker error occurred.
+
+### Gate 1 FAIL / stop
+
+Stop before any later gate if:
+- Gate1 reports `COMPOSER_NOT_FOUND`, `COMPOSER_NOT_EMPTY`, `COMPOSER_INSERT_VERIFY_FAILED`, identity mismatch, or another `FAIL`;
+- any part of the packet is missing/duplicated/reordered;
+- the packet is submitted automatically;
+- generation starts;
+- a file is attached;
+- the wrong tab/composer is modified.
+
+Do not manually press ChatGPT's send button during this test. The point of Gate 1 is insertion-only verification.
 
 ## Static checks
 
 From this directory:
 
 ```bash
+python -m json.tool manifest.json
 node --check route_adapter.js
+node --check composer_adapter.js
 node --check content.js
 node --check background.js
 node --check popup.js
 node tests/test_route_adapter.js
+node tests/test_composer_adapter.js
+node tests/test_gate1_safety.js
 ```
 
-## CURRENT stopping point
-
-**Gate 0 is accepted. Next gate is Gate 1: controlled packet insertion into the owned worker tab, with no submit/send action.**
-
-Gate 1 must preserve the existing forbidden-mechanism constraints and must not add canonical attachment or generation yet.
+Do not start canonical attachment or controlled submit until Gate 1 passes in Vivaldi.
