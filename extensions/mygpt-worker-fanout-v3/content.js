@@ -72,6 +72,7 @@
       return { ...attachment, identity, runToken: message.runToken, submitted: false };
     }
 
+    // Attachment can remount the composer. Reacquire it before paste.
     const afterUploadComposer = await MYGPTChatGPTAdapter.waitForComposer(document, 15000);
     if (!afterUploadComposer) {
       return {
