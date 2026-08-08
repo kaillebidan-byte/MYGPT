@@ -1,7 +1,7 @@
 # ChatGPT VoiceBridge 0.2.6 — N3 reuse assessment
 
 Date: 2026-08-08 JST
-Status: VERIFIED STATIC ANALYSIS / PREFERRED LOCAL BASE
+Status: VERIFIED STATIC ANALYSIS / CANDIDATE A — BASE NOT YET SELECTED
 
 ## Evidence
 
@@ -64,7 +64,7 @@ Debug logs intentionally store metadata such as tab/url/event state, but not res
 
 ## Relevance to N3
 
-This is a better engineering base than a new extension from scratch.
+This is a strong candidate engineering base and better than starting a new extension from scratch **if no stronger existing local add-on is found**.
 
 Already-proven primitives:
 1. ChatGPT/Custom-GPT DOM injection.
@@ -89,7 +89,18 @@ Chrome's current extension API documentation says creating a tab does not itself
 
 Therefore the first fan-out prototype can likely retain the current narrow permission surface while adding tab creation through the service worker. Verify in Vivaldi before changing permissions.
 
-## Preferred modification strategy
+## Runtime-duty-cycle consideration
+
+User has stated that another existing add-on is also available and is only expected to run for a few hours per day.
+
+That changes the base-selection criteria:
+- always-on minimal background overhead is less important than previously assumed;
+- a candidate that already has more of the required short-session orchestration primitives may be preferable even if it is less optimized for continuous operation;
+- however, security boundary, external communication, ChatGPT-internal API use, and identity-isolation behavior still outrank convenience.
+
+Therefore do not select VoiceBridge solely because it is already low-privilege and DOM-oriented. Inspect the alternate add-on first and compare actual reusable primitives.
+
+## Candidate-A modification strategy if selected
 
 Do not merge orchestration directly into the existing VoiceBridge readout path at first.
 Keep the established voice-monitor behavior intact and add a separate, opt-in `MYGPT worker` section/module.
@@ -109,8 +120,17 @@ After that passes, add one primitive at a time:
 
 Do not add AutoGPT-derived internal API interception, output scraping, authorization capture, header weakening, telemetry, or auto-retry logic.
 
-## Verdict
+## Current verdict
 
-**Use VoiceBridge 0.2.6 as the preferred local N3 automation base.**
+**VoiceBridge 0.2.6 = Candidate A, not yet the selected N3 base.**
 
-This changes the roadmap from `build a new minimal extension` to `extend an already-running, low-privilege, DOM-only local extension with isolated orchestration primitives`.
+Base selection is deferred until the user's other existing add-on is statically inspected and compared on:
+1. current ChatGPT / Custom-GPT DOM compatibility;
+2. fresh-tab/new-chat primitives;
+3. prompt insertion / controlled submit primitives;
+4. file-input/upload primitives;
+5. multi-tab coordination;
+6. external communication / privilege surface;
+7. internal ChatGPT API interception or token handling;
+8. modification cost and regression risk to the add-on's existing purpose;
+9. suitability for the stated few-hours-per-day operating window.
