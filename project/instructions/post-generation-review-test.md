@@ -1,12 +1,11 @@
 # 一時検証モード: post-generation review / one repair board / post-compare cell select
 
 このファイルは実験用Project Instructions。通常の`04-imagegen-workflow.md`より優先する。
-初回2×2を1枚生成し、FAIL時は2×2 REPAIR_SOURCE_BOARDを1枚だけ追加生成する。
-その後でINITIAL/REPAIR_SOURCEを実画像比較し、各slotの採用元を決めてPython合成・再監査する。
+初回4ポーズを1枚生成し、FAIL時はREPAIR_SOURCEを1枚だけ追加生成する。その後でINITIAL/REPAIR_SOURCEを実画像比較し、各slotの採用元を決めてPython合成・再監査する。
 K別生成、画像edit、A/B、2回目repairは禁止。画像生成は原則最大2回。
 
 処理:
-`INITIAL → 視覚監査 → machine audit → repair plan → REPAIR_SOURCE 1枚 → source比較 → cell選択合成 → 再監査 → delta → 採用`
+`INITIAL → 視覚監査 → machine audit → repair plan → REPAIR_SOURCE 1枚 → repair source review → source比較 → cell選択合成 → 再監査 → delta → 採用`
 
 ## 0. 終了条件 / GitHub取得
 途中ブロックは最終回答ではない。利用可能なtoolを呼ばずに不可能と推測して終了しない。
@@ -23,8 +22,7 @@ K別生成、画像edit、A/B、2回目repairは禁止。画像生成は原則�
 - `project/sources/production/05-post-generation-audit.md`
 - `audit/scripts/compose_repair_from_boards.py`
 connectorで取れなければ同repo/mainのraw URLを直接取得する。
-取得失敗=`SOURCE_UNAVAILABLE`、Python自体を起動不可=`EXECUTION_UNAVAILABLE`。混同しない。
-Python sourceはローカル保存して実ファイルへ実行する。
+取得失敗=`SOURCE_UNAVAILABLE`、Python自体を起動不可=`EXECUTION_UNAVAILABLE`。混同しない。Python sourceはローカル保存して実ファイルへ実行する。
 
 ## 1. canonical / contracts
 現在チャットへ直接添付された基準画像だけをcanonical identity referenceとする。
@@ -33,8 +31,10 @@ Python sourceはローカル保存して実ファイルへ実行する。
 - proportions: 頭身、頭/胴体/腕/脚の比率
 - silhouette: 頭部、胴体、袖、下衣、靴の外形
 - topology: 固有部品の個数、接続位置、左右関係、重なり順
+- occlusion_map: 部品同士の覆い方・境界。帽子と髪、髪と顔、袖と手、腰飾りと衣装など、どの部品がどこから見えるか
 - anchors: 顔、目、髪、頭部品、胸部意匠、腰部意匠、房/紐/留め具、裾、靴等
-ポーズに必要な自然変形以外で、部品の追加・欠落・左右反転・別形状化を許さない。
+
+canonicalにない部品の追加、欠落、左右反転、別形状化、接続変更、覆い関係の変更を許さない。たとえば髪がcanonicalでは帽子下縁から見えるなら、帽子側面から新しい髪束が生えたような構造へ変えない。ポーズに必要な自然変形だけ許す。
 
 `02-motion-design.md`から`MOTION_CONTRACT`を内部作成する:
 - active_limb_id / support_limb_id（必要時）
@@ -42,18 +42,24 @@ Python sourceはローカル保存して実ファイルへ実行する。
 - end
 - slot_state_plan: K1=左上→K2=右上→K3=左下→K4=右下
 
+K1〜K4は内部名であり、画像内へ描く記号ではない。
+
 ## 2. INITIAL_BOARD
 生成直前に`INITIAL_BOARD`と出す。
-portrait 2:3相当の2×2を1枚生成する。
+portrait 2:3相当の1枚の連続クロマキャンバス上へ、4体を左上・右上・左下・右下の4象限に配置して生成する。
+
+画像生成へ渡す指示では、可能な限り`K1/K2/K3/K4`、`1/2/3/4`、`frame`、`panel`、番号付き一覧を画像要素として連想させる表現を避け、位置と時間順を文章で伝える。
+「4分割された紙面」ではなく「同じ連続したmagenta背景上に4ポーズを四象限配置」と指定する。
+
 生成指示へIDENTITY_CONTRACT、MOTION_CONTRACT、全身、共通縮尺、中央safe gap、外周safe margin、均一単色クロマを含める。
-文字、ラベル、枠、grid、床、影、モーションライン、未指定effectは禁止。
+文字、番号、丸数字、ラベル、枠、divider、grid、床、影、モーションライン、未指定effectは禁止。
 未加工画像を`raw INITIAL_BOARD`として保持する。
 
 ## 3. INITIAL review / machine audit
 raw INITIAL_BOARDを実際に見て7項目を独立判定する:
 `identity / motion_semantics / continuity / endpoint / layout / chroma / unintended_output`
 
-identityはcanonicalとの比較と4セル相互比較を両方行い、IDENTITY_CONTRACTを1項目ずつ確認する。
+identityはcanonicalとの比較と4セル相互比較を両方行い、IDENTITY_CONTRACTを1項目ずつ確認する。特にsilhouette、topology、occlusion_mapを省略しない。
 continuityは身体への接続まで追う。endpointはK4をendとK1の両方に照合する。
 
 ```text
@@ -75,15 +81,6 @@ issues:
 - border_not_uniform / background_not_uniform / shadow_like_background → chroma
 - divider_like_*_white_band → unintended_output
 machine PASSは目視FAILを打ち消さない。
-
-```text
-MACHINE_AUDIT
-status: RAN / IMAGE_UNAVAILABLE / SOURCE_UNAVAILABLE / EXECUTION_UNAVAILABLE / ERROR
-...
-INITIAL_REVIEW
-<7項目>
-overall: PASS/FAIL
-```
 
 初回全PASSなら`SELECTED_BOARD stage: INITIAL reason: initial_pass`で終了。
 
@@ -109,13 +106,11 @@ K1:
   - <維持内容>
 ```
 
-identity FAILは該当セルのIDENTITY_CONTRACT違反をchangeへ入れる。
-motion/continuity/endpointは誤ったslotまたは境界だけを具体化する。
-PASS状態はlockへ入れる。
+identity FAILは該当セルのIDENTITY_CONTRACT違反をchangeへ入れる。motion/continuity/endpointは誤ったslotまたは境界だけを具体化する。PASS状態はlockへ入れる。
 
 ## 5. REPAIR_SOURCE_BOARD
 追加visual jobはこれ1回だけ。
-`REPAIR_SOURCE_BOARD`と出し、canonicalを正本としてportrait 2:3の2×2を新規生成する。
+`REPAIR_SOURCE_BOARD`と出し、canonicalを正本としてportrait 2:3の連続クロマキャンバス上へ4ポーズを四象限配置して新規生成する。
 
 生成指示へ:
 - IDENTITY_CONTRACT
@@ -124,29 +119,32 @@ PASS状態はlockへ入れる。
 - REPAIR_PRESERVE
 - REPAIR_TARGET_PLANのchange/lock
 - INITIAL key_hexに近い均一クロマ
-- 影/床/文字/枠/grid/UI/未指定effect禁止
+- 影/床/文字/番号/丸数字/ラベル/枠/divider/grid/UI/未指定effect禁止
 
+内部のK番号や計画記号を画像へ描かない。画像生成向け文章ではslot名より「左上の開始」「右上の次状態」等の位置記述を優先する。
 4ポーズを同じ1枚で生成し、identity・縮尺・時間関係を共有させる。
 未加工画像を`raw REPAIR_SOURCE_BOARD`として保持する。
 
-## 6. POST_SOURCE_COMPARE
-**REPAIR_TARGET_PLANでneeds_change=yesだったことを理由にREPAIRを自動採用しない。**
-INITIALとREPAIR_SOURCEの対応slotを、生成後の実画像でcanonical・contractsへ照合して比較する。
+## 6. REPAIR_SOURCE_REVIEW / POST_SOURCE_COMPARE
+REPAIR_SOURCEを合成前に実画像レビューする。INITIALと同じ7項目を使い、少なくとも次を明示確認する:
+- identity: IDENTITY_CONTRACT、とくにocclusion_map
+- motion: 各slot state
+- continuity / endpoint
+- layout / chroma
+- unintended_output: 番号、丸数字、ラベル、divider、gridを見落とさない
 
-各slotについて:
-- identity fidelity
-- slot state / motion phase
-- local layout
-- local chroma
-- unintended output
-を比較し、`INITIAL`または`REPAIR`を暫定選択する。
+`REPAIR_TARGET_PLANでneeds_change=yes`を理由にREPAIRを自動採用しない。
+INITIALとREPAIR_SOURCEの対応slotをcanonical・contractsへ照合して比較する。
 
-その後、暫定4セル列をK1→K4で読み、
-- continuity
-- endpoint
-を再確認する。
-混在選択で手足/保持側/接地側が切り替わる場合、関連する隣接slotの採用元を見直す。
-「修正版だから」ではなく、最終シーケンスとして良い方を選ぶ。
+各slotの優先順位:
+1. identity fidelity
+2. required slot state / motion phase
+3. unintended output
+4. local chroma / layout
+
+機械的layout改善だけで、identityやmotionが同等以下のREPAIRセルを自動優先しない。REPAIRに新しい番号・ラベル・部品追加がありINITIAL側にない場合、それを明示的な不利として扱う。
+
+暫定4セル列をK1→K4で読み、continuityとendpointを再確認する。混在で手足/保持側/接地側が切り替わる場合、関連slotの採用元を見直す。局所的に良くてもsequenceを壊すセルは採用しない。
 
 ```text
 CELL_SOURCE_DECISION
@@ -159,8 +157,7 @@ reason:
 ```
 
 ## 7. CELL_SELECT_COMPOSE
-`compose_repair_from_boards.py`を直接取得して実行する。
-`CELL_SOURCE_DECISION`でREPAIRを選んだlabelだけ`--use-edited`へ渡す。
+`compose_repair_from_boards.py`を直接取得して実行する。`CELL_SOURCE_DECISION`でREPAIRを選んだlabelだけ`--use-edited`へ渡す。
 
 ```text
 python compose_repair_from_boards.py \
@@ -172,25 +169,10 @@ python compose_repair_from_boards.py \
 ```
 
 `--edited`は互換引数名。入力はREPAIR_SOURCE_BOARD。
-出力は1024×1536、各セル512×768へ決定論的に再構成する。
-近似key色は初回keyへ正規化してよいが、影や大きな濃淡を消して監査を回避しない。
+出力は1024×1536、各セル512×768へ決定論的に再構成する。近似key色は初回keyへ正規化してよいが、影や大きな濃淡、文字等を消して監査を回避しない。
 
 ## 8. POST_REPAIR / delta
 合成raw REPAIR_BOARDを7項目で実画像レビューし、machine auditを再実行する。初回JSONを再利用しない。追加repairは禁止。
-
-```text
-POST_REPAIR_MACHINE_AUDIT
-status: RAN / IMAGE_UNAVAILABLE / SOURCE_UNAVAILABLE / EXECUTION_UNAVAILABLE / ERROR
-mechanical_flags:
-- true flag
-
-POST_REPAIR_REVIEW
-<7項目>
-overall: PASS/FAIL
-repair_mode: one_repair_board_post_compare_cell_select
-issues:
-- 残った問題
-```
 
 INITIAL_REVIEWとPOST_REPAIR_REVIEWを比較:
 - fixed = FAIL→PASS
