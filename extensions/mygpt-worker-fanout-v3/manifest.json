@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "MYGPT Worker Fanout v3",
-  "version": "0.3.0",
-  "description": "Three-slot MYGPT Custom GPT preparer using stripped AutoGPT ChatGPT primitives plus Translation Loop runtime guard.",
+  "version": "0.3.1",
+  "description": "Three-slot MYGPT Custom GPT preparer using AutoGPT ChatGPT primitives in MAIN world plus Translation Loop runtime guard.",
   "permissions": [
     "storage",
     "tabs",
@@ -27,7 +27,8 @@
         "https://chat.openai.com/*"
       ],
       "js": [
-        "page_observer.js"
+        "page_observer.js",
+        "chatgpt_adapter.js"
       ],
       "run_at": "document_start",
       "world": "MAIN"
@@ -39,7 +40,6 @@
       ],
       "js": [
         "route_adapter.js",
-        "chatgpt_adapter.js",
         "content.js"
       ],
       "run_at": "document_idle"
