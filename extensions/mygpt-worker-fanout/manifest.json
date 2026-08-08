@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MYGPT Worker Fanout",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Gate 0/1: verify Custom GPT worker identity and insert a controlled packet into the owned composer without submitting it.",
   "permissions": [
     "storage"
@@ -25,7 +25,7 @@
       ],
       "js": [
         "route_adapter.js",
-        "composer_adapter.js",
+        "prompt_stacker_insert_runner.js",
         "content.js"
       ],
       "run_at": "document_idle"
