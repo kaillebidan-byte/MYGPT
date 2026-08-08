@@ -1,0 +1,12 @@
+"use strict";
+const assert = require("node:assert/strict");
+const { evaluateSubmissionEvidence } = require("../loop_core.js");
+const before = { userCount: 1, latestUserKey: "u1", latestUserHash: "a", generationActive: false, conversationId: null, url: "https://chatgpt.com/g/g-worker" };
+const after = { userCount: 2, latestUserKey: "u2", latestUserHash: "b", latestUserText: "hello", generationActive: true, conversationId: "c2", url: "https://chatgpt.com/g/g-worker/c/c2", composerCleared: true };
+const evidence = evaluateSubmissionEvidence("hello", before, after, { rotation: true });
+assert.equal(evidence.committed, true);
+assert.equal(evidence.userCountIncreased, true);
+assert.equal(evidence.latestUserMatched, true);
+assert.equal(evidence.generationStarted, true);
+assert.equal(evidence.conversationCreated, true);
+console.log("Translation Loop submission evidence: PASS");

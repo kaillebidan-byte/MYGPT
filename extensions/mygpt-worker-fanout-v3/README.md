@@ -1,105 +1,106 @@
-# MYGPT Worker Fanout v3
+# MYGPT Worker Fanout v4
 
-Status: **v0.3.4 STATIC PASS candidate — corrected READY ordering live re-test pending**
+Status: **v0.4.0 STATIC PASS candidate — full 3-worker submit/monitor live test pending**
 
-This is the stripped-AutoGPT rebuild. v0.3.4 keeps the proven MAIN-world AutoGPT upload/paste path and fixes the READY check ordering.
+This version stops treating READY as the end goal. It reuses the supplied extensions as an integrated worker system:
 
-## Architecture
+```text
+Translation Loop control plane
+        +
+AutoGPT ChatGPT upload/paste/passive observer
+        +
+VoiceBridge-style long-lived monitoring
+```
 
-- AutoGPT 0.0.71 ChatGPT behavior, reimplemented narrowly in page MAIN world:
-  - unified composer
-  - `DataTransfer -> input.files -> change`
-  - attachment UI + upload spinner completion evidence
-  - ChatGPT-specific synthetic paste
-  - passive page-world fetch/WebSocket observation without Bearer capture
-- Translation Loop 0.5.1:
-  - `runtime_guard.js` reused for serialized state mutation / runToken
-  - Prompt Stacker `enabledCandidate/getSendButton` logic directly adapted into `translation_loop_send_guard.js` for final composer-send readiness
-- VoiceBridge 0.2.6 concepts:
-  - route + generation MutationObserver diagnostics
+## One-click flow
 
-No Google Analytics, membership, Autojourney services, prompt export, imgbb, external upload, direct internal API calls, Bearer capture, downloads, DNR header stripping or visibility shim are included.
+1. active source tab must be the target Custom GPT;
+2. derive and lock the Custom GPT worker identity;
+3. open F2/F3/F4 tabs before inserting any draft;
+4. verify each is the same worker and has no restored draft;
+5. process each slot sequentially, temporarily making that worker tab active for Vivaldi reliability;
+6. reconstruct and attach the same canonical with AutoGPT's `DataTransfer -> input.files -> change` path;
+7. wait for upload activity to settle;
+8. paste the slot packet in page MAIN world with AutoGPT's synthetic ClipboardEvent path;
+9. use Translation Loop / Prompt Stacker to wait for an enabled composer-local send control;
+10. arm the passive AutoGPT-style fetch observer with a per-slot nonce **before activation**;
+11. use Translation Loop's ordinary native `button.click()` with Enter fallback disabled;
+12. accept submit only with positive evidence from Translation Loop DOM evidence and/or passive conversation fetch evidence;
+13. monitor all three tabs through VoiceBridge-style long-lived ports + 1-second scan pings + a Translation Loop-style alarm watchdog;
+14. use Translation Loop terminal classification plus image-turn stability to mark each worker COMPLETE.
 
-## v0.3.4 live-fix
+## Reused directly / strongly
 
-v0.3.3 incorrectly required an enabled send button before prompt insertion, which can deadlock in PREPARING. v0.3.4 restores the correct order: AutoGPT file change -> visible attachment UI + no upload spinner -> synthetic paste -> Translation Loop enabled send button -> READY.
+### Translation Loop 0.5.1
 
-Attachment completion now requires positive composer-local UI evidence (filename, attachment marker, or newly added image) instead of button state. Translation Loop send-button monitoring is used only as the final combined attachment+prompt READY gate.
+- `runtime_guard.js` — direct reuse;
+- `loop_core.js` — direct reuse of positive submission evidence;
+- `terminal_gate.js` — direct reuse of terminal classification;
+- `prompt_stacker_runner.js` — direct substantial reuse including run controller, bounded waits, composer-local send discovery and native click;
+- `background.js` patterns — content probe/reinject, bounded waits, watchdog, centralized state/log handling;
+- `content.js` patterns — visible generation signals, role-node extraction, fingerprints, action-bar/thinking checks.
 
-## v0.3.3 live-fix
+Prompt Stacker-derived code remains under `LICENSE-PROMPT-STACKER`.
 
-The v0.3.2 live run proved that all three synthetic pastes succeeded. ChatGPT rendered each
-logical newline as a separate `<p>`, and `innerText` inserted an extra blank line between
-paragraphs (`expectedChars:48`, `observedChars:50`). v0.3.3 therefore verifies the logical
-prompt by reading each `#prompt-textarea p` and joining paragraphs with one `\n`.
+### AutoGPT 0.0.71
 
-One of the three tabs also reported upload-ready while the canonical was visibly absent.
-That was traced to the simplified READY predicate, not to the AutoGPT file-transfer path itself.
+- page MAIN-world ChatGPT adapter;
+- file upload primitive;
+- synthetic paste primitive;
+- observer-before-trigger nonce ordering;
+- passive fetch clone/stream observation;
+- passive `ws.chatgpt.com` observation.
 
-## v0.3.2 live-fix
+No Bearer capture or active internal ChatGPT API calls are used.
 
-The v0.3.1 live screenshot proved that F2 upload and paste were actually successful.
-The visible three-line packet was present, while verification reported `observedChars: 18`;
-18 is exactly the first line `[MYGPT_V3_F2_TEST]`. The adapter had correctly targeted
-`#prompt-textarea p` for the AutoGPT paste event but incorrectly reused that single paragraph
-for full-draft readback. v0.3.2 keeps the paste target and reads/verifies the logical prompt
-from all paragraphs.
+### VoiceBridge 0.2.6
 
-F3/F4 then opened with the F2 draft already present. v0.3.2 therefore creates and verifies
-all F2/F3/F4 worker tabs before inserting any slot packet. Preparation remains sequential only
-after all three tabs are staged, preventing later-created worker roots from restoring the F2 draft.
+- long-lived content/background port;
+- reconnect loop;
+- 1-second background scan ping;
+- hidden/background-tab rescan model;
+- generation and turn-state observation.
 
-## v0.3.1 live failure fix
+Speech/local-service transport is not included.
 
-The first v0.3.0 live run reached upload-ready but returned
-`PROMPT_PASTE_VERIFY_FAILED` with `observedChars: 0`. The cause was architectural:
-AutoGPT's `main.js` creates and dispatches the synthetic paste from the page MAIN world,
-while v0.3.0 ran `chatgpt_adapter.js` in the isolated extension world.
+## Vivaldi handling
 
-v0.3.1 moved the ChatGPT adapter itself to MAIN world and invokes READY preparation with
-`chrome.scripting.executeScript({world:"MAIN"})`. Translation Loop's runToken/state guard
-remains in the extension background. Identity/generation evidence is re-read from the isolated
-content script after MAIN-world preparation.
+The three tabs are still isolated conversations. During upload/paste/send only the currently processed worker is temporarily made active; all tabs are opened before any draft is inserted. This avoids hidden-tab DOM/upload stalls without merging worker contexts.
 
-## v0.3.4 live scope
+## Runtime phases
 
-One click prepares exactly three fresh tabs: F2/F3/F4. Each must remain unsent.
+Per-slot:
 
-1. active tab must be the target Custom GPT;
-2. derive its normalized `/g/<worker>` identity;
-3. create F2/F3/F4 tabs to the same worker root;
-4. verify each identity;
-5. attach the same canonical with AutoGPT's file-input pattern;
-6. wait for visible attachment UI plus no upload spinner;
-7. paste a distinct packet with a synthetic paste event;
-8. verify normalized paragraph readback;
-9. require a real enabled composer send control via Translation Loop, while keeping `submitted:false`;
-10. require no active generation and final phase = `READY` only when all three slots pass.
+`QUEUED -> OPENING -> VERIFYING -> STAGED -> PREPARING -> SUBMITTING -> SUBMITTED/GENERATING -> SETTLING -> COMPLETE`
 
-All three worker tabs are opened and verified before any draft insertion. READY preparation then runs sequentially by slot to reduce Vivaldi hidden-tab contention.
+Overall:
+
+`PREPARING -> MONITORING -> COMPLETE`
+
+Partial failures become `PARTIAL_MONITORING` / `PARTIAL_COMPLETE` rather than destroying completed workers.
+
+## External/product layers intentionally absent
+
+- Google Analytics;
+- membership/entitlement;
+- Autojourney services;
+- external prompt export/translation;
+- imgbb;
+- unrelated provider adapters;
+- Bearer capture;
+- direct internal conversation polling;
+- download automation;
+- DNR header stripping.
 
 ## Live test
 
-1. Disable the older Worker Fanout extensions.
-2. Load this directory unpacked.
-3. Open `MYGPT Single Frame Worker Test` in the active tab.
-4. Choose the canonical.
-5. Keep the inert F2/F3/F4 test packets.
-6. Click `F2/F3/F4をREADYまで準備`.
-7. Expected final `Phase: READY`.
-8. Open each slot and verify:
-   - same Custom GPT;
-   - canonical attached;
-   - correct distinct packet present;
-   - nothing submitted;
-   - no generation started.
+1. disable/reload older Worker Fanout versions;
+2. load this directory unpacked;
+3. open `MYGPT Single Frame Worker Test` as the active source tab;
+4. select the canonical image;
+5. put the actual F2/F3/F4 static-state packets in the three textareas;
+6. click `F2/F3/F4を隔離生成` once;
+7. expect each slot to show `native-click` plus a submit proof such as `autogpt-fetch-commit`, `autogpt-fetch-request`, or `translation-loop-dom`;
+8. generation continues in isolated tabs and each slot should eventually become `COMPLETE`.
 
-Expected slot diagnostics:
-
-- attachment: `autogpt-upload+visible-attachment`
-- final READY gate: `translation-loop-send-ready`
-- insertion: `autogpt-synthetic-paste`
-
-## Passive observer
-
-`page_observer.js` is already installed in MAIN world for the next controlled-submit step. It can observe the page's own conversation POST stream and `ws.chatgpt.com` updates, but v0.3.4 does not trigger submission and does not read/store Authorization headers.
+The source tab is restored after all three submits are attempted.

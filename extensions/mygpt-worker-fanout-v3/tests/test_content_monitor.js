@@ -1,0 +1,13 @@
+"use strict";
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const source = fs.readFileSync(path.resolve(__dirname, "../content.js"), "utf8");
+assert.match(source, /chrome\.runtime\.connect\(\{ name: MONITOR_PORT \}\)/);
+assert.match(source, /mygpt-worker-scan-now/);
+assert.match(source, /document\.visibilityState/);
+assert.match(source, /data-message-author-role/);
+assert.match(source, /latestAssistantImageCount/);
+assert.match(source, /finishedActionsVisible/);
+assert.match(source, /strongThinkingActive/);
+console.log("VoiceBridge-style worker monitor: PASS");

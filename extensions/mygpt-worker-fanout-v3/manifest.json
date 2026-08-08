@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "MYGPT Worker Fanout v3",
-  "version": "0.3.4",
-  "description": "Three-slot MYGPT Custom GPT preparer using AutoGPT upload/paste plus visible attachment evidence and Translation Loop final send-readiness.",
+  "name": "MYGPT Worker Fanout v4",
+  "version": "0.4.0",
+  "description": "Three isolated Custom GPT workers using Translation Loop control/submit evidence, AutoGPT upload/paste/passive observation, and VoiceBridge-style monitoring.",
   "permissions": [
     "storage",
     "tabs",
     "scripting",
-    "unlimitedStorage"
+    "unlimitedStorage",
+    "alarms"
   ],
   "host_permissions": [
     "https://chatgpt.com/*",
@@ -17,7 +18,7 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "MYGPT Worker Fanout v3",
+    "default_title": "MYGPT Worker Fanout v4",
     "default_popup": "popup.html"
   },
   "content_scripts": [
@@ -28,7 +29,7 @@
       ],
       "js": [
         "page_observer.js",
-        "translation_loop_send_guard.js",
+        "prompt_stacker_runner.js",
         "chatgpt_adapter.js"
       ],
       "run_at": "document_start",

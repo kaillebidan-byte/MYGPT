@@ -17,8 +17,6 @@
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
 
-  // This adapter must execute in the page MAIN world. Synthetic ClipboardEvent
-  // clipboardData is part of ChatGPT's page-side input contract.
   function normalizeText(value) {
     return String(value || "")
       .replace(/\r\n?/g, "\n")
@@ -29,20 +27,12 @@
       .trim();
   }
 
-  function getComposer(doc = document) {
-    return doc.querySelector(COMPOSER_SELECTOR);
-  }
+  function getComposer(doc = document) { return doc.querySelector(COMPOSER_SELECTOR); }
+  function getFileInput(doc = document) { return getComposer(doc)?.querySelector(FILE_INPUT_SELECTOR) || null; }
+  function getPromptRoot(doc = document) { return doc.querySelector(PROMPT_ROOT_SELECTOR); }
+  function getSubmitButton(doc = document) { return doc.querySelector(SUBMIT_SELECTOR); }
 
-  function getFileInput(doc = document) {
-    return getComposer(doc)?.querySelector(FILE_INPUT_SELECTOR) || null;
-  }
-
-  function getPromptRoot(doc = document) {
-    return doc.querySelector(PROMPT_ROOT_SELECTOR);
-  }
-
-  // AutoGPT dispatches paste to the first paragraph inside #prompt-textarea.
-  // Keep that event target, but never use a single paragraph as full-draft evidence.
+  // AutoGPT dispatches the paste to the first paragraph inside #prompt-textarea.
   function getPromptEditor(doc = document) {
     const paragraph = doc.querySelector(PROMPT_PARAGRAPH_SELECTOR);
     if (paragraph) return paragraph;
@@ -52,40 +42,18 @@
     return root.querySelector?.('p, [contenteditable="true"]') || root;
   }
 
-  function getSubmitButton(doc = document) {
-    return doc.querySelector(SUBMIT_SELECTOR);
-  }
-
-  function isUploading(doc = document) {
-    return Boolean(getComposer(doc)?.querySelector("circle"));
-  }
-
-  function isStopButton(button) {
-    if (!button) return false;
-    const testId = button.getAttribute?.("data-testid") || "";
-    const aria = button.getAttribute?.("aria-label") || "";
-    return testId === "stop-button" || testId === "composer-stop-button" || /stop generating|生成を停止/i.test(aria);
-  }
-
-  function getTranslationLoopSendButton(doc = document) {
-    const guard = globalScope.MYGPTTranslationLoopSendGuard;
-    if (!guard?.getEnabledSendButton) return null;
-    return guard.getEnabledSendButton(getPromptRoot(doc) || getPromptEditor(doc), doc);
-  }
+  function isUploading(doc = document) { return Boolean(getComposer(doc)?.querySelector("circle")); }
 
   function attachmentSnapshot(doc = document) {
     const composer = getComposer(doc);
     if (!composer?.querySelectorAll) return { markers: 0, images: 0 };
-    const markerNodes = new Set();
+    const markers = new Set();
     for (const selector of ATTACHMENT_UI_SELECTORS) {
       let nodes = [];
       try { nodes = composer.querySelectorAll(selector); } catch (_) { continue; }
-      for (const node of nodes) markerNodes.add(node);
+      for (const node of nodes) markers.add(node);
     }
-    return {
-      markers: markerNodes.size,
-      images: composer.querySelectorAll("img").length
-    };
+    return { markers: markers.size, images: composer.querySelectorAll("img").length };
   }
 
   function attachmentVisible(fileName, before, doc = document) {
@@ -94,40 +62,14 @@
     const text = composer.innerText || composer.textContent || "";
     if (fileName && text.includes(fileName)) return { kind: "visible-filename" };
     const current = attachmentSnapshot(doc);
-    if (current.markers > (before?.markers || 0)) {
-      return { kind: "attachment-marker", ...current };
-    }
-    if (current.images > (before?.images || 0)) {
-      return { kind: "attachment-image", ...current };
-    }
+    if (current.markers > Number(before?.markers || 0)) return { kind: "attachment-marker", ...current };
+    if (current.images > Number(before?.images || 0)) return { kind: "attachment-image", ...current };
     return null;
-  }
-
-  // Upload completion is attachment-specific. Send readiness is checked only
-  // after the prompt is pasted, because prompt content can control button state.
-  function uploadReady(fileName, before, doc = document) {
-    return !isUploading(doc) && attachmentVisible(fileName, before, doc);
-  }
-
-  async function waitForSendReady(doc = document, timeout = 10000) {
-    const button = await waitFor(() => getTranslationLoopSendButton(doc), {
-      timeout,
-      interval: 100
-    });
-    if (!button) return null;
-    return {
-      evidence: "translation-loop-send-ready",
-      testId: button.getAttribute?.("data-testid") || null,
-      ariaLabel: button.getAttribute?.("aria-label") || null,
-      type: button.getAttribute?.("type") || null
-    };
   }
 
   function editorText(editor) {
     if (!editor) return "";
-    if (editor.tagName === "TEXTAREA" || editor.tagName === "INPUT") {
-      return normalizeText(editor.value);
-    }
+    if (editor.tagName === "TEXTAREA" || editor.tagName === "INPUT") return normalizeText(editor.value);
     return normalizeText(editor.innerText || editor.textContent || "");
   }
 
@@ -135,7 +77,6 @@
     const root = getPromptRoot(doc);
     if (!root) return editorText(getPromptEditor(doc));
     if (root.tagName === "TEXTAREA" || root.tagName === "INPUT") return editorText(root);
-
     const paragraphs = Array.from(root.querySelectorAll?.("p") || []);
     if (paragraphs.length) {
       return normalizeText(paragraphs.map((node) => normalizeText(node.innerText || node.textContent || "")).join("\n"));
@@ -143,9 +84,7 @@
     return editorText(root);
   }
 
-  function composerDraftText(doc = document) {
-    return composerStructuredText(doc);
-  }
+  function composerDraftText(doc = document) { return composerStructuredText(doc); }
 
   async function waitFor(test, options = {}) {
     const timeout = Number.isFinite(options.timeout) ? options.timeout : 15000;
@@ -156,9 +95,7 @@
       try {
         const result = test();
         if (result) return result;
-      } catch (error) {
-        lastError = error;
-      }
+      } catch (error) { lastError = error; }
       await sleep(interval);
     }
     if (lastError) throw lastError;
@@ -175,68 +112,81 @@
   }
 
   function createFile(fileSpec) {
-    if (!fileSpec || typeof fileSpec.name !== "string" || !fileSpec.name) {
-      return { ok: false, reason: "FILE_NAME_MISSING" };
-    }
-    if (typeof fileSpec.dataUrl !== "string") {
-      return { ok: false, reason: "FILE_DATA_MISSING" };
-    }
+    if (!fileSpec || typeof fileSpec.name !== "string" || !fileSpec.name) return { ok: false, reason: "FILE_NAME_MISSING" };
+    if (typeof fileSpec.dataUrl !== "string") return { ok: false, reason: "FILE_DATA_MISSING" };
     const match = fileSpec.dataUrl.match(/^data:([^;,]*)(;base64)?,(.*)$/s);
     if (!match) return { ok: false, reason: "FILE_DATA_INVALID" };
     let binary;
-    try {
-      binary = match[2] ? atob(match[3] || "") : decodeURIComponent(match[3] || "");
-    } catch (_) {
-      return { ok: false, reason: "FILE_DATA_DECODE_FAILED" };
-    }
+    try { binary = match[2] ? atob(match[3] || "") : decodeURIComponent(match[3] || ""); }
+    catch (_) { return { ok: false, reason: "FILE_DATA_DECODE_FAILED" }; }
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i) & 0xff;
     const type = fileSpec.type || match[1] || "application/octet-stream";
-    return {
-      ok: true,
-      file: new File([bytes], fileSpec.name, { type, lastModified: Date.now() })
-    };
+    return { ok: true, file: new File([bytes], fileSpec.name, { type, lastModified: Date.now() }) };
+  }
+
+  async function waitForUploadSettled(doc = document, options = {}) {
+    const timeout = options.timeout || 90000;
+    const interval = options.interval || 250;
+    const stableCyclesNeeded = options.stableCycles || 3;
+    const startedAt = Date.now();
+    let stableCycles = 0;
+    let sawSpinner = false;
+    while (Date.now() - startedAt < timeout) {
+      const uploading = isUploading(doc);
+      if (uploading) {
+        sawSpinner = true;
+        stableCycles = 0;
+      } else {
+        stableCycles += 1;
+        if (stableCycles >= stableCyclesNeeded && Date.now() - startedAt >= 750) {
+          return { settled: true, sawSpinner };
+        }
+      }
+      await sleep(interval);
+    }
+    return null;
   }
 
   async function attachFile(fileSpec, options = {}) {
     const doc = options.document || document;
     const made = createFile(fileSpec);
     if (!made.ok) return made;
-
     const initial = await waitForComposer(doc, options.composerTimeout || 15000);
     if (!initial) return { ok: false, reason: "COMPOSER_OR_FILE_INPUT_NOT_FOUND" };
 
-    const beforeAttachment = attachmentSnapshot(doc);
+    const before = attachmentSnapshot(doc);
     const transfer = new DataTransfer();
     transfer.items.add(made.file);
-    const input = getFileInput(doc);
+    const input = getFileInput(doc); // re-resolve after React can remount composer
     if (!input) return { ok: false, reason: "FILE_INPUT_NOT_FOUND" };
-
-    try {
-      input.files = transfer.files;
-    } catch (error) {
-      return {
-        ok: false,
-        reason: "FILE_INPUT_ASSIGN_FAILED",
-        detail: error instanceof Error ? error.message : String(error)
-      };
+    try { input.files = transfer.files; }
+    catch (error) {
+      return { ok: false, reason: "FILE_INPUT_ASSIGN_FAILED", detail: error instanceof Error ? error.message : String(error) };
     }
+    if (input.files?.length !== 1) return { ok: false, reason: "FILE_INPUT_ASSIGN_NOT_REFLECTED" };
 
+    // Exact AutoGPT primitive: one bubbling change event; no synthetic input event.
     input.dispatchEvent(new Event("change", { bubbles: true }));
-
-    await sleep(250);
-    const ready = await waitFor(() => uploadReady(made.file.name, beforeAttachment, doc), {
+    const settled = await waitForUploadSettled(doc, {
       timeout: options.uploadTimeout || 90000,
-      interval: options.uploadInterval || 250
+      interval: options.uploadInterval || 250,
+      stableCycles: 3
     });
-    if (!ready) {
-      return { ok: false, reason: "ATTACHMENT_UI_NOT_CONFIRMED", name: made.file.name };
-    }
+    if (!settled) return { ok: false, reason: "UPLOAD_SETTLE_TIMEOUT", name: made.file.name };
 
+    // The worker is foregrounded while this runs. Require positive attachment UI
+    // evidence so a slot can never be submitted without the canonical image.
+    const visible = await waitFor(() => attachmentVisible(made.file.name, before, doc), {
+      timeout: options.attachmentUiTimeout || 10000,
+      interval: 200
+    });
+    if (!visible) return { ok: false, reason: "ATTACHMENT_UI_NOT_CONFIRMED", name: made.file.name };
     return {
       ok: true,
       evidence: "autogpt-upload+visible-attachment",
-      attachmentUiEvidence: ready.kind,
+      attachmentUiEvidence: visible.kind,
+      sawSpinner: settled.sawSpinner,
       name: made.file.name,
       size: made.file.size,
       type: made.file.type
@@ -249,21 +199,13 @@
     const raw = String(text || "");
     const expected = normalizeText(raw);
     if (!expected) return { ok: false, reason: "PACKET_EMPTY" };
-
-    const editor = await waitFor(() => getPromptEditor(doc), {
-      timeout: options.editorTimeout || 15000,
-      interval: 150
-    });
+    const editor = await waitFor(() => getPromptEditor(doc), { timeout: options.editorTimeout || 15000, interval: 150 });
     if (!editor) return { ok: false, reason: "PROMPT_EDITOR_NOT_FOUND" };
-
-    if (composerDraftText(doc)) {
-      return { ok: false, reason: "COMPOSER_NOT_EMPTY", observed: composerDraftText(doc) };
-    }
+    if (composerDraftText(doc)) return { ok: false, reason: "COMPOSER_NOT_EMPTY", observed: composerDraftText(doc) };
 
     editor.click?.();
     editor.focus?.();
     await sleep(50);
-
     const selection = win.getSelection?.();
     if (selection && doc.createRange) {
       const range = doc.createRange();
@@ -281,12 +223,7 @@
       } catch (_) {}
     }
 
-    // Match AutoGPT 0.0.71 ordering: create the paste event, then DataTransfer,
-    // then define clipboardData on the event before dispatch.
-    const pasteEvent = new ClipboardEvent("paste", {
-      bubbles: true,
-      cancelable: true
-    });
+    const pasteEvent = new ClipboardEvent("paste", { bubbles: true, cancelable: true });
     const clipboard = new DataTransfer();
     clipboard.setData("text/plain", raw);
     Object.defineProperty(pasteEvent, "clipboardData", { value: clipboard });
@@ -297,10 +234,7 @@
       const current = getPromptEditor(doc);
       observed = composerStructuredText(doc);
       return observed === expected ? current : null;
-    }, {
-      timeout: options.reflectTimeout || 5000,
-      interval: 100
-    });
+    }, { timeout: options.reflectTimeout || 5000, interval: 100 });
 
     if (!reflected) {
       return {
@@ -311,47 +245,21 @@
         observedPreview: observed.slice(0, 200)
       };
     }
-
     return {
       ok: true,
-      evidence: "normalized-exact-readback",
+      evidence: "normalized-paragraph-readback",
       method: "autogpt-synthetic-paste",
-      composerKind: reflected.tagName === "TEXTAREA" || reflected.tagName === "INPUT"
-        ? "text-control"
-        : "contenteditable",
+      composerKind: reflected.tagName === "TEXTAREA" || reflected.tagName === "INPUT" ? "text-control" : "contenteditable",
       observedChars: observed.length
     };
   }
 
   const api = Object.freeze({
-    COMPOSER_SELECTOR,
-    FILE_INPUT_SELECTOR,
-    PROMPT_PARAGRAPH_SELECTOR,
-    PROMPT_ROOT_SELECTOR,
-    SUBMIT_SELECTOR,
-    ATTACHMENT_UI_SELECTORS,
-    normalizeText,
-    getComposer,
-    getFileInput,
-    getPromptRoot,
-    getPromptEditor,
-    getSubmitButton,
-    getTranslationLoopSendButton,
-    attachmentSnapshot,
-    attachmentVisible,
-    isUploading,
-    isStopButton,
-    uploadReady,
-    waitForSendReady,
-    editorText,
-    composerStructuredText,
-    composerDraftText,
-    waitFor,
-    waitForComposer,
-    attachFile,
-    pastePrompt
+    COMPOSER_SELECTOR, FILE_INPUT_SELECTOR, PROMPT_PARAGRAPH_SELECTOR, PROMPT_ROOT_SELECTOR, SUBMIT_SELECTOR,
+    ATTACHMENT_UI_SELECTORS, normalizeText, getComposer, getFileInput, getPromptRoot, getPromptEditor,
+    getSubmitButton, isUploading, attachmentSnapshot, attachmentVisible, editorText, composerStructuredText,
+    composerDraftText, waitFor, waitForComposer, createFile, waitForUploadSettled, attachFile, pastePrompt
   });
-
   globalScope.MYGPTChatGPTAdapter = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

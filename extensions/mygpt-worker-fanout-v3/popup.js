@@ -1,18 +1,19 @@
 "use strict";
 
-const STATE_KEY = "mygptV3Runtime";
-const PAYLOAD_KEY = "mygptV3Payload";
+const STATE_KEY = "mygptV4Runtime";
+const PAYLOAD_KEY = "mygptV4Payload";
+const LEGACY_PAYLOAD_KEY = "mygptV3Payload";
 const SLOT_IDS = ["F2", "F3", "F4"];
 const MSG = Object.freeze({
-  PREPARE_THREE: "MYGPT_V3_PREPARE_THREE",
-  RESET: "MYGPT_V3_RESET",
-  GET_STATE: "MYGPT_V3_GET_STATE",
-  FOCUS_SLOT: "MYGPT_V3_FOCUS_SLOT"
+  RUN_THREE: "MYGPT_V4_RUN_THREE",
+  RESET: "MYGPT_V4_RESET",
+  GET_STATE: "MYGPT_V4_GET_STATE",
+  FOCUS_SLOT: "MYGPT_V4_FOCUS_SLOT"
 });
 
 const $ = (id) => document.getElementById(id);
 const canonical = $("canonical");
-const prepare = $("prepare");
+const run = $("run");
 const reset = $("reset");
 const fileInfo = $("fileInfo");
 const phase = $("phase");
@@ -21,36 +22,28 @@ const stateFile = $("stateFile");
 const slotsEl = $("slots");
 const errorEl = $("error");
 const packetEls = Object.fromEntries(SLOT_IDS.map((id) => [id, $(id)]));
-
 let selectedFileSpec = null;
 let lastRenderedAt = 0;
 
-function allPacketsReady() {
-  return SLOT_IDS.every((slotId) => packetEls[slotId].value.trim());
-}
-
-function updatePrepareEnabled(state = null) {
-  prepare.disabled = Boolean(state?.enabled) || !selectedFileSpec || !allPacketsReady();
-}
+function allPacketsReady() { return SLOT_IDS.every((slotId) => packetEls[slotId].value.trim()); }
+function updateRunEnabled(state = null) { run.disabled = Boolean(state?.enabled) || !selectedFileSpec || !allPacketsReady(); }
 
 function render(state) {
   const updatedAt = Number.isFinite(state?.updatedAt) ? state.updatedAt : 0;
   if (updatedAt && updatedAt < lastRenderedAt) return;
   if (updatedAt) lastRenderedAt = updatedAt;
-
   phase.textContent = state?.phase || "UNKNOWN";
   worker.textContent = state?.workerIdentity?.workerPath || "-";
   stateFile.textContent = state?.fileName || "-";
   errorEl.textContent = state?.error ? `${state.error.code}: ${JSON.stringify(state.error.detail || {})}` : "";
   slotsEl.textContent = "";
-
   for (const slotId of SLOT_IDS) {
     const slot = state?.slots?.find((item) => item.slotId === slotId) || { slotId, phase: "IDLE" };
     const row = document.createElement("div");
     row.className = "slot";
     const text = document.createElement("div");
     text.className = "mono";
-    text.textContent = `${slotId}: ${slot.phase} | Tab ${slot.tabId ?? "-"} | ${slot.attachmentEvidence || "-"} | ${slot.insertionMethod || "-"}`;
+    text.textContent = `${slotId}: ${slot.phase} | Tab ${slot.tabId ?? "-"} | attach=${slot.attachmentEvidence || "-"}${slot.attachmentUiEvidence ? `/${slot.attachmentUiEvidence}` : ""} | send=${slot.activation || "-"}/${slot.submitEvidence || "-"} | done=${slot.completionEvidence || "-"}`;
     row.appendChild(text);
     if (Number.isInteger(slot.tabId)) {
       const button = document.createElement("button");
@@ -69,8 +62,7 @@ function render(state) {
     }
     slotsEl.appendChild(row);
   }
-
-  updatePrepareEnabled(state);
+  updateRunEnabled(state);
 }
 
 function fileToDataUrl(file) {
@@ -85,45 +77,31 @@ function fileToDataUrl(file) {
 async function persistPayload() {
   if (!selectedFileSpec) return;
   const packets = Object.fromEntries(SLOT_IDS.map((slotId) => [slotId, packetEls[slotId].value]));
-  await chrome.storage.local.set({
-    [PAYLOAD_KEY]: { file: selectedFileSpec, packets }
-  });
+  await chrome.storage.local.set({ [PAYLOAD_KEY]: { file: selectedFileSpec, packets } });
 }
 
 async function loadPayload() {
-  const stored = await chrome.storage.local.get(PAYLOAD_KEY);
+  const stored = await chrome.storage.local.get([PAYLOAD_KEY, LEGACY_PAYLOAD_KEY]);
   const payload = stored[PAYLOAD_KEY];
-  if (!payload) return;
-  if (payload.packets) {
-    for (const slotId of SLOT_IDS) {
-      if (typeof payload.packets[slotId] === "string") packetEls[slotId].value = payload.packets[slotId];
-    }
+  if (payload?.packets) {
+    for (const slotId of SLOT_IDS) if (typeof payload.packets[slotId] === "string") packetEls[slotId].value = payload.packets[slotId];
   }
-  if (payload.file?.dataUrl) {
-    selectedFileSpec = payload.file;
-    fileInfo.textContent = `${payload.file.name} (${payload.file.size} bytes) — storageから復元`;
+  const file = payload?.file?.dataUrl ? payload.file : stored[LEGACY_PAYLOAD_KEY]?.file;
+  if (file?.dataUrl) {
+    selectedFileSpec = file;
+    fileInfo.textContent = `${file.name} (${file.size} bytes) — storageから復元`;
   }
 }
 
 canonical.addEventListener("change", async () => {
   errorEl.textContent = "";
   const file = canonical.files?.[0] || null;
-  if (!file) {
-    selectedFileSpec = null;
-    fileInfo.textContent = "未選択";
-    updatePrepareEnabled();
-    return;
-  }
+  if (!file) { selectedFileSpec = null; fileInfo.textContent = "未選択"; updateRunEnabled(); return; }
   try {
-    selectedFileSpec = {
-      name: file.name,
-      type: file.type || "application/octet-stream",
-      size: file.size,
-      dataUrl: await fileToDataUrl(file)
-    };
+    selectedFileSpec = { name: file.name, type: file.type || "application/octet-stream", size: file.size, dataUrl: await fileToDataUrl(file) };
     fileInfo.textContent = `${file.name} (${file.size} bytes)`;
     await persistPayload();
-    updatePrepareEnabled();
+    updateRunEnabled();
   } catch (error) {
     selectedFileSpec = null;
     fileInfo.textContent = "読込失敗";
@@ -133,7 +111,7 @@ canonical.addEventListener("change", async () => {
 
 for (const slotId of SLOT_IDS) {
   packetEls[slotId].addEventListener("input", () => {
-    updatePrepareEnabled();
+    updateRunEnabled();
     if (selectedFileSpec) persistPayload().catch(() => {});
   });
 }
@@ -145,19 +123,16 @@ async function activeTabId() {
   return id;
 }
 
-prepare.addEventListener("click", async () => {
-  prepare.disabled = true;
+run.addEventListener("click", async () => {
+  run.disabled = true;
   errorEl.textContent = "";
   try {
     if (!selectedFileSpec) throw new Error("CANONICAL_NOT_SELECTED");
     if (!allPacketsReady()) throw new Error("PACKET_EMPTY");
     await persistPayload();
-    const response = await chrome.runtime.sendMessage({
-      type: MSG.PREPARE_THREE,
-      sourceTabId: await activeTabId()
-    });
+    const response = await chrome.runtime.sendMessage({ type: MSG.RUN_THREE, sourceTabId: await activeTabId() });
     if (response?.state) render(response.state);
-    if (!response?.ok) throw new Error(response?.error || "PREPARE_FAILED");
+    if (!response?.ok) throw new Error(response?.error || "RUN_FAILED");
   } catch (error) {
     errorEl.textContent = error instanceof Error ? error.message : String(error);
     await refresh().catch(() => {});
@@ -184,7 +159,5 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 (async () => {
   await loadPayload();
   await refresh();
-  updatePrepareEnabled();
-})().catch((error) => {
-  errorEl.textContent = error instanceof Error ? error.message : String(error);
-});
+  updateRunEnabled();
+})().catch((error) => { errorEl.textContent = error instanceof Error ? error.message : String(error); });

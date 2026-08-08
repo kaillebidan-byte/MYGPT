@@ -8,6 +8,7 @@
   const OBS_EVENT = "MYGPT_V3_PAGE_OBSERVED";
   const CONVERSATION_PATHS = ["/backend-api/conversation", "/backend-api/f/conversation"];
   let armed = null;
+  let activeConversationNonce = null;
 
   function emit(kind, detail = {}) {
     window.dispatchEvent(new CustomEvent(OBS_EVENT, {
@@ -28,6 +29,7 @@
       promptPrefix: typeof detail.promptPrefix === "string" ? detail.promptPrefix : "",
       armedAt: Date.now()
     };
+    activeConversationNonce = detail.nonce;
   });
 
   function isConversationUrl(value) {
@@ -116,6 +118,7 @@
             const conversationId = recursiveFindConversationId(parsed);
             if (conversationId) {
               committed = true;
+              activeConversationNonce = sendContext.nonce;
               emit("conversation-commit", {
                 nonce: sendContext.nonce,
                 conversationId
@@ -171,7 +174,7 @@
           socket.addEventListener("message", (event) => {
             if (typeof event.data !== "string") return;
             if (!/conversation-update|image_gen_async|stream_handoff|conversation_async_status/.test(event.data)) return;
-            emit("websocket-conversation-update", { textLength: event.data.length });
+            emit("websocket-conversation-update", { nonce: activeConversationNonce, textLength: event.data.length });
           });
         }
       } catch (_) {}
