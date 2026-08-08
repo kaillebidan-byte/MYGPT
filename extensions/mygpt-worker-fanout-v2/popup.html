@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MYGPT Worker Fanout v2</title>
+  <style>
+    body { font-family: system-ui, sans-serif; min-width: 390px; margin: 14px; color: #202124; }
+    h1 { font-size: 16px; margin: 0 0 10px; }
+    p { font-size: 12px; line-height: 1.45; }
+    label { display:block; font-size:12px; font-weight:700; margin-top:10px; }
+    textarea { width:100%; min-height:105px; box-sizing:border-box; font:12px ui-monospace, monospace; }
+    input[type=file] { width:100%; }
+    button { width:100%; padding:8px 10px; margin-top:8px; }
+    .status { margin-top:10px; padding:9px; border:1px solid #bbb; border-radius:6px; background:#f7f7f7; font-size:12px; }
+    .mono { font-family:ui-monospace, monospace; overflow-wrap:anywhere; }
+    .error { color:#9c1c1c; }
+  </style>
+</head>
+<body>
+  <h1>MYGPT Worker Fanout v2 — 1 worker READY</h1>
+  <p>Translation Loop系のstate/runTokenとprompt挿入を土台に、canonical添付だけAutoGPT系のFile/DataTransfer方式を使う。まだ送信しない。</p>
+
+  <label for="canonical">Canonical image</label>
+  <input id="canonical" type="file" accept="image/*">
+  <div id="fileInfo" class="mono">未選択</div>
+
+  <label for="packet">Worker packet</label>
+  <textarea id="packet">[MYGPT_V2_READY_TEST]
+mode=PREPARE_ONLY
+submit=FORBIDDEN
+purpose=verify_canonical_plus_packet</textarea>
+
+  <button id="prepare" type="button">1 workerをREADYまで準備</button>
+  <button id="focus" type="button" disabled>prepared worker tabへ移動</button>
+  <button id="reset" type="button">状態・canonicalをリセット</button>
+
+  <div class="status">
+    <div><b>Phase:</b> <span id="phase">読込中</span></div>
+    <div><b>Worker:</b> <span id="worker" class="mono">-</span></div>
+    <div><b>Tab:</b> <span id="tabId" class="mono">-</span></div>
+    <div><b>File:</b> <span id="stateFile" class="mono">-</span></div>
+    <div><b>Attachment:</b> <span id="attachment">-</span></div>
+    <div><b>Composer:</b> <span id="composer">-</span></div>
+    <div><b>Insert:</b> <span id="insert">-</span></div>
+    <div id="error" class="error"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
