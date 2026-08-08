@@ -1,7 +1,7 @@
 # Incident — frame-first same-turn jobs collapsed into sequence sheets
 
 Date: 2026-08-08
-Status: STATIC CONTROL PASS / root cause narrowed to motion orchestration context
+Status: M1 PASS / M2a visible-four-state FAIL / next: M2b accumulation isolation
 
 ## Test goal
 
@@ -95,51 +95,126 @@ It disproves:
 
 The static output is a redraw, not a direct copy of the canonical. Identity is strongly anchored but non-moving regions are still regenerated at pixel level.
 
+## Follow-up M1 — motion request + one image call
+
+A completely clean isolation Project was used with:
+- Project Sources 0
+- no retired layout image
+- directly attached high-resolution canonical
+- minimal single-static-pose Instructions
+- the same natural-language one-shot motion request
+- one image-generation call only
+
+Result:
+- one image
+- one person
+- one pose
+- portrait
+- no 2x2
+- no labels/dividers
+- anatomical right arm active
+- identity strongly anchored
+
+M1 therefore PASSed.
+
+This rejects the stronger hypothesis that **the presence of a motion request by itself necessarily sheetifies the first image call**.
+
+Detailed record:
+- `research/experiments/2026-08-08-m1-motion-context-single-call.md`
+
+## Follow-up M2a — visible four-state plan
+
+The intended next test was supposed to keep the other three states out of each image call. However, the test instruction given to the user mistakenly told them to paste POSE A/B/C/D together into one message.
+
+This introduced a confound, so the result is recorded separately as M2a rather than as the planned M2.
+
+Condition:
+- separate clean Project from M1
+- Sources 0
+- directly attached high-resolution canonical
+- minimal Instructions
+- the motion request plus four named chronological static poses were all visible in the same user message before generation
+
+Observed uploaded outputs from the generation session:
+- three explicit 2x2 sequence sheets
+- four later standalone portraits produced during recovery attempts
+
+The three sheets included:
+- four poses in one image
+- central vertical/horizontal dividers
+- visible `POSE A`, `POSE B`, `POSE C`, `POSE D` labels
+- label styling that changed across retries
+
+This is strong evidence that the generation system absorbed the visible four-state structure and pose names into the composition instead of treating them as independent output jobs.
+
+The later standalone portraits do not make this run a PASS. Recovery prompts introduced strong negative layout wording and one path explicitly requested extraction of the upper-right POSE B from a generated four-way image. That recovery architecture is outside the intended frame-first test and should not be treated as production evidence.
+
+Detailed record:
+- `research/experiments/2026-08-08-m2a-visible-four-state-sheet-collapse.md`
+
 ## Strongest current conclusion
 
-The failure is tied to **motion orchestration context**, not ordinary single-pose generation.
+The failure is tied to **multi-state orchestration context**, not ordinary single-pose generation and not motion wording alone.
 
-Current evidence now points to one or both of:
+Current evidence supports the following hierarchy:
 
-A. exposing the full four-state workflow (`motion contract`, four chronological states, repeated frame calls) before/during image generation causes the image system to represent the whole sequence in each call;
+1. Static single-pose request: standalone portrait PASS.
+2. Natural-language motion request + one image call: standalone portrait PASS.
+3. Full production workflow with global four-state / layout / audit context: strong sheetification.
+4. Minimal Project but all four named chronological states exposed together before generation: strong sheetification.
 
-B. the full Project Instructions repeatedly mention global sequence/layout concepts (`F1-F4`, four jobs, board, 2x2, sheet, compose, audit, repair), so each image-generation call receives too much global multi-frame context even when the local prompt requests only one pose.
+Therefore a leading trigger is now **global multi-state exposure before/during image generation**.
 
-The next experiment must distinguish A from B.
+Still unresolved:
+- whether repeated same-chat image calls alone cause contamination when the conversation never exposes a global four-state plan;
+- whether automated one-turn four-call orchestration can keep generation-facing context local enough to avoid sheetification.
 
-## Next isolation experiment
+## Next isolation experiment — M2b
 
 Do not run the full current Instructions again.
 
-### Test B — minimal four-call motion orchestration with zero layout vocabulary
+Use another completely new Project.
 
-Use temporary Project Instructions containing only:
-- current chat's directly attached canonical is the identity reference;
-- convert the user's motion into four chronological pose states internally;
-- call image generation four times sequentially;
-- each image call receives only the canonical identity rule and that call's one pose state;
-- do not display or pass the other three states to the image call;
-- do not perform repair or audit during this experiment.
+Keep:
+- Project Sources 0
+- no `four-pose-portrait.png`
+- high-resolution canonical directly attached
+- minimal Instructions that only describe one current static pose at a time
+- no repair, audit, Python compose, or post-generation correction
 
-Crucially, the temporary Instructions must contain **none** of these concepts or words:
-- board
-- sheet
-- panel
-- 2x2
-- compose
-- grid
-- layout guide
-- Python compose
-- machine audit
-- repair
-- comparison
-- F1/F2/F3/F4 as visible generation labels
+Run four user turns in the same chat. Each turn requests only one static pose.
 
-The four states can be represented internally as `state_a` through `state_d` or equivalent, but image prompts must receive only one state at a time.
+Do **not** tell the model that the four turns form one motion or four chronological states. Do not use `POSE A/B/C/D` labels in the actual generation text.
+
+Turn 1:
+- neutral front-facing full-body stance
+- both arms naturally down
+
+Turn 2:
+- same character
+- anatomical right elbow lightly bent
+- right hand to upper abdomen / solar plexus
+- left arm, legs, torso, head, expression preserved
+
+Turn 3:
+- same character
+- anatomical right elbow bent further
+- right hand just below the chest flower emblem
+- not yet endpoint
+- other body regions preserved
+
+Turn 4:
+- same character
+- anatomical right hand at chest-emblem area
+- stopped endpoint
+- other body regions preserved
 
 Interpretation:
-- Test B PASS -> current full Instructions/Sources contaminate generation context; redesign production orchestration so layout/audit vocabulary is unavailable until generation finishes.
-- Test B FAIL -> four-state same-turn motion orchestration itself is enough to trigger sequence representation in this Project path; per-frame same-turn automation is unreliable without a true isolated execution boundary.
+- 4/4 standalone portraits -> repeated same-chat calls / progressive pose changes alone are not sufficient. Global four-state exposure becomes the stronger trigger.
+- first call standalone, later calls sheetify -> accumulating same-chat image context is a causal candidate.
+- first call sheetifies -> inspect Project setup for contamination before drawing a new conclusion.
+
+If M2b PASSes, proceed to M2c in another clean Project: restore one natural-language motion request and automated four-call orchestration, but never visibly enumerate all four states before the first image call.
 
 ## Do not repeat
 
@@ -148,10 +223,12 @@ Interpretation:
 - Do not treat `1 visual job = 1 frame` as demonstrated just because one repair call escaped into a single frame.
 - Do not restore `four-pose-portrait.png`.
 - Do not switch back to low-resolution canonical.
-- Do not rerun the full 4 INITIAL + repair workflow before Test B.
+- Do not rerun the full 4 INITIAL + repair workflow.
+- Do not treat M2a recovery portraits as evidence that visible four-state orchestration succeeded.
+- Do not expose all four named states together again when testing accumulation-only behavior.
 
 ## Architectural implication
 
 Generation-facing context and post-generation/audit context must be separated as much as the ChatGPT Project execution model permits.
 
-The static-control PASS proves the image model can produce a correct single-pose portrait in the same new Project. The unresolved question is whether removing global layout/audit vocabulary is enough to preserve that behavior across four same-turn motion calls.
+The static control and M1 show that the image system can make a single-pose portrait even when the user's high-level intent is motion. M2a shows that exposing the full named four-state structure before generation strongly pushes the same system toward multi-panel representation.
