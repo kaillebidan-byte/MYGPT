@@ -13,7 +13,7 @@ from collections import Counter
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 
 
 def border_pixels(rgb: np.ndarray, width: int) -> np.ndarray:
@@ -28,7 +28,6 @@ def border_pixels(rgb: np.ndarray, width: int) -> np.ndarray:
 
 def detect_key(rgb: np.ndarray, border_width: int) -> tuple[int, int, int]:
     samples = border_pixels(rgb, border_width)
-    # Quantize slightly so tiny generated variations do not defeat mode detection.
     q = (samples // 4) * 4
     counts = Counter(map(tuple, q.tolist()))
     coarse = np.array(counts.most_common(1)[0][0], dtype=np.int16)
@@ -41,7 +40,6 @@ def detect_key(rgb: np.ndarray, border_width: int) -> tuple[int, int, int]:
 
 
 def centered_empty_gap(mask: np.ndarray, axis: int) -> int:
-    # mask=True means non-chroma / foreground-like.
     occupied = mask.any(axis=axis)
     n = occupied.shape[0]
     c = n // 2
@@ -85,6 +83,59 @@ def quadrant_bboxes(mask: np.ndarray) -> list[dict[str, object]]:
     return out
 
 
+def dilate_mask(mask: np.ndarray, radius: int) -> np.ndarray:
+    if radius <= 0:
+        return mask.copy()
+    size = radius * 2 + 1
+    image = Image.fromarray((mask.astype(np.uint8) * 255), mode="L")
+    return np.asarray(image.filter(ImageFilter.MaxFilter(size))) > 0
+
+
+def background_quality_metrics(
+    rgb: np.ndarray,
+    *,
+    key: tuple[int, int, int],
+    distance: np.ndarray,
+    core_foreground_distance: float,
+    exclusion_radius: int,
+    deviation_distance: float,
+) -> dict[str, float | int]:
+    core_foreground = distance > core_foreground_distance
+    safe_background = ~dilate_mask(core_foreground, exclusion_radius)
+    safe_count = int(safe_background.sum())
+
+    deviation = (distance > deviation_distance) & safe_background
+    deviation_count = int(deviation.sum())
+    deviation_ratio = deviation_count / safe_count if safe_count else 0.0
+
+    rgb_f = rgb.astype(np.float32)
+    key_f = np.array(key, dtype=np.float32)
+    key_norm = float(np.linalg.norm(key_f))
+    rgb_norm = np.linalg.norm(rgb_f, axis=2)
+    dot = np.tensordot(rgb_f, key_f, axes=([2], [0]))
+    cosine = dot / np.maximum(rgb_norm * key_norm, 1e-6)
+    scale = dot / max(key_norm * key_norm, 1e-6)
+    residual = np.linalg.norm(rgb_f - scale[..., None] * key_f, axis=2)
+
+    shadow_like = (
+        safe_background
+        & (cosine >= 0.99)
+        & (scale >= 0.20)
+        & (scale <= 0.92)
+        & (residual <= 25.0)
+    )
+    shadow_count = int(shadow_like.sum())
+    shadow_ratio = shadow_count / safe_count if safe_count else 0.0
+
+    return {
+        "safe_background_pixels": safe_count,
+        "background_deviation_pixels": deviation_count,
+        "background_deviation_ratio": deviation_ratio,
+        "shadow_like_background_pixels": shadow_count,
+        "shadow_like_background_ratio": shadow_ratio,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path)
@@ -95,6 +146,11 @@ def main() -> None:
     parser.add_argument("--center-band", type=int, default=6)
     parser.add_argument("--aspect-target", type=float, default=2.0 / 3.0)
     parser.add_argument("--aspect-tolerance", type=float, default=0.08)
+    parser.add_argument("--core-foreground-distance", type=float, default=100.0)
+    parser.add_argument("--background-exclusion-radius", type=int, default=5)
+    parser.add_argument("--background-deviation-distance", type=float, default=24.0)
+    parser.add_argument("--background-deviation-ratio-limit", type=float, default=0.002)
+    parser.add_argument("--shadow-like-ratio-limit", type=float, default=0.001)
     args = parser.parse_args()
 
     with Image.open(args.input) as image:
@@ -131,8 +187,20 @@ def main() -> None:
     border_distance = np.linalg.norm(border - np.array(key, dtype=np.int16), axis=1)
     border_key_match_ratio = float((border_distance <= 24.0).mean())
 
+    bg = background_quality_metrics(
+        rgb,
+        key=key,
+        distance=distance,
+        core_foreground_distance=args.core_foreground_distance,
+        exclusion_radius=args.background_exclusion_radius,
+        deviation_distance=args.background_deviation_distance,
+    )
+
+    background_not_uniform = bg["background_deviation_ratio"] > args.background_deviation_ratio_limit
+    shadow_like_background = bg["shadow_like_background_ratio"] > args.shadow_like_ratio_limit
+
     result = {
-        "version": 1,
+        "version": 2,
         "input": args.input.name,
         "width": w,
         "height": h,
@@ -150,6 +218,16 @@ def main() -> None:
         "horizontal_center_band_non_chroma_ratio": round(h_contam, 6),
         "vertical_center_band_white_ratio": round(v_white, 6),
         "horizontal_center_band_white_ratio": round(h_white, 6),
+        "background_quality": {
+            "core_foreground_distance": args.core_foreground_distance,
+            "exclusion_radius": args.background_exclusion_radius,
+            "deviation_distance": args.background_deviation_distance,
+            "safe_background_pixels": int(bg["safe_background_pixels"]),
+            "background_deviation_pixels": int(bg["background_deviation_pixels"]),
+            "background_deviation_ratio": round(float(bg["background_deviation_ratio"]), 6),
+            "shadow_like_background_pixels": int(bg["shadow_like_background_pixels"]),
+            "shadow_like_background_ratio": round(float(bg["shadow_like_background_ratio"]), 6),
+        },
         "quadrant_bboxes": quadrant_bboxes(non_chroma),
         "mechanical_flags": {
             "wrong_aspect": not aspect_pass,
@@ -159,8 +237,10 @@ def main() -> None:
             "divider_like_vertical_white_band": v_white > 0.5,
             "divider_like_horizontal_white_band": h_white > 0.5,
             "border_not_uniform": border_key_match_ratio < 0.98,
+            "background_not_uniform": bool(background_not_uniform),
+            "shadow_like_background": bool(shadow_like_background),
         },
-        "scope_note": "Machine audit covers mechanical geometry/chroma signals only; identity, motion semantics, limb continuity, endpoint, and subtle attached shadows still require visual review.",
+        "scope_note": "Machine audit covers mechanical geometry and chroma/background signals only; identity, motion semantics, limb continuity, and endpoint still require visual review. Very subtle attached shadows may still require visual review.",
     }
 
     text = json.dumps(result, ensure_ascii=False, indent=2)
