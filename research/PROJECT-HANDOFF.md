@@ -1,6 +1,6 @@
 # MYGPT調整プロジェクト 引継ぎ
 
-更新日: 2026-08-08 19:45 JST
+更新日: 2026-08-08 JST
 
 GitHub `main` を正本とし、チャット記憶だけで過去方式へ戻さない。
 
@@ -8,13 +8,14 @@ GitHub `main` を正本とし、チャット記憶だけで過去方式へ戻さ
 
 1. `research/decisions/2026-08-08-identity-continuity-direction.md`
 2. `research/audits/2026-08-08-c0-final-candidate-composed-audit.md`
-3. `research/experiments/2026-08-08-w4-endpoint-and-final-candidate-result.md`
-4. `research/experiments/2026-08-08-w3-ab-spatial-overconstraint-result.md`
-5. `research/experiments/2026-08-08-w2-hand-shape-position-result.md`
-6. `research/experiments/2026-08-08-w1-targeted-sleeve-invariant-result.md`
-7. `research/audits/2026-08-08-n1-raw-identity-continuity-audit.md`
-8. `research/experiments/2026-08-08-native-chat-worker-isolation-plan.md`
-9. `research/incidents/2026-08-08-frame-first-same-turn-sheet-collapse.md`
+3. `research/experiments/2026-08-08-n2-branch-thinking-followup-result.md`
+4. `research/experiments/2026-08-08-w4-endpoint-and-final-candidate-result.md`
+5. `research/experiments/2026-08-08-w3-ab-spatial-overconstraint-result.md`
+6. `research/experiments/2026-08-08-w2-hand-shape-position-result.md`
+7. `research/experiments/2026-08-08-w1-targeted-sleeve-invariant-result.md`
+8. `research/audits/2026-08-08-n1-raw-identity-continuity-audit.md`
+9. `research/experiments/2026-08-08-native-chat-worker-isolation-plan.md`
+10. `research/incidents/2026-08-08-frame-first-same-turn-sheet-collapse.md`
 
 ---
 
@@ -45,7 +46,13 @@ N1:
 - 2x2 / labels / dividersなし
 - right-hand progression成立
 
-Custom GPT / Thinkingは画像生成tool availability FAIL。現行workerでは使わない。
+N0ではCustom GPT / Thinkingで画像生成tool availability FAILを実機再現した。
+ただしN2 follow-upではclean-seed Branch先をThinkingへ切り替えた後の画像生成が成功し、A/B 2候補が返った。
+したがって「Custom GPT / Thinkingは画像生成不可」という一般則は撤回する。
+N0はその時点のruntime/tool-availability incidentとして保存する。
+
+現行production workerは、N1/W1-W4/C0の検証鎖があるInstantをデフォルトのまま維持する。
+Thinkingへ切り替える根拠にはまだしない。
 
 ---
 
@@ -136,7 +143,7 @@ F4はF2/F3よりraw redraw差がやや大きいが、visible identity/topology�
 - detected keyに単一dominant channelがある場合だけ自動despill
 - near-key pixelだけ対象
 - dominant key channelをnon-key channels基準でcap
--従来のthreshold / feather alpha処理は維持
+- 従来のthreshold / feather alpha処理は維持
 - `--no-despill`で無効化可能
 
 candidate 4枚をwhite / black compositeで再検証し、緑フリンジが明確に減少。
@@ -157,7 +164,7 @@ F1 = canonical
         ↓
 planner emits F2/F3/F4 independent local static packets
         ↓
-F2/F3/F4 = separate fresh Custom GPT / Instant conversations
+F2/F3/F4 = isolated Custom GPT / Instant worker conversations
              same canonical + one current pose only
         ↓
 identity / continuity audit
@@ -174,39 +181,75 @@ visual identity/motion audit + machine geometry/chroma audit
 4 keyposesを3 image generationsで作る。
 
 Worker設定:
-- Instant
+- Instantをvalidated defaultとする
 - Image generation ON
 - Web OFF
 - Code/Data Analysis OFF
 - Actions NONE
 - Apps NONE
 - Knowledge NONE
-- fresh conversation per generated frame
 - canonical直接添付
 - full motion / other packets / progress% / F1-F4 / sequence / board / sheetを見せない
 - proven targeted active-sleeve invariantだけ追加
+
+worker isolationの起点は2方式とも成立:
+- explicit fresh conversation + canonical再添付: proven
+- clean pre-motion seedからBranch: N2 PASS。canonical再添付を省けるoptional UX reduction
+
+Branchはzero-click fan-outではない。
+worker自動spawnやpose packet自動配布を実現するものではない。
 
 visible handは各local packetへabsolute articulation / palm orientationを書く。
 
 ---
 
-## 7. 次フェーズ
+## 7. N2 Branch / Thinking follow-up
 
-生成品質とcomposed candidateはC0を通過。
-次に進めるならBranch / orchestration friction reduction。
+`research/experiments/2026-08-08-n2-branch-thinking-followup-result.md`
 
-Branchを試す場合:
-- clean pre-motion seedのみ
-- global motion contextを継承させない
-- canonical添付の継承可否
-- Instant/model configuration維持
+Branch:
+- same Custom GPT継承 PASS
+- clean seed継承 PASS
+- canonical image reference effective PASS
+- Instant利用可能 PASS
+- global motion context混入なし
+
+Thinking follow-up:
+- Branch先をThinkingへ切り替えた後、画像生成成功
+- A/B 2候補が返った
+- 2候補ともstandalone 1024x1536 portrait
+- anatomical-right arm指定成立
+- canonical参照成立
+- 候補間でactive sleeve / redraw amountに差あり
+
+これはN0のThinking tool availability FAILに対する反例。
+ただしBranchがThinking成功の原因とは未証明。
+Thinkingの安定性やInstantより高品質であることも未証明。
+
+よってproduction defaultはInstantのまま。
+A/B multiplicityをproduction仕様として仮定しない。
+
+---
+
+## 8. 次フェーズ
+
+生成品質、C0、N2 Branchは通過済み。
+次に検討する対象はN3のorchestration friction / automation ceiling。
+
+残る手作業:
+- F2/F3/F4用の3 workerを個別に作る / Branchする
+- 3 local pose packetを個別に投入する
+- 3生成を個別に実行する
 
 zero-click multiple worker spawnはnormal Chatで未確認。
 Work/APIは元制約外。
 
+Thinkingのcontrolled比較は、Instantを置き換える具体的な理由が生じた場合だけ行う。
+現時点では必須ではない。
+
 ---
 
-## 8. やらないこと
+## 9. やらないこと
 
 - W-series生成調整を再開しない
 - broad identity Knowledgeを追加しない
@@ -215,11 +258,13 @@ Work/APIは元制約外。
 - direct 2x2 generationへ戻さない
 - generated-frame identity chainingをしない
 - full-board repairへ戻さない
-- Custom GPT Thinkingをprompt repairしない
+- Thinking成功1回だけを理由にproduction workerを切り替えない
+- Thinking failureをprompt repairで追い続けない
+- BranchのA/B出力数を保証仕様として扱わない
 
 ---
 
-## 9. 運用反省
+## 10. 運用反省
 
 正しい順序:
 1. GitHub CURRENT確認
