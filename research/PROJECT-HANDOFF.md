@@ -1,21 +1,23 @@
 # MYGPT調整プロジェクト 引継ぎ
 
-更新日: 2026-08-08 JST
+更新日: 2026-08-08 20:08 JST
 
 GitHub `main` を正本とし、チャット記憶だけで過去方式へ戻さない。
 
 ## 最初に読む
 
-1. `research/decisions/2026-08-08-identity-continuity-direction.md`
-2. `research/audits/2026-08-08-c0-final-candidate-composed-audit.md`
-3. `research/experiments/2026-08-08-n2-branch-thinking-followup-result.md`
-4. `research/experiments/2026-08-08-w4-endpoint-and-final-candidate-result.md`
-5. `research/experiments/2026-08-08-w3-ab-spatial-overconstraint-result.md`
-6. `research/experiments/2026-08-08-w2-hand-shape-position-result.md`
-7. `research/experiments/2026-08-08-w1-targeted-sleeve-invariant-result.md`
-8. `research/audits/2026-08-08-n1-raw-identity-continuity-audit.md`
-9. `research/experiments/2026-08-08-native-chat-worker-isolation-plan.md`
-10. `research/incidents/2026-08-08-frame-first-same-turn-sheet-collapse.md`
+1. `research/decisions/2026-08-08-production-v0-acceptance.md`
+2. `research/decisions/2026-08-08-asset-status-classification.md`
+3. `research/decisions/2026-08-08-identity-continuity-direction.md`
+4. `research/audits/2026-08-08-c0-final-candidate-composed-audit.md`
+5. `research/experiments/2026-08-08-n2-branch-thinking-followup-result.md`
+6. `research/experiments/2026-08-08-w4-endpoint-and-final-candidate-result.md`
+7. `research/experiments/2026-08-08-w3-ab-spatial-overconstraint-result.md`
+8. `research/experiments/2026-08-08-w2-hand-shape-position-result.md`
+9. `research/experiments/2026-08-08-w1-targeted-sleeve-invariant-result.md`
+10. `research/audits/2026-08-08-n1-raw-identity-continuity-audit.md`
+11. `research/experiments/2026-08-08-native-chat-worker-isolation-plan.md`
+12. `research/incidents/2026-08-08-frame-first-same-turn-sheet-collapse.md`
 
 ---
 
@@ -31,7 +33,36 @@ GitHub `main` を正本とし、チャット記憶だけで過去方式へ戻さ
 
 ---
 
-## 1. carrier / context isolation — 解決済み
+## 1. CURRENT production v0 scope
+
+production v0の対象範囲を固定した。
+
+対象:
+- 1人
+- canonical静止姿勢から開始
+- one-shot motion
+- 4 keyposes
+- F1 = canonicalそのもの
+- F2/F3/F4のみ生成
+- 正面基準の共通カメラ
+- chroma background
+- deterministic board / strip composition
+
+まだv0 production成立を主張しない対象:
+- loop
+- canonicalと異なる開始姿勢
+- 複数人物
+- 大きなcamera / viewpoint change
+- 複雑なprop / environment interaction
+- Thinking default
+- zero-click fan-out
+
+Acceptance正本:
+`research/decisions/2026-08-08-production-v0-acceptance.md`
+
+---
+
+## 2. carrier / context isolation — 解決済み
 
 通った構成:
 - minimal Custom GPT
@@ -46,17 +77,39 @@ N1:
 - 2x2 / labels / dividersなし
 - right-hand progression成立
 
-N0ではCustom GPT / Thinkingで画像生成tool availability FAILを実機再現した。
-ただしN2 follow-upではclean-seed Branch先をThinkingへ切り替えた後の画像生成が成功し、A/B 2候補が返った。
-したがって「Custom GPT / Thinkingは画像生成不可」という一般則は撤回する。
-N0はその時点のruntime/tool-availability incidentとして保存する。
+N2 Branch:
+- clean pre-motion seedからBranch PASS
+- same Custom GPT継承 PASS
+- canonical image reference effective PASS
+- Instant利用可能 PASS
+- global motion context混入なし
 
-現行production workerは、N1/W1-W4/C0の検証鎖があるInstantをデフォルトのまま維持する。
-Thinkingへ切り替える根拠にはまだしない。
+Branchはcanonical再添付を省けるoptional UX reduction。
+zero-click worker spawn / packet配布ではない。
 
 ---
 
-## 2. identity / continuity — W1-W4で必要箇所だけ改善済み
+## 3. Thinking follow-up
+
+N0ではCustom GPT / Thinkingで画像生成tool availability FAILを実機再現した。
+N2 follow-upではclean-seed Branch先をThinkingへ切り替えた後の画像生成が成功し、A/B 2候補が返った。
+
+したがって「Custom GPT / Thinkingは画像生成不可」という一般則は撤回。
+N0はその時点のruntime/tool-availability incidentとして保存する。
+
+外部既存事例でもCustom GPT image generationの成功・失敗にaccount/session/client variabilityがあった。
+
+ただし:
+- BranchがThinking成功の原因とは未証明
+- Thinkingの安定性は未証明
+- Instantより高品質とは未証明
+- A/B multiplicityは保証仕様ではない
+
+現行production defaultはN1/W1-W4/C0の検証鎖があるInstantを維持。
+
+---
+
+## 4. identity / continuity — W1-W4で必要箇所だけ改善済み
 
 N1 raw audit:
 - regenerated neutral startは不採用
@@ -67,6 +120,10 @@ W1:
 - active large sleeveの短い不変条件だけ追加
 - opening / gold trim / grey lining / motifを維持
 - PASS
+
+現行workerで維持する文:
+
+`動かす腕の大袖は、腕の屈曲に伴ってたわみ・向きが変わってよいが、基準画像の大袖としての基本構造を維持する。袖口の開口、金色の縁取り、灰色の内側、袖の模様を、別構造へ描き替えたり消したりしない。`
 
 W2:
 - local packetでneutral hand articulationを明示
@@ -84,7 +141,7 @@ W-series generation tuningは終了。
 
 ---
 
-## 3. CURRENT final candidate
+## 5. CURRENT final candidate / C0
 
 - F1 = canonical `kokyo_base_20260805.png`
 - F2 = W3-B `19_12_14 (2)`
@@ -99,13 +156,7 @@ W-series generation tuningは終了。
 
 side swapなし、endpoint reversionなし。
 
----
-
-## 4. C0 deterministic composed audit — PASS
-
-`research/audits/2026-08-08-c0-final-candidate-composed-audit.md`
-
-実行済み:
+C0実行済み:
 - chroma removal
 - common scale / baseline normalization
 - deterministic 2x2 board
@@ -128,32 +179,34 @@ Visual:
 - hand articulation PASS / minor redraw only
 - hat/hair / non-active sleeve / chest flower / waist medallion / major tassel-cord layout / lower garment / shoesにproduction-blocking failureなし
 
-F4はF2/F3よりraw redraw差がやや大きいが、visible identity/topologyは維持。generation tuningへ戻らない。
+これはCURRENT candidate PASS。
+まだproduction v0 generalized PASSではない。
 
 ---
 
-## 5. chroma removal — C0内で修正済み
+## 6. chroma removal / active infrastructure
 
-初回透明化でanti-aliased輪郭に薄い緑フリンジを確認。
-生成問題ではなくalpha-only chroma removalのRGB spillと診断。
+`audit/scripts/remove_chroma_key.py`へdominant-channel despill追加済み。
 
-`audit/scripts/remove_chroma_key.py`へdominant-channel despillを追加。
-
-内容:
 - detected keyに単一dominant channelがある場合だけ自動despill
 - near-key pixelだけ対象
 - dominant key channelをnon-key channels基準でcap
-- 従来のthreshold / feather alpha処理は維持
+- threshold / feather alpha処理は維持
 - `--no-despill`で無効化可能
 
-candidate 4枚をwhite / black compositeで再検証し、緑フリンジが明確に減少。
-
+white / black compositeで緑フリンジ減少を確認済み。
 patch commit:
 - `f33abec67811e85bfc3eddf2d283383315eea47f`
 
+CURRENT ACTIVE:
+- `audit/scripts/remove_chroma_key.py`
+- `audit/scripts/compose_keypose_board_from_frames.py`
+- `audit/scripts/build_motion_strip.py`
+- `audit/scripts/machine_audit_board.py`
+
 ---
 
-## 6. CURRENT production architecture
+## 7. CURRENT production architecture
 
 ```text
 natural motion request
@@ -164,8 +217,8 @@ F1 = canonical
         ↓
 planner emits F2/F3/F4 independent local static packets
         ↓
-F2/F3/F4 = isolated Custom GPT / Instant worker conversations
-             same canonical + one current pose only
+F2/F3/F4 = isolated Custom GPT / Instant workers
+             canonical + current one pose only
         ↓
 identity / continuity audit
         ↓
@@ -181,75 +234,85 @@ visual identity/motion audit + machine geometry/chroma audit
 4 keyposesを3 image generationsで作る。
 
 Worker設定:
-- Instantをvalidated defaultとする
+- Instant validated default
 - Image generation ON
 - Web OFF
 - Code/Data Analysis OFF
 - Actions NONE
 - Apps NONE
 - Knowledge NONE
-- canonical直接添付
+- canonical直接添付 / inherited clean Branch seed
 - full motion / other packets / progress% / F1-F4 / sequence / board / sheetを見せない
-- proven targeted active-sleeve invariantだけ追加
-
-worker isolationの起点は2方式とも成立:
-- explicit fresh conversation + canonical再添付: proven
-- clean pre-motion seedからBranch: N2 PASS。canonical再添付を省けるoptional UX reduction
-
-Branchはzero-click fan-outではない。
-worker自動spawnやpose packet自動配布を実現するものではない。
+- targeted active-sleeve invariantだけ追加
 
 visible handは各local packetへabsolute articulation / palm orientationを書く。
 
 ---
 
-## 7. N2 Branch / Thinking follow-up
+## 8. Asset status — P0で整理済み
 
-`research/experiments/2026-08-08-n2-branch-thinking-followup-result.md`
+正本:
+`research/decisions/2026-08-08-asset-status-classification.md`
 
-Branch:
-- same Custom GPT継承 PASS
-- clean seed継承 PASS
-- canonical image reference effective PASS
-- Instant利用可能 PASS
-- global motion context混入なし
+分類:
 
-Thinking follow-up:
-- Branch先をThinkingへ切り替えた後、画像生成成功
-- A/B 2候補が返った
-- 2候補ともstandalone 1024x1536 portrait
-- anatomical-right arm指定成立
-- canonical参照成立
-- 候補間でactive sleeve / redraw amountに差あり
+CURRENT ACTIVE:
+- current minimal Custom GPT / Instant worker architecture
+- active post-processing / audit scripts
 
-これはN0のThinking tool availability FAILに対する反例。
-ただしBranchがThinking成功の原因とは未証明。
-Thinkingの安定性やInstantより高品質であることも未証明。
+CURRENT CONTROL / EVIDENCE:
+- handoff / decision / experiment / audit / incident records
+- generation workerには見せない
 
-よってproduction defaultはInstantのまま。
-A/B multiplicityをproduction仕様として仮定しない。
+TEST / AUDIT FIXTURE:
+- layout guide generator
+- `audit/references/layout-guides/**`
+- past fixed audit artifacts
+- generation referenceには戻さない
 
----
+FROZEN LEGACY:
+- `project/**`
+- `legacy/**`
 
-## 8. 次フェーズ
+2026-08-08、root READMEをCURRENT architectureへ更新。
+`project/instructions/project-instructions.md`へFROZEN LEGACY bannerを追加し、旧4-job Project構成をCURRENTと誤認しないよう修正した。
 
-生成品質、C0、N2 Branchは通過済み。
-次に検討する対象はN3のorchestration friction / automation ceiling。
-
-残る手作業:
-- F2/F3/F4用の3 workerを個別に作る / Branchする
-- 3 local pose packetを個別に投入する
-- 3生成を個別に実行する
-
-zero-click multiple worker spawnはnormal Chatで未確認。
-Work/APIは元制約外。
-
-Thinkingのcontrolled比較は、Instantを置き換える具体的な理由が生じた場合だけ行う。
-現時点では必須ではない。
+Frozen資産を再活性化する場合は、過去棄却理由を無効化する新証拠を示し、単一変数実験として扱う。
 
 ---
 
-## 9. やらないこと
+## 9. 次フェーズ — P1 generalization gate
+
+N3 automationより先にproduction v0一般化を確認する。
+
+R0:
+- 既存right-hand-to-chest motion
+- C0 PASS済み
+
+R1:
+- mirrored unilateral motion
+- anatomical-left handをcanonical neutralから上げ、上腹部〜胸部へ到達
+- side selection / opposite sleeve / non-active sleeve / hand / endpointを確認
+
+R2:
+- torso-dominant shallow bow
+- 両足接地のまま上体を前傾して停止
+- armsは新gestureを作らず受動追従
+- torso / hat-hair / both sleeves / waist / lower garment / baselineを確認
+
+P1ルール:
+- worker global configurationを変えない
+- new broad Knowledgeを追加しない
+- first-pass failureは記録する
+- isolated retry成功をfirst-pass PASSへ書き換えない
+- local packet design failureとgeneration architecture failureを分離する
+
+R1/R2最終PASS後にproduction v0 generalized verdictを出す。
+その後N3 orchestration friction / automation ceilingへ進む。
+
+---
+
+## 10. やらないこと
 
 - W-series生成調整を再開しない
 - broad identity Knowledgeを追加しない
@@ -261,12 +324,13 @@ Thinkingのcontrolled比較は、Instantを置き換える具体的な理由が�
 - Thinking成功1回だけを理由にproduction workerを切り替えない
 - Thinking failureをprompt repairで追い続けない
 - BranchのA/B出力数を保証仕様として扱わない
+- `project/**` / `legacy/**`をCURRENT generation runtimeへそのまま戻さない
+- layout guideをgeneration referenceへ戻さない
 
 ---
 
-## 10. 運用反省
+## 11. 運用順序
 
-正しい順序:
 1. GitHub CURRENT確認
 2. 実画像 / ログ確認
 3. 問題局所化
