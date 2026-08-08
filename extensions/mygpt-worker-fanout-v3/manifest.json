@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MYGPT Worker Fanout v3",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Three-slot MYGPT Custom GPT preparer using AutoGPT ChatGPT primitives in MAIN world plus Translation Loop runtime guard.",
   "permissions": [
     "storage",
