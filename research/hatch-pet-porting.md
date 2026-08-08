@@ -1,119 +1,70 @@
 # hatch-pet設計からMYGPTへ移植する要素
 
-## 目的
+この文書は調査記録でありProject Sourceではない。
 
-OpenAI公式`hatch-pet` Skillで高いキャラクター同一性が得られる理由を、MYGPTのChatGPT Project構成へ移植可能な要素と、Projectからは再現できない要素に分ける。
+## hatch-petから有効な原則
 
-この文書は調査・設計記録であり、ChatGPT Projectへ直接投入するProject Sourceではない。
+- canonical imageへ毎job再アンカーする
+- identity referenceとlayout/post-processing責務を分離する
+- 1 visual jobの画像生成条件を小さくする
+- 長いQA規則をimage promptへ詰め込まない
+- chroma key + deterministic post-processingを使う
+- repairは失敗した最小単位だけcanonicalからやり直す
 
-## 参照
+## 過去判断
 
-- OpenAI Skills / hatch-pet
-  - https://github.com/openai/skills/blob/main/skills/.curated/hatch-pet/SKILL.md
-- hatch-pet run preparation
-  - https://github.com/openai/skills/blob/main/skills/.curated/hatch-pet/scripts/prepare_pet_run.py
-- OpenAI imagegen skill sample
-  - https://github.com/openai/codex/blob/main/codex-rs/skills/src/assets/samples/imagegen/SKILL.md
+以前、K1〜K4を個別生成した実験では、個別画像以外に2×2や横4枚が出る一方、identity保持自体は良好だった。この結果から一時的に`1 motion = 1 visual job = 1 direct 2x2 board`へ切り替えた。
 
-## hatch-petで重要な構造
+その後、Project構成を再点検すると、当時のProject Instructions、`03-keypose-board-spec.md`、`04-imagegen-workflow.md`、Project Sourceの`four-pose-portrait.png`がすべて2×2を強く条件付けしていたことが分かった。
 
-### canonical imageへの再アンカー
+空Projectの単独ポーズ隔離試験では1人物1枚が正常に生成されたため、「個別jobそのものが2×2化を必然的に起こす」という過去結論は採用しない。
 
-hatch-petはcanonical baseを固定し、各animation rowをそこから生成する。直前のrowを次のrowの正本として世代継承しない。
+## canonical解像度の実機結果
 
-### visual jobの隔離
+同じ単独ポーズ条件で、低解像度の縮小canonicalと1024×1536の高解像度canonicalを比較した。
 
-複数のrowを同じworkerへまとめず、1 visual job = 1 workerとして扱う。
+高解像度canonicalでは、帽子形状、帽子と髪の境界、頭身、袖、腰飾り、下衣、靴などのidentity fidelityが明確に改善した。
 
-### identity referenceとlayout referenceの分離
+したがって現行方式では、利用可能なら加工前に近い高解像度canonicalを直接添付して使う。
 
-キャラクター同一性を決める画像と、slot配置だけを伝えるlayout guideを別入力として扱う。
-
-### concise state prompt
-
-長いQA規則を画像生成promptへ詰め込まず、canonical reference、layout、今回の動作、主要禁止事項へ絞る。
-
-### chroma key + deterministic post-processing
-
-画像生成段階で最終alphaやatlasを完成させず、単色背景から後処理で背景除去、frame抽出、正規化、検査を行う。
-
-### 最小単位のrepair
-
-全成果物をやり直さず、失敗したvisual jobだけをcanonical imageから再生成する。
-
-## MYGPTの実機結果との対応
-
-ProjectでK1〜K4を4枚の独立画像として同一ユーザー依頼内に生成させる実験では、次を確認した。
-
-- K1〜K4個別画像以外に、2×2や横4枚の複数ポーズ画像が複数生成された。
-- 個別K1〜K4は共通ベースへの局所編集に近い結果になった。
-- K1とK4はピクセル単位で完全一致した。
-- K2/K3の差分は主に腕周辺へ限定された。
-- 個別生成はidentity保持には有利だったが、4つの独立visual jobとしての制御とmotion semanticsを安定して両立できなかった。
-
-したがって、Project-only構成では「K1、K2、K3、K4を4 visual jobs」とするのではなく、**1モーションボード全体を1 visual job**として扱う。
-
-## MYGPTへ移植する方針
-
-### 移植する
-
-- 新しいチャット + 元の基準画像直接添付をjob isolationとして使う
-- 1 motion = 1 visual job = 1 image generation
-- 直接添付された元画像をcanonical identity referenceに固定
-- 2×2 layout guideをidentityとは別のlayout-only sourceとして扱う
-- 画像生成内部promptを短く状態固有にする
-- 真の透明背景要求を外し、均一な単色chroma backgroundを使う
-- `audit/`でchroma除去、2×2分割、bbox、正規化、strip化を行う
-- 不合格時は同一応答内で自動再生成せず、失敗確認後に1 boardだけrepairする
-
-### Projectからは移植できない
-
-- hatch-petのlightweight worker/subagentそのもの
-- manifestからworkerごとに入力画像を強制的に分離する実行基盤
-- Project Instructionsから画像生成toolの内部入力配列を直接制御すること
-
-その代わり、MYGPTでは「新しいチャットに1つのmotion依頼だけ」を隔離境界とする。
-
-## 新しい責務分割
+## 現行移植方針
 
 ```text
-current chat
-  direct canonical character image
-  + one motion request
-  + optional Project layout guide
-        |
-        v
-ChatGPT Project
-  motion design K1-K4
-  concise imagegen instruction
-  exactly one 2x2 portrait board
-  flat chroma background
-        |
-        v
-audit/scripts/remove_chroma_key.py
-        |
-        v
-audit/scripts/build_motion_strip.py
-        |
-        v
-transparent normalized motion strip
+direct canonical image
+  |
+  +--> visual job F1: one person / one pose
+  +--> visual job F2: one person / one pose
+  +--> visual job F3: one person / one pose
+  +--> visual job F4: one person / one pose
+             |
+             v
+compose_keypose_board_from_frames.py
+             |
+             v
+canonical 2x2 board
+             |
+             +--> visual review
+             +--> machine audit
+             |
+             v
+failed frames only: one repair round
 ```
 
-## 次の実機テスト
+2×2 layout guideを画像生成モデルへ与えない。最終board geometryはPythonへ移す。
 
-依頼文は変更しない。
+## Projectで完全再現できないもの
 
-> このキャラクターが手を振るモーションを作ってください。
+- hatch-petのworker/subagent isolationそのもの
+- tool内部のimage input配列をProject Instructionsから強制制御すること
 
-最初の判定はidentity細部ではなく、visual job境界を見る。
+そのためMYGPTでは、新しいチャット + canonical直接添付 + 1モーション依頼を上位の隔離境界とし、その内部で4つの単独画像生成jobを順に実行する。
 
-1. 画像生成結果が1枚だけか
-2. その1枚に4ポーズだけあるか
-3. 2×2 portraitか
-4. 均一な単色chroma backgroundか
-5. 全身とsafe gapがあるか
-6. K1→K4が動作として読めるか
-7. 表情、影、文字、effectの退行がないか
-8. 最後に顔、体格、胸部、胸紋、腰飾りなどのidentity driftを見る
+## 次の検証
 
-同一応答で複数画像や別案が再び生成された場合は、文言を追加して塞ぐ前に、Project側で1 visual jobを保証できる範囲を再評価する。
+高解像度canonicalを使った実Projectで、次を確認する。
+
+1. 各画像生成jobが人物1体だけを返すか
+2. 4frameのidentityがdirect 2×2方式より改善するか
+3. motion continuityが許容範囲か
+4. Python合成boardでlayout/chromaが安定するか
+5. failed-frame repairが他frameを再設計せず改善できるか
