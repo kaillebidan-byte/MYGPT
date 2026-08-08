@@ -1,144 +1,152 @@
 # N3 — ChatGPT Plus orchestration friction / automation ceiling
 
 Date: 2026-08-08 JST
-Status: CURRENT — OFFICIAL NO-CODE FAN-OUT NOT FOUND
+Status: OFFICIAL BUILT-IN CEILING CONFIRMED / COMMUNITY BROWSER-AUTOMATION PATH REOPENED
 
-## Constraint
+## Correction
 
-Production dependency must remain within ordinary ChatGPT / Project / Custom GPT behavior available to the user's ChatGPT Plus environment.
+Earlier N3 wording overreached by treating the lack of an official built-in fan-out feature as the ceiling for every solution compatible with ChatGPT Plus.
 
-Do not require:
-- ChatGPT Work
-- Codex weekly agentic allowance
-- separate OpenAI API billing
+That conclusion is withdrawn.
 
-Validated generation architecture still requires three isolated F2/F3/F4 workers.
+Correct distinction:
 
-## Question
+1. **Official in-product / no-extension path**
+   - no documented bulk branch / multi-worker fan-out was found
+   - manual Branch x3 remains the minimum proven built-in workflow
 
-Can ordinary ChatGPT / Project / Custom GPT features automatically:
-1. create three isolated Custom GPT conversations / branches from one clean seed, and
-2. distribute a different local static pose packet to each,
-without exposing workers to the full motion or other packets?
+2. **Community browser-extension / local browser-automation path**
+   - not ruled out
+   - Chinese-language GPTs tooling already provides precedent for driving multiple GPTs conversations from a logged-in ChatGPT Plus web session without requiring a separate OpenAI API key
+   - this path must be evaluated before declaring an orchestration ceiling under the user's actual constraints
+
+The user's constraints prohibit separate OpenAI API billing / Work-Codex production dependency. They do **not** by themselves prohibit a local browser extension, userscript, or Playwright-style UI automation using the user's existing ChatGPT Plus session.
 
 ## Official product findings
-
-Checked current official OpenAI Help Center / release documentation on 2026-08-08.
 
 ### Branch conversations
 
 OpenAI documents `Branch in new chat` as a user action from a message menu.
-A branch creates a separate conversation from that point.
 No official bulk / multi-branch / fan-out control was found.
 
-Source:
-- ChatGPT Release Notes — Branch conversations on web
-- https://help.openai.com/en/articles/6825453-chatgpt-release-notes
+### @-mention a GPT
 
-Implication for MYGPT:
-- clean-seed Branch remains valid
-- three branches still require three user branch actions
+A GPT can be brought into a regular web conversation with `@`, but the current conversation context is retained.
+This conflicts with the validated worker-isolation requirement if invoked from the planner/full-motion chat.
 
-### @-mention a GPT in an existing regular chat
+### Projects / Tasks / Actions
 
-OpenAI documents that on web a user can type `@` to bring a GPT into a regular conversation.
-The conversation keeps its current context.
+- Project branching does not document automatic multi-chat fan-out.
+- Scheduled Tasks do not provide the current isolated Custom-GPT image-worker fan-out.
+- GPT Actions connect a GPT to external APIs; they are not an official UI-chat spawning mechanism.
 
-Source:
-- GPTs in ChatGPT
-- https://help.openai.com/en/articles/8554407
-
-Implication for MYGPT:
-- this does not create an isolated fresh worker
-- using `@GPT` after the planner/full-motion context would preserve precisely the context that CURRENT isolation rules forbid
-- therefore @-mention is not a replacement for clean separate branches
-
-### Projects
-
-OpenAI documents Projects as shared/contextual workspaces with files, instructions, memory, chats, and manual branching.
-Projects can branch chats, but the documentation does not describe automatic multi-chat fan-out.
-OpenAI also states that chats created with a GPT cannot be moved into a Project; a custom GPT can be used for messages in an existing Project chat, while using it as the first message starts the GPT conversation outside the Project.
-
-Source:
-- Projects in ChatGPT
-- https://help.openai.com/en/articles/10169521-projects-in-chatgpt
-
-Implication for MYGPT:
-- Project does not eliminate the manual creation of three isolated worker threads
-- moving the current Custom GPT worker architecture into Project is not an orchestration shortcut
-- Project memory/source context would also need to re-pass the already solved isolation / 2x2 conditioning tests, so it should not be reintroduced without a separate reason
-
-### Scheduled Tasks
-
-OpenAI currently lists GPTs as unsupported with Tasks.
-Official documentation also notes that project tasks cannot access project files.
-
-Source:
-- Tasks in ChatGPT
-- https://help.openai.com/en/articles/10291617-tasks-inchatgpt
-
-Implication for MYGPT:
-- Tasks cannot schedule or invoke the current Custom GPT worker
-- Tasks cannot carry the canonical image-file dependency for this pipeline
-- not a production fan-out mechanism
-
-### GPT Actions
-
-GPT Actions connect a GPT to external APIs through an OpenAPI schema.
-They do not document an API for spawning separate ChatGPT Custom GPT conversations in the ChatGPT UI.
-Using an external OpenAI API orchestrator would move the architecture outside the current no-separate-API-billing constraint.
-
-Source:
-- Configuring actions in GPTs
-- https://help.openai.com/en/articles/9442513
-
-## N3 verdict
-
-Within the current constraints, no official ChatGPT no-code feature was found that performs zero-click or one-click fan-out of three isolated Custom GPT workers with three different dynamic pose packets.
-
-The minimum validated in-product workflow remains:
+Therefore the **official built-in** verdict remains:
 
 ```text
-planner produces F2/F3/F4 copy-ready local packets
+planner outputs 3 packets
         ↓
-clean Custom GPT seed + canonical once
+clean seed + canonical
         ↓
 manual Branch x3
         ↓
-manual send one packet per branch
+manual packet send x3
+```
+
+## Chinese-language / community precedent — OpenGPTs
+
+A Chinese open-source project, `hzeyuan/OpenGPTS`, is directly relevant and was not considered in the earlier N3 closure.
+
+Project description / README states that its browser plugin supports:
+- web-based ChatGPT calling from an already logged-in ChatGPT session
+- Multi-GPTs Calls: one input, multiple model/GPT calls simultaneously
+- Multi-GPTs Chat
+- multiple windows in one interface
+- batch conversation / GPT management
+
+The project explicitly frames each GPT as an Agent and browser plugins as a way to automate web operations.
+
+Important limitations for MYGPT:
+- current public project is old; latest visible repository activity is from 2024
+- README marks multimodal input as not implemented
+- RPA / Agent Workflow is also marked not available
+- therefore OpenGPTs itself is **not** accepted as the production solution
+
+However, it is strong prior-art evidence that:
+- an existing ChatGPT Plus login can be used by a browser extension to drive arbitrary GPT conversations
+- multiple GPT conversations can be initiated/managed outside the stock ChatGPT interaction flow
+- a separate OpenAI API key is not inherently required for this category of solution
+
+This invalidates the earlier broad claim that the user's no-API constraint closes browser-side orchestration.
+
+## Reopened candidate — N3-B1 local browser automation
+
+Goal:
+Automate only the repetitive UI operations while preserving the already validated isolation architecture.
+
+Target workflow:
+
+```text
+planner produces F2/F3/F4 copy-ready packets
+        ↓
+local browser automation
+        ├─ open isolated Custom GPT chat/tab 1
+        ├─ open isolated Custom GPT chat/tab 2
+        └─ open isolated Custom GPT chat/tab 3
+        ↓
+attach canonical to each isolated chat
+(or duplicate a proven clean seed if reliable)
+        ↓
+send one distinct local packet to each
         ↓
 three independent image generations
 ```
 
-Compared with fresh conversations, Branch still removes repeated canonical attachment and gives the three workers an identical clean starting context.
-It does not remove branch creation or packet delivery.
+Preferred implementation order:
 
-## Rejected shortcuts under CURRENT rules
+### B1-a — UI-level automation first
 
-Do not use:
-- `@GPT` from the planner/full-motion chat: preserves forbidden context
-- Project memory/source as a packet distribution bus: breaks worker isolation and reopens prior Project-conditioning risk
-- Scheduled Tasks: GPTs unsupported; image/file dependency unsuitable
-- Actions calling an OpenAI API orchestrator: violates current separate-API-billing constraint
-- one same-chat sequence containing all packets: violates isolation and reopens same-turn / multi-pose conditioning failures
+Use browser-extension / userscript / Playwright-style interaction with the visible ChatGPT UI.
 
-## Practical production status
+Why first:
+- does not require separate OpenAI API billing
+- can use the user's existing Plus login
+- keeps the same Custom GPT product surface already validated for image generation
+- can preserve isolation by creating separate tabs/chats
+- can automate canonical file upload through the normal UI
 
-Production v0 is therefore **manual-assisted**, not zero-click automated.
+Do not assume hidden/internal ChatGPT backend endpoints are stable production APIs.
 
-The remaining manual friction is known and bounded:
-- create/branch three worker chats
-- send three already-prepared local packets
-- collect three outputs
+### B1-b — internal-web-call techniques only as research evidence
 
-Generation-quality architecture does not need to change to solve this UX issue.
+Community projects may call ChatGPT web endpoints directly using logged-in browser state.
+Treat that only as evidence of feasibility until current behavior, account safety, file/image support, and stability are verified.
+Do not make it production architecture merely because old tooling once worked.
 
-## Future reconsideration trigger
+## Acceptance test for N3-B1
 
-Reopen N3 only if one of these changes:
-- OpenAI introduces documented multi-chat / multi-GPT fan-out
-- Branch gains bulk duplication / prompt-distribution controls
-- Tasks gains GPT + file/image support and preserves isolation
-- user explicitly relaxes the no-API / no-agentic-production constraint
+Do not alter generation prompts while testing automation.
 
-Until then, do not trade away the proven isolation boundary for fewer clicks.
+Use the already validated R0 or a neutral single-frame packet as the payload.
+
+Required PASS conditions:
+1. same Custom GPT is opened in 3 genuinely separate conversations/tabs
+2. canonical image is successfully attached / inherited in each
+3. Instant remains selected/usable
+4. each worker receives only its own one local packet
+5. no full-motion / other-packet cross-contamination
+6. 3 standalone image-generation jobs start independently
+7. automation does not silently reuse one conversation for multiple workers
+8. user can stop/recover from one failed tab without corrupting the others
+9. no separate OpenAI API billing is required
+
+Only after these pass should click-count reduction be measured.
+
+## Current N3 verdict
+
+**Official built-in fan-out: not found.**
+
+**Overall orchestration ceiling under the user's Plus/no-separate-API constraint: NOT CLOSED.**
+
+N3 is reopened specifically for local browser-side automation / extension techniques.
+
+Do not trade away the proven worker isolation boundary. The automation target is UI friction, not generation architecture.
