@@ -8,8 +8,47 @@
     INSERT_PACKET: "MYGPT_GATE1_INSERT_PACKET"
   });
 
+  const INPUT_SELECTORS = Object.freeze([
+    "#prompt-textarea",
+    'textarea[data-id="prompt-textarea"]',
+    'textarea[data-testid="prompt-textarea"]',
+    'textarea[name="prompt-textarea"]',
+    'textarea[placeholder*="Send a message"]',
+    'textarea[placeholder*="Message"]',
+    ".ProseMirror",
+    '[contenteditable="true"][role="textbox"]',
+    '[contenteditable="true"][data-virtualkeyboard="true"]'
+  ]);
+
   let lastReportedHref = null;
   let reportScheduled = false;
+
+  function isVisible(node) {
+    if (!(node instanceof HTMLElement)) return false;
+    const style = getComputedStyle(node);
+    if (
+      style.display === "none" ||
+      style.visibility === "hidden" ||
+      Number(style.opacity) === 0
+    ) {
+      return false;
+    }
+    const rect = node.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }
+
+  const promptRunner = globalThis.MYGPTPromptStackerInsert?.createRunner({
+    document,
+    window,
+    adapter: {
+      editor: INPUT_SELECTORS
+    },
+    acceptNode: isVisible
+  });
+
+  if (!promptRunner) {
+    throw new Error("Translation Loop insert-only runner unavailable");
+  }
 
   function buildReport() {
     return {
@@ -48,10 +87,10 @@
     });
   }
 
-  function insertGate1Packet(message) {
+  async function insertGate1Packet(message) {
     const identity = MYGPTWorkerRoute.normalizeCustomGptIdentity(location.href);
     if (!identity.ok) {
-      return { ok: false, reason: identity.reason, identity };
+      return { ok: false, reason: identity.reason, identity, submitted: false };
     }
 
     if (
@@ -62,27 +101,43 @@
         ok: false,
         reason: "WORKER_IDENTITY_MISMATCH",
         identity,
-        expectedWorkerKey: message.expectedWorkerKey || null
+        expectedWorkerKey: message.expectedWorkerKey || null,
+        submitted: false
       };
     }
 
     if (typeof message.runToken !== "string" || !message.runToken) {
-      return { ok: false, reason: "RUN_TOKEN_MISSING", identity };
+      return { ok: false, reason: "RUN_TOKEN_MISSING", identity, submitted: false };
     }
 
-    const composer = MYGPTComposer.findComposer(document);
-    if (!composer) {
-      return { ok: false, reason: "COMPOSER_NOT_FOUND", identity };
+    promptRunner.start();
+    try {
+      const result = await promptRunner.insertOnly(message.packet, {
+        editorTimeout: 10000,
+        editorInterval: 150,
+        reflectTimeout: 3000,
+        reflectInterval: 100
+      });
+      return {
+        ...result,
+        identity,
+        runToken: message.runToken,
+        submitted: false,
+        observedAt: Date.now()
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        reason: "PACKET_INSERT_EXCEPTION",
+        detail: error instanceof Error ? error.message : String(error),
+        identity,
+        runToken: message.runToken,
+        submitted: false,
+        observedAt: Date.now()
+      };
+    } finally {
+      promptRunner.stop();
     }
-
-    const result = MYGPTComposer.insertPacket(composer, message.packet);
-    return {
-      ...result,
-      identity,
-      runToken: message.runToken,
-      submitted: false,
-      observedAt: Date.now()
-    };
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -102,17 +157,15 @@
     }
 
     if (message.type === MSG.INSERT_PACKET) {
-      try {
-        sendResponse(insertGate1Packet(message));
-      } catch (error) {
+      insertGate1Packet(message).then(sendResponse).catch((error) => {
         sendResponse({
           ok: false,
           reason: "PACKET_INSERT_EXCEPTION",
           detail: error instanceof Error ? error.message : String(error),
           submitted: false
         });
-      }
-      return false;
+      });
+      return true;
     }
 
     return false;
