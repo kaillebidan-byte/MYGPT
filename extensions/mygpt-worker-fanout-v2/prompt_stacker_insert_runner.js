@@ -22,6 +22,7 @@
 
   function normalizeText(value) {
     return String(value || "")
+      .replace(/\r\n?/g, "\n")
       .replace(/\u00a0/g, " ")
       .replace(/[ \t]+\n/g, "\n")
       .replace(/\n{3,}/g, "\n\n")
@@ -170,6 +171,35 @@
       return true;
     }
 
+    async function waitForStableEditor(options = {}) {
+      const timeout = Number.isFinite(options.timeout) ? options.timeout : 10000;
+      const interval = Number.isFinite(options.interval) ? options.interval : 100;
+      const stableMs = Number.isFinite(options.stableMs) ? options.stableMs : 500;
+      const generation = options.generation ?? controller.generation;
+      let lastEditor = null;
+      let sameSince = 0;
+
+      return waitFor(() => {
+        const editor = getEditor();
+        if (!editor) {
+          lastEditor = null;
+          sameSince = 0;
+          return null;
+        }
+        if (editor !== lastEditor) {
+          lastEditor = editor;
+          sameSince = Date.now();
+          return null;
+        }
+        return Date.now() - sameSince >= stableMs ? editor : null;
+      }, {
+        timeout,
+        interval,
+        controller,
+        generation
+      });
+    }
+
     async function insertOnly(prompt, insertOptions = {}) {
       const runGeneration = controller.generation;
       if (!controller.canRun(runGeneration)) {
@@ -182,10 +212,10 @@
         return { ok: false, reason: "PACKET_EMPTY", submitted: false };
       }
 
-      const editor = await waitFor(getEditor, {
+      const editor = await waitForStableEditor({
         timeout: insertOptions.editorTimeout || 10000,
-        interval: insertOptions.editorInterval || 150,
-        controller,
+        interval: insertOptions.editorInterval || 100,
+        stableMs: insertOptions.editorStableMs || 500,
         generation: runGeneration
       });
       if (!editor) {
@@ -204,14 +234,29 @@
         return { ok: false, reason: "COMPOSER_SET_FAILED", submitted: false };
       }
 
-      const reflected = await waitFor(() => editorText(editor) === normalizedPrompt, {
-        timeout: insertOptions.reflectTimeout || 3000,
+      let observedEditor = editor;
+      let observedText = editorText(editor);
+      const reflected = await waitFor(() => {
+        const current = getEditor();
+        if (!current) return null;
+        observedEditor = current;
+        observedText = editorText(current);
+        return observedText === normalizedPrompt ? current : null;
+      }, {
+        timeout: insertOptions.reflectTimeout || 4000,
         interval: insertOptions.reflectInterval || 100,
         controller,
         generation: runGeneration
       });
       if (!reflected) {
-        return { ok: false, reason: "COMPOSER_INSERT_VERIFY_FAILED", submitted: false };
+        return {
+          ok: false,
+          reason: "COMPOSER_INSERT_VERIFY_FAILED",
+          submitted: false,
+          expectedChars: normalizedPrompt.length,
+          observedChars: observedText.length,
+          editorRemounted: observedEditor !== editor
+        };
       }
 
       if (!controller.canRun(runGeneration)) {
@@ -222,11 +267,12 @@
         ok: true,
         submitted: false,
         exactMatch: true,
-        composerKind: editor.tagName === "TEXTAREA" || editor.tagName === "INPUT"
+        composerKind: reflected.tagName === "TEXTAREA" || reflected.tagName === "INPUT"
           ? "text-control"
           : "contenteditable",
         method: "translation-loop-prompt-stacker-insert-only",
-        observedChars: normalizedPrompt.length
+        observedChars: normalizedPrompt.length,
+        editorRemounted: reflected !== editor
       };
     }
 
@@ -240,6 +286,7 @@
       getEditor,
       editorText,
       setPromptText,
+      waitForStableEditor,
       insertOnly
     };
   }
