@@ -30,9 +30,10 @@ class FakeTextarea {
   closest() { return null; }
 }
 
-function fakeDocument(editor) {
+function fakeDocument(editorRef) {
   return {
     querySelectorAll(selector) {
+      const editor = typeof editorRef === "function" ? editorRef() : editorRef;
       if (
         selector.includes("prompt-textarea") ||
         selector.includes("contenteditable") ||
@@ -49,6 +50,7 @@ function fakeDocument(editor) {
 
 (async () => {
   assert.equal(normalizeText(" a\u00a0b \n\n\n c "), "a b\n\n c");
+  assert.equal(normalizeText("a\r\nb\rc"), "a\nb\nc");
 
   const controller = createRunController();
   assert.equal(controller.state, "idle");
@@ -88,6 +90,7 @@ function fakeDocument(editor) {
   const inserted = await runner.insertOnly("Gate 1 packet", {
     editorTimeout: 500,
     editorInterval: 5,
+    editorStableMs: 5,
     reflectTimeout: 500,
     reflectInterval: 5
   });
@@ -107,20 +110,16 @@ function fakeDocument(editor) {
   draftRunner.start();
   const draftResult = await draftRunner.insertOnly("must not overwrite", {
     editorTimeout: 100,
-    editorInterval: 5
+    editorInterval: 5,
+    editorStableMs: 5
   });
   assert.equal(draftResult.ok, false);
   assert.equal(draftResult.reason, "COMPOSER_NOT_EMPTY");
   assert.equal(draftEditor.value, "existing draft");
 
   let delayedEditor = null;
-  const delayedDocument = {
-    querySelectorAll() { return delayedEditor ? [delayedEditor] : []; },
-    createRange() { return null; },
-    execCommand() { return false; }
-  };
   const delayedRunner = createRunner({
-    document: delayedDocument,
+    document: fakeDocument(() => delayedEditor),
     window: windowRef,
     adapter: { editor: ["#prompt-textarea"] }
   });
@@ -129,11 +128,28 @@ function fakeDocument(editor) {
   const delayedResult = await delayedRunner.insertOnly("delayed", {
     editorTimeout: 500,
     editorInterval: 5,
+    editorStableMs: 5,
     reflectTimeout: 500,
     reflectInterval: 5
   });
   assert.equal(delayedResult.ok, true);
   assert.equal(delayedEditor.value, "delayed");
+
+  let remountEditor = new FakeTextarea();
+  const remountRunner = createRunner({
+    document: fakeDocument(() => remountEditor),
+    window: windowRef,
+    adapter: { editor: ["#prompt-textarea"] }
+  });
+  remountRunner.start();
+  setTimeout(() => { remountEditor = new FakeTextarea(); }, 10);
+  const stableEditor = await remountRunner.waitForStableEditor({
+    timeout: 300,
+    interval: 5,
+    stableMs: 20
+  });
+  assert.equal(stableEditor, remountEditor, "runner must settle on the remounted editor");
+  remountRunner.stop();
 
   const raceRunner = createRunner({
     document: fakeDocument(null),
@@ -143,7 +159,8 @@ function fakeDocument(editor) {
   raceRunner.start();
   const staleInsert = raceRunner.insertOnly("old packet", {
     editorTimeout: 100,
-    editorInterval: 5
+    editorInterval: 5,
+    editorStableMs: 5
   });
   setTimeout(() => {
     raceRunner.stop();
