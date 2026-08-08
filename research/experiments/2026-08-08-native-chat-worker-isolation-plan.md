@@ -1,7 +1,7 @@
-# Next experiment plan — native Chat worker isolation on Plus
+# Native Chat worker isolation on Plus
 
 Date: 2026-08-08
-Status: PLANNED — revised after confirming Custom-GPT Thinking image-generation issue
+Status: N0/N1 COMPLETED — context boundary proven; N2/N3 DEFERRED until identity/continuity quality passes
 Constraint: no ChatGPT Work / no Codex agentic allowance / no OpenAI API billing
 
 Basis:
@@ -10,241 +10,193 @@ Basis:
 - M2e temporal roles restored but 2x2 sheet regression
 - `research/chatgpt-project-practices/native-chat-context-isolation.md`
 - `research/chatgpt-project-practices/custom-gpt-thinking-imagegen-known-issue.md`
+- `research/experiments/2026-08-08-n0-custom-gpt-thinking-instant-result.md`
+- `research/experiments/2026-08-08-n1-fresh-custom-gpt-instant-four-frame-result.md`
+- `research/decisions/2026-08-08-identity-continuity-direction.md`
 
-## Decision
+## Original question
 
-Do not continue prompt-only M2 variants inside one Project conversation.
-Do not use Work or API for the next proof.
+Can the missing `今はこの1姿勢だけ考えろ` boundary be created inside ChatGPT Plus without Work/API by using fresh Custom-GPT conversations as isolated image-generation workers?
 
-A fresh Custom-GPT conversation remains a candidate native context boundary, but it now has TWO independent gates:
+## Minimal worker configuration used
 
-1. Can Custom GPT Thinking actually return generated images on this account/session?
-2. If only Instant is reliable, is Instant image quality high enough for MYGPT?
-
-Do not collapse these questions into one PASS/FAIL.
-
-The old Custom-GPT production architecture remains rejected. This test revives only an image-only stateless worker with no Actions/Knowledge/GitHub/file-transfer orchestration.
-
----
-
-## N0 — model/runtime matrix before worker architecture
-
-### Goal
-
-Separate:
-- model-mode image quality
-- Custom-GPT runtime/tool-routing defects
-- single-frame worker viability
-
-### Minimal worker GPT configuration
-
-Temporary name: `MYGPT Single Frame Worker Test`
+Temporary worker concept:
+`MYGPT Single Frame Worker Test`
 
 Capabilities:
 - Image generation: ON
-- Web/search: OFF if configurable
-- Code/Data Analysis: OFF if configurable
+- Web/search: OFF
+- Code/Data Analysis: OFF
 - Actions: NONE
 - Apps: NONE
 - Knowledge files: NONE
 
-Worker Instructions:
+Behavioral contract:
+- direct-attached image is the canonical
+- only the current single static pose is handled
+- do not plan other time states or the full motion
+- one person / one pose / full body / front-facing / portrait
+- one image generation then stop
 
-```text
-チャットに直接添付された人物画像を、その会話における人物の基準画像として扱う。
-
-ユーザーから指定された現在の1つの静止姿勢だけを画像として作る。
-他の時点や動作全体を計画しない。
-
-基準画像の人物の外見、体格、帽子、髪、表情、胸紋、袖、腰飾り、房・紐、下衣、靴をできるだけ維持する。
-
-人物は1体、全身、正面基準、portraitとする。
-1回の依頼につき画像を1枚だけ作り、生成後は停止する。
-```
-
-Do not include motion / four-state / progress / board / sheet / compose / audit / repair vocabulary.
-
-### Fixed test input
-
-Every condition uses a FRESH conversation and directly attaches the same:
-- `kokyo_base_20260805.png`
-
-Exact static request:
-
-```text
-この人物を、正面を向いて直立し、キャラクター自身の右肘を軽く曲げ、右手を上腹部・みぞおち付近まで上げた全身姿勢で1枚作ってください。
-左腕、両脚、体幹、頭、表情は基準画像を維持してください。
-```
-
-### Four conditions
-
-Run separately and save every output immediately:
-
-A. Normal Chat / Thinking
-B. Normal Chat / Instant
-C. Custom GPT / Thinking
-D. Custom GPT / Instant
-
-No `@GPT` invocation. Open the Custom GPT directly as a new conversation for C/D.
-
-### Gate 1 — tool availability
-
-For each condition record:
-- native image generation invoked or not
-- visible image returned or not
-- internal `/mnt/data/...` path only
-- false claim that image generation is unavailable
-- timeout/failure
-
-Important interpretation:
-A failure in C matching the known Thinking/reasoning Custom-GPT issue is a PLATFORM/RUNTIME FAIL, not evidence that the stateless-worker context idea is wrong.
-
-### Gate 2 — carrier
-
-For successful generations:
-- exactly one visible image
-- one person / one pose
-- portrait
-- no multi-panel / labels / dividers
-- anatomical right arm active
-
-### Gate 3 — pose accuracy
-
-Required:
-- right hand is actually around upper abdomen / solar plexus, not chest endpoint or waist-low
-- left arm, head, torso, legs remain close to canonical
-- no active-limb side swap
-
-### Gate 4 — identity / topology quality
-
-Compare all successful A/B/C/D outputs against the canonical using the same checklist:
-- proportions
-- silhouette
-- hat/hair boundary and hair emergence
-- chest flower emblem
-- large sleeve silhouette/topology
-- waist circular ornament
-- tassel/cord/fastener count and attachment
-- lower garment
-- shoes
-- overlap/occlusion order
-
-Do not decide quality from overall resemblance alone.
-
-### N0 interpretation matrix
-
-- C fails, D passes carrier + quality:
-  Thinking path is blocked by known Custom-GPT platform issue, but an Instant-only worker remains viable.
-
-- C fails, D generates but quality is materially worse than B:
-  Custom-GPT runtime/configuration adds a quality problem; do not proceed to N1.
-
-- B and D are both materially worse than A:
-  Instant-mode preparation/reasoning is the likely limiting factor; Custom GPT worker is not practical for MYGPT even if it generates successfully.
-
-- B and D meet the MYGPT quality threshold:
-  Thinking is not required for the isolated single-frame worker. Proceed to N1 using Instant.
-
-- C works and quality is good:
-  record the platform issue as non-universal/intermittent for this account, but still test D because production reliability matters more than a single Thinking success.
-
-### Repetition
-
-Do not do large batches initially.
-First run one output per A/B/C/D.
-If B vs D or A vs B is ambiguous, repeat only the ambiguous pair with one fresh run each.
+Do not include motion / four-state / progress / board / sheet / compose / audit / repair vocabulary in worker-facing context.
 
 ---
 
-## N1 — planner / fresh-worker manual boundary proof
+## N0 result — model/runtime gate
 
-Run only if at least one Custom-GPT mode passes N0 quality; prefer the reliable mode. If Thinking is affected by the known issue and Instant passes quality, use Instant.
+### Custom GPT / Thinking
 
-### Goal
+Result: FAIL for tool availability.
 
-Prove the desired architecture inside ChatGPT UI:
-planner knows the full motion; each worker conversation knows one frame only.
+Observed:
+`画像生成ツールがこの環境で利用できないため、画像ファイルを返せません。`
 
-### Planner
+Interpretation:
+- consistent with the separately recorded Custom-GPT Thinking image-generation issue
+- not a failure of the isolated-worker context design
+- do not keep prompt-repairing Thinking for this path
 
-Use a separate planner chat/Project.
-Planner gets the natural motion request and produces four local static-pose packets: start / early / late / endpoint.
-Planner does not generate images.
+### Custom GPT / Instant
 
-### Worker execution
+Result: PASS for N0.
 
-For EACH packet:
-1. open the minimal worker GPT as a NEW conversation;
-2. explicitly select the N0-approved model mode;
-3. directly attach `kokyo_base_20260805.png`;
-4. paste ONLY that one local packet;
-5. generate one image;
-6. save it immediately;
-7. start another fresh worker conversation for the next packet.
+Observed:
+- visible generated image returned
+- one person / one pose / portrait
+- no multi-panel
+- anatomical right arm active
+- requested upper-abdomen / solar-plexus pose was followed
+- major canonical identity features stayed close enough to justify N1
 
-Do not use `@` mention.
-Do not put worker conversations inside the motion-planner Project.
-Do not show a worker the other packets.
+Important:
+- this was a redraw, not unchanged-pixel preservation
+- one frame cannot establish temporal continuity
 
-### N1 pass
+Decision:
+Use Instant for the worker path.
 
-- 4 fresh worker conversations
-- 4 standalone portraits
-- no 2x2 / multi-panel / labels / dividers
-- start frame arms down
-- right hand position progresses monotonically through early/late to endpoint
-- identity/topology does not fall below the quality threshold established at N0
+---
 
-PASS means the missing context boundary can be achieved inside Plus/ChatGPT UI without Work/API; remaining problem is orchestration/UI automation.
+## N1 result — fresh worker boundary proof
+
+Execution:
+- same minimal Custom GPT
+- Instant
+- four completely new conversations
+- same high-resolution canonical directly attached in every conversation
+- each worker received exactly one local static-pose packet
+- no worker saw the full motion, the other three poses, progress percentages, or F1-F4/sequence/sheet concepts
+
+Result: PASS for carrier/context isolation.
+
+Observed:
+- 4/4 standalone portraits
+- no 2x2 / labels / dividers
+- anatomical right hand progressed in the intended temporal direction
+
+Core conclusion:
+**A fresh Custom-GPT / Instant conversation can act as the missing native context boundary inside ChatGPT Plus.**
+
+This resolves the main sheet-carrier question enough to move on.
+
+---
+
+## N1 quality finding — why the project does not move directly to automation
+
+The regenerated neutral-start frame drifted more strongly from the canonical in body width/proportions and other whole-body geometry.
+
+The moving frames were more stable overall, but independent redraw still leaves continuity risk in:
+- active anatomical-right sleeve silhouette/opening/folds
+- hand shape
+- local arm/torso occlusion
+- fine accessory topology such as tassels/cords/fasteners
+
+Therefore the next problem is identity/temporal continuity, not chat spawning UX.
+
+Current candidate changes the four-frame plan to:
+- F1 = canonical itself, no generation
+- F2/F3/F4 = three fresh Custom-GPT / Instant workers
+
+See:
+`research/decisions/2026-08-08-identity-continuity-direction.md`
 
 ---
 
 ## N2 — Branch-from-clean-seed friction reduction
 
-Run only if N1 passes.
+Status: DEFERRED.
 
-Create a clean worker conversation containing only canonical/single-frame setup and no motion plan.
-Test `Branch in new chat` from that pre-motion point.
+Do not run N2 yet.
 
-Verify:
-- intended Custom GPT / model mode remains in effect
-- canonical remains usable
-- one local packet still gives one standalone portrait
+Reason:
+Proving Branch convenience before the candidate frames pass identity/continuity quality would optimize an architecture that may still need a different image-control mechanism.
 
-If one branch works, try four branches from the same clean seed.
-If branch attachment/model behavior is unreliable, abandon N2 and keep N1 fresh conversations.
+Run N2 only after C0/C1 passes.
+
+When resumed:
+- branch only from a clean pre-motion seed
+- no global motion plan in inherited context
+- verify Custom GPT configuration remains correct
+- verify Instant remains selected/usable
+- verify canonical attachment remains an effective reference
+- first test one branch, then four only if the first passes
+
+If branch inheritance is unreliable, keep explicit fresh conversations.
 
 ---
 
 ## N3 — automation ceiling assessment
 
-Only after N1 proves context isolation.
+Status: DEFERRED.
 
-Current official feature survey found no normal-Chat primitive that lets a parent chat programmatically spawn four independent Custom-GPT conversations and send one packet into each.
+Known so far:
+- manual fresh worker boundary works inside Plus
+- normal Chat has no confirmed documented primitive for a parent chat to programmatically spawn multiple independent Custom-GPT conversations and send separate packets into them
+- `@workerGPT` is rejected because current conversation context is retained
+- branching after planner output is rejected because the global plan would be inherited
 
-Classify resulting UX:
-A. manual fresh-worker boundary
-B. semi-manual clean-seed branches
-C. zero-click orchestration — not currently documented in normal Chat
+UX levels remain:
+A. manual fresh-worker boundary — proven
+B. clean-seed branch boundary — not yet tested
+C. zero-click orchestration — not documented in normal Chat
 
-Work/API remain outside the original constraint unless the user later changes it.
+Work/API remain outside the original constraint unless the user explicitly changes it.
+
+---
+
+## Immediate next stage outside N-series
+
+Do not generate new test images first.
+
+C0:
+- use F1 canonical + existing N1 moving frames
+- run deterministic chroma removal / normalization / board or strip composition
+- visually audit identity/continuity
+
+C1:
+- add machine-assisted continuity signals if useful
+- do not lengthen worker prompt
+
+Only if C0 fails:
+- C2 local edit diagnostic
+- then C3 canonical identity + one single-pose visual guide role-separated reference test
 
 ---
 
 ## Rejected shortcuts
 
-- `@workerGPT` from planner chat: rejected because current conversation context is retained.
-- Branch after planner output: rejected because global plan would be inherited.
-- Same Project for planner and worker: rejected for isolation proof.
-- Scheduled Tasks: poor fit for immediate canonical-image generation.
-- Temporary Chat: diagnostic fallback only, not primary worker architecture.
-- Interpreting Instant success as production success without identity/pose scoring: rejected.
-- Interpreting Custom-GPT Thinking failure as architecture failure when it matches the known platform bug: rejected.
-
----
+- `@workerGPT` from planner chat
+- branch after planner output
+- same Project for planner and worker isolation proof
+- scheduled Tasks for immediate canonical-image frame generation
+- interpreting Custom-GPT Thinking failure as architecture failure
+- interpreting Instant single-frame success as production continuity proof
+- direct 2x2 generation
+- four-pose visual guide as generation reference
+- generated-frame chaining as identity source
 
 ## Operational rule
 
 Save every generated image immediately.
-If FAIL is already clear, stop after the evidence required for diagnosis has been saved.
-Do not modify production MYGPT Instructions/Sources until N0/N1 outcome is known.
+If a fail condition is already clear, stopping is allowed after the evidence needed for diagnosis has been saved.
+Do not change production MYGPT Instructions/Sources until the current C0/C1 identity-continuity decision is evaluated.
