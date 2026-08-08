@@ -109,17 +109,20 @@ Keep:
 
 Do not add broad identity prose from the retry experiments.
 
-## N3 follow-up
+## N3 orchestration status — separate from this quality verdict
 
-N3 orchestration investigation is complete under the current Plus / ordinary ChatGPT / Project / Custom GPT constraints.
+The production-v0 generation-quality PASS does **not** imply that orchestration work is closed.
 
-Record:
+Current N3 record:
 - `research/experiments/2026-08-08-n3-orchestration-ceiling.md`
 
-Current conclusion:
-- no official zero-click / one-click fan-out of three isolated Custom GPT workers with three dynamic packets was found
-- production v0 is manual-assisted
-- clean-seed Branch reduces canonical reattachment but does not remove three branch actions or three packet sends
+Correct current distinction:
+- official ChatGPT built-in bulk fan-out of isolated Custom-GPT workers: not found
+- manual fresh chats / clean-seed Branch remain proven
+- browser-side automation using the existing logged-in ChatGPT Plus session is a reopened research path
+- current Chinese/community tooling demonstrates automatic fresh-chat creation, prompt queues, image upload/generation automation on ChatGPT, but Custom-GPT (`/g/...`) compatibility remains unverified
 
-Do not reopen generation-quality tuning merely to reduce UI clicks.
-Reopen orchestration only if official product capability changes or the user explicitly relaxes the no-API / no-agentic-production constraint.
+Therefore N3 is **OPEN** for browser-side / Custom-GPT compatibility testing under the existing no-separate-API-billing constraint.
+
+Do not reopen R0-R2 generation tuning merely to reduce UI clicks.
+Do not weaken the proven worker-isolation boundary for automation convenience.
