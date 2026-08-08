@@ -16,7 +16,7 @@ const MSG = Object.freeze({
 });
 
 const ISOLATED_FILES = ["route_adapter.js", "content.js"];
-const MAIN_FILES = ["page_observer.js", "chatgpt_adapter.js"];
+const MAIN_FILES = ["page_observer.js", "translation_loop_send_guard.js", "chatgpt_adapter.js"];
 
 function emptySlot(slotId) {
   return {
@@ -89,7 +89,7 @@ async function ensureMainRuntime(tabId) {
     const probe = await chrome.scripting.executeScript({
       target: { tabId },
       world: "MAIN",
-      func: () => Boolean(globalThis.MYGPTChatGPTAdapter)
+      func: () => Boolean(globalThis.MYGPTTranslationLoopSendGuard && globalThis.MYGPTChatGPTAdapter)
     });
     available = probe?.[0]?.result === true;
   } catch (_) {}
@@ -216,6 +216,19 @@ async function prepareInMainWorld(tabId, slotId, token, file, packet) {
         };
       }
 
+      const sendReady = await adapter.waitForSendReady(document, 10000);
+      if (!sendReady) {
+        return {
+          ok: false,
+          reason: "COMPOSER_SEND_NOT_READY",
+          attachment,
+          pasted,
+          runToken: args.runToken,
+          slotId: args.slotId,
+          submitted: false
+        };
+      }
+
       return {
         ok: true,
         slotId: args.slotId,
@@ -224,6 +237,8 @@ async function prepareInMainWorld(tabId, slotId, token, file, packet) {
         composerKind: pasted.composerKind,
         insertionMethod: pasted.method,
         pasteEvidence: pasted.evidence,
+        sendReadyEvidence: sendReady.evidence,
+        sendButton: sendReady,
         packetChars: pasted.observedChars,
         submitted: false,
         generationActive: generationActive(),
@@ -371,8 +386,9 @@ async function prepareStagedSlot(token, sourceIdentity, payload, staged) {
     result.runToken === token &&
     result.submitted === false &&
     result.executionWorld === "MAIN" &&
-    result.attachment?.evidence === "autogpt-upload-ready" &&
+    result.attachment?.evidence === "autogpt-upload+visible-attachment" &&
     result.insertionMethod === "autogpt-synthetic-paste" &&
+    result.sendReadyEvidence === "translation-loop-send-ready" &&
     MYGPTWorkerRoute.sameWorkerIdentity(sourceIdentity, postReport?.identity) &&
     result.generationActive !== true &&
     postReport?.generationActive !== true
@@ -446,9 +462,6 @@ async function startThree(message) {
   if (!start.committed || !start.value) return { ok: false, error: "RUN_START_REJECTED", state: start.runtime };
   const token = start.value;
 
-  // Open every worker tab before inserting any draft. ChatGPT can restore the latest
-  // unsent draft when a new /g/<worker> root is opened, so late-created tabs must not
-  // be created after F2 has already received its packet.
   const opened = [];
   for (const slotId of SLOT_IDS) {
     if (!(await guard.isCurrent(token))) break;
@@ -462,8 +475,6 @@ async function startThree(message) {
   }
 
   const results = [];
-  // Preparation remains sequential to reduce hidden-tab contention; all three tabs
-  // are already staged empty before this loop begins.
   for (const item of staged) {
     if (!(await guard.isCurrent(token))) break;
     results.push(await prepareStagedSlot(token, sourceIdentity, payload, item));
