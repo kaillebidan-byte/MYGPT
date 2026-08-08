@@ -21,5 +21,5 @@ assert.match(source, /clipboard\.setData\("text\/plain"/);
 assert.match(source, /querySelector\("circle"\)/);
 assert.match(source, /90000/);
 assert.match(source, /2000/);
-
-console.log("AutoGPT ChatGPT adapter contract: PASS");
+assert.match(source, /must execute in the page MAIN world/);
+console.log("AutoGPT MAIN-world ChatGPT adapter contract: PASS");
