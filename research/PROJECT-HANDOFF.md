@@ -1,22 +1,23 @@
 # MYGPT調整プロジェクト 引継ぎ
 
-更新日: 2026-08-08 20:55 JST
+更新日: 2026-08-08 21:00 JST
 
 GitHub `main` を正本とする。チャット記憶だけで過去方式へ戻さない。
 
 ## 最初に読む
 
 1. `research/decisions/2026-08-08-production-v0-generalized-verdict.md`
-2. `research/decisions/2026-08-08-production-v0-acceptance.md`
-3. `research/audits/2026-08-08-p1-r2-final-composed-audit.md`
-4. `research/audits/2026-08-08-p1-r1-final-composed-audit.md`
-5. `research/audits/2026-08-08-c0-final-candidate-composed-audit.md`
-6. `research/decisions/2026-08-08-asset-status-classification.md`
-7. `research/decisions/2026-08-08-identity-continuity-direction.md`
-8. `research/experiments/2026-08-08-n2-branch-thinking-followup-result.md`
-9. W1-W4 experiment records
-10. `research/experiments/2026-08-08-native-chat-worker-isolation-plan.md`
-11. `research/incidents/2026-08-08-frame-first-same-turn-sheet-collapse.md`
+2. `research/experiments/2026-08-08-n3-orchestration-ceiling.md`
+3. `research/decisions/2026-08-08-production-v0-acceptance.md`
+4. `research/audits/2026-08-08-p1-r2-final-composed-audit.md`
+5. `research/audits/2026-08-08-p1-r1-final-composed-audit.md`
+6. `research/audits/2026-08-08-c0-final-candidate-composed-audit.md`
+7. `research/decisions/2026-08-08-asset-status-classification.md`
+8. `research/decisions/2026-08-08-identity-continuity-direction.md`
+9. `research/experiments/2026-08-08-n2-branch-thinking-followup-result.md`
+10. W1-W4 experiment records
+11. `research/experiments/2026-08-08-native-chat-worker-isolation-plan.md`
+12. `research/incidents/2026-08-08-frame-first-same-turn-sheet-collapse.md`
 
 ---
 
@@ -167,15 +168,12 @@ W1-W4で必要箇所だけ改善済み。
 
 `動かす腕の大袖は、腕の屈曲に伴ってたわみ・向きが変わってよいが、基準画像の大袖としての基本構造を維持する。袖口の開口、金色の縁取り、灰色の内側、袖の模様を、別構造へ描き替えたり消したりしない。`
 
-W2:
-- visible hand articulation / palm orientationはlocal packetへabsoluteに書く
+Visible hand:
+- articulation / palm orientationはlocal packetへabsoluteに書く
 
-W3:
-- strong spatial exclusionはstateを押し下げる場合がある
+Strong spatial exclusion:
+- stateを押し下げる場合がある
 - broad/global ruleへ昇格しない
-
-W4:
-- endpoint / sleeve / carrier PASS
 
 W-series generation tuningは再開しない。
 
@@ -183,7 +181,7 @@ W-series generation tuningは再開しない。
 
 ## 6. R0 — anatomical-right hand raise PASS
 
-Final candidate:
+Final:
 - F1 = canonical `kokyo_base_20260805.png`
 - F2 = W3-B `19_12_14 (2)`
 - F3 = W2 `19_07_53`
@@ -201,13 +199,13 @@ C0:
 
 ## 7. R1 — mirrored anatomical-left hand raise FINAL PASS
 
-Final selected:
+Final:
 - F1 = canonical
 - F2 = A2 `20_29_13 (2)`
 - F3 = B retry-2 `20_39_04`
 - F4 = C `20_31_39`
 
-First-pass history:
+History:
 - B first-pass FAIL: chest flowerへ早く重なった
 - B retry-1 FAIL: fingertips still overlap
 - B retry-2 PASS after local positive landmark changed to lower-chest line
@@ -221,16 +219,12 @@ Final:
 - major identity PASS
 - post-processing / machine audit PASS
 
-Interpretation:
-small visual landmark近傍のfirst-pass spatial reliabilityは完全ではない。
+Small visual landmark近傍のfirst-pass spatial reliabilityは完全ではない。
 Failureはlocal stateへ局所化でき、global worker変更は不要だった。
 
 ---
 
 ## 8. R2 — torso-dominant shallow bow FINAL PASS
-
-Plan:
-`research/experiments/2026-08-08-p1-r2-torso-bow-plan.md`
 
 First-pass:
 - A PASS
@@ -242,7 +236,7 @@ Final C retry:
 - absolute torso-angle target + canonical open-eye / neutral expression指定
 - PASS
 
-Final selected:
+Final:
 - F1 = canonical
 - F2 = A `20_47_00`
 - F3 = B `20_48_07`
@@ -274,7 +268,50 @@ First-pass failureは履歴に保持。
 
 ---
 
-## 9. Chroma / active infrastructure
+## 9. N3 orchestration ceiling — CLOSED UNDER CURRENT CONSTRAINTS
+
+正本:
+`research/experiments/2026-08-08-n3-orchestration-ceiling.md`
+
+2026-08-08にOpenAI公式仕様を再確認。
+
+確認結果:
+- Branchはmanual `Branch in new chat` 操作
+- bulk / multi-branch fan-outの公式機能は確認できない
+- regular chatで`@GPT`を呼ぶとcurrent conversation contextを維持するため、planner/full-motion chatからの呼び出しはworker isolationと衝突
+- Projectsはchat branchingを提供するがautomatic multi-chat fan-outではない
+- GPT-created chatをProjectへmoveできない
+- Scheduled TasksはGPTsをサポートしない
+- GPT Actionsはexternal API接続であり、ChatGPT UI内のisolated Custom GPT chatsをspawnする公式機構ではない
+
+CURRENT制約内の最小運用:
+
+```text
+planner outputs 3 copy-ready local packets
+        ↓
+clean Custom GPT seed + canonical once
+        ↓
+manual Branch x3
+        ↓
+manual send one packet per branch
+        ↓
+3 independent generations
+```
+
+Production v0はmanual-assisted。
+Branchでcanonical再添付は省けるが、3 branch作成と3 packet投入は残る。
+
+N3を再開する条件:
+- official multi-chat / multi-GPT fan-out追加
+- bulk branch / prompt distribution追加
+- TasksがGPT + image/fileをサポート
+- ユーザーがno-API / no-agentic production制約を明示的に緩和
+
+それまではクリック削減のためにproven isolation boundaryを崩さない。
+
+---
+
+## 10. Chroma / active infrastructure
 
 CURRENT ACTIVE:
 - `audit/scripts/remove_chroma_key.py`
@@ -292,7 +329,7 @@ Patch:
 
 ---
 
-## 10. Asset status
+## 11. Asset status
 
 正本:
 `research/decisions/2026-08-08-asset-status-classification.md`
@@ -325,27 +362,22 @@ Frozen資産を再活性化する場合:
 
 ---
 
-## 11. NEXT — N3 orchestration friction / automation ceiling
+## 12. CURRENT stopping point
 
-Generation-quality generalizationはv0として終了。
-新しいproduction evidenceがacceptance contractを壊すまではR0-R2 tuningへ戻らない。
+Production v0のgeneration architecture、一般化gate、post-processing、Branch UX、現行制約下のorchestration ceilingまで確認済み。
 
-次に調査する:
-- 3 isolated worker / Branchを手動で作る操作を減らせるか
-- 3 local static pose packetを手動投入する操作を減らせるか
-- ChatGPT Plusの通常Chat / Project / Custom GPT機能差分で成立するか
+ここから先は自動的に範囲を広げない。
+次の作業はユーザーが求める方向で選ぶ:
+- production運用runbook / planner packet formatの固定
+- v0 scope拡張（loop / different start / prop等）
+- constraint relaxationを伴うautomation再設計
+- legacy / fixtureから特定資産をsingle-variableで再評価
 
-Production dependencyにしない:
-- ChatGPT Work
-- Codex系週間agentic allowance
-- OpenAI API別課金
-
-BranchはN2で成立済みだがzero-click fan-outではない。
-N3では公式機能と実機可能範囲を外部確認してから設計する。
+新しいproduction evidenceがacceptance contractを壊さない限り、R0-R2 generation tuningへ戻らない。
 
 ---
 
-## 12. やらないこと
+## 13. やらないこと
 
 - W-series tuning再開
 - R0/R1/R2をprettier variant目的で再生成
@@ -359,10 +391,11 @@ N3では公式機能と実機可能範囲を外部確認してから設計する
 - Thinking成功だけでdefault切替
 - output A/B数を保証仕様化
 - first-pass failureをretry成功で消す
+- official supportなしにzero-click fan-outがあると仮定する
 
 ---
 
-## 13. 運用順序
+## 14. 運用順序
 
 1. GitHub CURRENT確認
 2. 実画像 / ログ確認
