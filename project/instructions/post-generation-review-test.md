@@ -1,6 +1,6 @@
-# 一時検証モード: 生成後レビュー + 機械監査 + GitHub監査 + 1回修正
+# 一時検証モード: 生成後レビュー + 機械監査 + GitHub監査 + 1回修正 + 表示スタンプ
 
-このファイルは、主要モーションボード生成後に同一ターン内で実画像を視覚確認し、その生成画像をPython機械監査へ渡せるか検証した上で、GitHub監査規則を取得して1回だけrepair・再監査するための一時Project Instructionsである。
+このファイルは、主要モーションボード生成後に同一ターン内で実画像を視覚確認し、その生成画像をPython機械監査へ渡し、GitHub監査規則を取得して1回だけrepair・再監査し、初回と修正版を取り違えない表示専用スタンプ画像も作るための一時Project Instructionsである。
 
 この検証中は、画像生成物だけを返して応答を終了する規則よりこのファイルを優先する。
 
@@ -18,7 +18,7 @@
 - `end`: one-shotの具体的終了状態
 - `slot_state_plan`: top-left / top-right / bottom-left / bottom-rightの状態
 
-K1/K2/K3/K4という表示用ラベルを画像へ描かせない。
+K1/K2/K3/K4という表示用ラベルをraw boardへ描かせない。
 
 viewer-spaceはcontinuity確認の補助とし、同一脚の最終判定では身体への接続関係も確認する。
 
@@ -36,11 +36,13 @@ portrait 2:3相当の2x2主要motion boardを1枚だけ生成する。
 
 A/B候補、別案、追加boardを同時生成しない。
 
+生成された未加工画像を`raw INITIAL_BOARD`として保持する。後段の監査・repairではこのraw画像だけを使う。
+
 生成終了後もassistant responseを終了しない。
 
 ## 3. 初回視覚レビュー
 
-生成された実画像そのものを見て7項目をすべて判定する。
+生成されたraw INITIAL_BOARDそのものを見て7項目をすべて判定する。
 
 - `identity`
 - `motion_semantics`
@@ -81,9 +83,9 @@ issues:
 
 生成画像を視覚確認できない場合は`REVIEW_UNAVAILABLE`を返して終了する。
 
-## 4. 生成画像の機械監査接続テスト
+## 4. 生成画像の機械監査
 
-視覚レビュー後、repairより前に、実際に生成された`INITIAL_BOARD`画像をコード実行環境へ渡して機械監査を試す。
+視覚レビュー後、repairより前に、実際に生成されたraw INITIAL_BOARDをコード実行環境へ渡して機械監査する。
 
 監査スクリプトはこのターンでGitHubの現在内容を取得する。
 
@@ -93,7 +95,8 @@ issues:
 
 - canonical identity referenceを監査してはいけない。
 - 生成前の画像や別チャットの画像を監査してはいけない。
-- `INITIAL_BOARD`として直前に生成された実画像ファイルそのものを入力にする。
+- 表示スタンプ付きコピーを監査してはいけない。
+- raw INITIAL_BOARDとして直前に生成された実画像ファイルそのものを入力にする。
 - 生成画像の実ファイル/path/bytesをコード実行環境へ渡せない場合、成功したことにしない。
 - スクリプトを読んだだけで実行済みと扱わない。
 - JSONを推測で作らない。
@@ -101,7 +104,7 @@ issues:
 可能なら次と同等の実行を行う。
 
 ```text
-python audit/scripts/machine_audit_board.py <actual-generated-board> --output <machine-audit-json>
+python audit/scripts/machine_audit_board.py <raw-initial-board> --output <machine-audit-json>
 ```
 
 実行に成功した場合は本文へ次を出す。
@@ -110,12 +113,14 @@ python audit/scripts/machine_audit_board.py <actual-generated-board> --output <m
 MACHINE_AUDIT
 status: RAN
 script: https://github.com/kaillebidan-byte/MYGPT/blob/main/audit/scripts/machine_audit_board.py
-input: <実際に監査した生成画像の識別可能な名前またはpath>
+input: <実際に監査したraw生成画像の識別可能な名前またはpath>
 width: <value>
 height: <value>
 aspect_pass: <true/false>
 key_hex: <value>
 border_key_match_ratio: <value>
+background_deviation_ratio: <value>
+shadow_like_background_ratio: <value>
 outer_edge_non_chroma_pixels: <value>
 vertical_center_gap_px: <value>
 horizontal_center_gap_px: <value>
@@ -154,10 +159,14 @@ status: EXECUTION_UNAVAILABLE
 - `center_vertical_contamination` → layout
 - `center_horizontal_contamination` → layout
 - `border_not_uniform` → chroma
+- `background_not_uniform` → chroma
+- `shadow_like_background` → chroma
 - `divider_like_vertical_white_band` → unintended_output
 - `divider_like_horizontal_white_band` → unintended_output
 
-機械監査がPASSでも、視覚的な接地影などを打ち消してはいけない。
+`background_not_uniform`または`shadow_like_background`がtrueなら、目視で見落とした背景濃淡・接地影の補助証拠としてchromaをFAILにする。
+
+逆にmachine flagがすべてfalseでも、視覚的な接地影などを打ち消してはいけない。
 
 本文へ次を出す。
 
@@ -175,9 +184,48 @@ issues:
 - 視覚または機械監査で確認したFAIL
 ```
 
-7項目すべてPASSなら追加処理せず終了する。
+## 6. 初回表示スタンプ
 
-## 6. FAIL後のGitHub監査資料取得
+`INITIAL_REVIEW`確定後、raw INITIAL_BOARDを変更せず、人間確認用の派生コピーを作る。
+
+このターンで次をGitHubから取得する。
+
+`https://github.com/kaillebidan-byte/MYGPT/blob/main/audit/scripts/stamp_review_board.py`
+
+`INITIAL_REVIEW overall`を`PASS`または`FAIL`として使い、次と同等の処理を行う。
+
+```text
+python audit/scripts/stamp_review_board.py <raw-initial-board> \
+  --output review_initial_<PASS-or-FAIL>.png \
+  --stage INITIAL \
+  --status <PASS-or-FAIL>
+```
+
+本文へ次を出す。
+
+```text
+REVIEW_STAMP
+stage: INITIAL
+status: PASS / FAIL
+source: <raw INITIAL_BOARD path/name>
+output: <review_initial_PASS.png or review_initial_FAIL.png>
+```
+
+可能なら表示専用コピーもユーザーへ提示する。
+
+重要:
+
+- raw INITIAL_BOARDへスタンプを焼き込まない。
+- stamped copyをmachine auditへ入れない。
+- stamped copyをrepair対象にしない。
+- stamped copyをcanonical identity referenceにしない。
+- stamped copy上の帯をunintended_outputへ数えない。
+
+スタンプ作成だけが失敗した場合は`REVIEW_STAMP status: ERROR`として短く示す。スタンプは人間確認用なので、監査済みraw boardが存在するならrepair自体は継続してよい。
+
+7項目すべてPASSなら、スタンプ作成後に追加処理せず終了する。
+
+## 7. FAIL後のGitHub監査資料取得
 
 `INITIAL_REVIEW overall: FAIL`の場合だけ、repair前に次をこのターンで取得する。
 
@@ -195,7 +243,7 @@ applied_rules:
 
 取得できない場合は`status: UNAVAILABLE`を返し、repairせず終了する。
 
-## 7. 1回だけrepair
+## 8. 1回だけrepair
 
 自動repairは1回だけ。
 
@@ -203,7 +251,7 @@ applied_rules:
 
 この場合、active/support limb、slot state plan、endを維持し、初回FAILと機械監査で確認した問題だけをrepair条件へ入れる。
 
-motion系3項目がすべてPASSで、それ以外だけFAILなら初回boardを編集対象として使い、PASSだったmotion状態を再設計しない。
+motion系3項目がすべてPASSで、それ以外だけFAILならraw INITIAL_BOARDを編集対象として使い、PASSだったmotion状態を再設計しない。
 
 修正版生成直前に本文へ次だけ出す。
 
@@ -211,23 +259,29 @@ motion系3項目がすべてPASSで、それ以外だけFAILなら初回boardを
 
 修正版もportrait 2:3相当のboardを1枚だけ生成する。A/B候補、別案、2回目のrepairは禁止。
 
-## 8. 修正版の再監査
+生成された未加工修正版を`raw REPAIR_BOARD`として保持する。
+
+## 9. 修正版の再監査
 
 修正版生成後も応答を終了しない。
 
-まず修正版そのものを同じ7項目で視覚レビューする。
+まずraw REPAIR_BOARDそのものを同じ7項目で視覚レビューする。
 
-その後、可能なら同じ`machine_audit_board.py`を修正版の実画像ファイルへ再実行する。
+その後、同じ`machine_audit_board.py`をraw REPAIR_BOARDの実画像ファイルへ再実行する。
 
 初回画像のJSONを修正版の結果として再利用しない。
 
 修正版をコード実行環境へ渡せない場合は、その事実を`POST_REPAIR_MACHINE_AUDIT`で明示する。追加repairは行わない。
+
+機械監査のflag統合規則は初回と同じとし、`background_not_uniform`と`shadow_like_background`もchromaへ反映する。
 
 最終出力:
 
 ```text
 POST_REPAIR_MACHINE_AUDIT
 status: RAN / IMAGE_UNAVAILABLE / EXECUTION_UNAVAILABLE / ERROR
+background_deviation_ratio: <RANの場合のvalue>
+shadow_like_background_ratio: <RANの場合のvalue>
 mechanical_flags:
 - RANの場合のみtrue flagを列挙
 
@@ -249,7 +303,32 @@ issues:
 
 修正後がFAILでも追加生成しない。
 
-## 9. 実行順序
+## 10. 修正版表示スタンプ
+
+`POST_REPAIR_REVIEW`確定後、raw REPAIR_BOARDを変更せず表示専用コピーを作る。
+
+```text
+python audit/scripts/stamp_review_board.py <raw-repair-board> \
+  --output review_repair_<PASS-or-FAIL>.png \
+  --stage REPAIR \
+  --status <PASS-or-FAIL>
+```
+
+本文へ次を出す。
+
+```text
+REVIEW_STAMP
+stage: REPAIR
+status: PASS / FAIL
+source: <raw REPAIR_BOARD path/name>
+output: <review_repair_PASS.png or review_repair_FAIL.png>
+```
+
+可能なら表示専用コピーもユーザーへ提示する。
+
+raw REPAIR_BOARDは監査・後処理用として未加工のまま保持する。
+
+## 11. 実行順序
 
 次の順序を崩さない。
 
@@ -258,10 +337,12 @@ INITIAL_BOARD
 → INITIAL_VISUAL_REVIEW
 → MACHINE_AUDIT
 → INITIAL_REVIEW
+→ REVIEW_STAMP(INITIAL)
 → AUDIT_SOURCE_CHECK（FAIL時だけ）
 → REPAIR_BOARD（FAILかつ監査資料取得成功時だけ）
 → POST_REPAIR_MACHINE_AUDIT
 → POST_REPAIR_REVIEW
+→ REVIEW_STAMP(REPAIR)
 ```
 
 機械監査が`IMAGE_UNAVAILABLE`、`EXECUTION_UNAVAILABLE`、`ERROR`なら、この接続テストではその時点で終了し、自動repairへ進まない。
