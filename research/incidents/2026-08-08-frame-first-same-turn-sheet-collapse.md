@@ -1,7 +1,7 @@
 # Incident — frame-first same-turn jobs collapsed into sequence sheets
 
 Date: 2026-08-08
-Status: CONFIRMED / current frame-first same-turn architecture rejected pending isolation
+Status: CONFUNDED / rerun in progress after deleting retained Project chat
 
 ## Test goal
 
@@ -28,7 +28,7 @@ Repair policy:
 - one repair round
 - only failed frames regenerated
 
-## Actual result
+## Actual result of the first run
 
 Every INITIAL generation and every REPAIR generation returned a multi-pose sequence sheet rather than one raw frame.
 
@@ -76,63 +76,74 @@ The Project correctly marked all raw frames as invalid:
 
 The repair round produced no FAIL->PASS transition, so INITIAL remained selected by the existing delta rule.
 
-## What this disproves
+## Newly discovered confound
 
-The previous working hypothesis was:
+After the first run, it was discovered that an older chat remained inside the same ChatGPT Project. That older chat contained repeated generation of four chibi-character poses in 2x2 layouts.
 
-> If `four-pose-portrait.png` and direct-2x2 Project sources are removed, four same-turn image-generation jobs can behave as isolated one-pose jobs.
+Because Project memory can use other chats inside the same Project as context, the first 8/8 sheetification result was **not cleanly isolated from prior 2x2 conversation history**.
 
-This test disproves that hypothesis for the tested ChatGPT Project path.
+The older 2x2 chat has now been deleted and the same frame-first motion test is being resent.
 
-Removing the old layout guide and rewriting Sources was not sufficient to obtain per-call visual isolation.
+Therefore the first-run result must not be used to claim either of the following as established facts:
 
-## Strongest interpretation
+- `same-turn 4 image-generation jobs inherently collapse into sequence sheets`
+- `the current 01-05 Project Sources still force 2x2 output`
 
-Do not treat each image-generation call inside one motion turn as an isolated worker.
+Both remain hypotheses until the post-deletion rerun is observed.
 
-The image-generation system is evidently still conditioned by broader conversation / task context strongly enough that a local prompt saying `one person / one pose only` is overridden by the overall motion-sequence intent.
+## What the first run still confirms
 
-This is consistent with the observed behavior:
-- all 8 calls independently produced a representation of the overall sequence
-- labels varied (`F`, `I`, bare numbers), meaning the exact local anti-label wording was not controlling the global sequence representation
-- REPAIR repeated the behavior despite stronger single-frame wording
+Even with the confound, these observations remain factual for that run:
 
-This does **not** prove that every motion request always yields a sheet. The remaining causal split is:
+- 8 / 8 generated images were sequence sheets.
+- stronger local `one person / one pose / no sheet` wording did not override the active context.
+- the model represented the broader motion sequence rather than only the requested local frame state.
+- the high-resolution canonical did not prevent sheetification.
 
-A. the mere presence of a motion-level request causes sequence-sheet generation, or
-B. the Project instruction to run four same-turn generation jobs / the full multi-frame workflow causes the image tool to retain sequence context across calls.
+This shows that some active context strongly favored sequence-sheet output, but the source of that context was not isolated.
 
-## Next isolation test
+## Current causal split
 
-Before another architecture rewrite, run exactly one image generation in the actual MYGPT Project with the current high-resolution canonical and current Sources.
+After discovering the retained old chat, the candidates are now:
 
-Use a static-pose request, not a motion request:
+A. retained Project chat history with repeated 2x2/chibi outputs contaminated the run;
+B. current Project Instructions / Sources still contain enough sequence context to cause sheetification;
+C. one motion-level request plus four same-turn image-generation calls causes sequence context to persist across calls;
+D. more than one of A-C contributed.
 
-`このキャラクターが、正面を向いたまま右手を胸の高さに置いている全身画像を1枚作ってください。`
+Do not choose among these before the post-deletion rerun result.
 
-No F1/F2/F3/F4 contract, no repair, no board compose, no second image call.
+## Rerun now in progress
+
+Conditions for the rerun:
+- delete the retained old 2x2/chibi Project chat;
+- keep the current frame-first Instructions / Sources;
+- keep `four-pose-portrait.png` removed from Project Sources;
+- use the 1024x1536 high-resolution canonical directly attached to the new generation chat;
+- resend the same one-shot motion request and inspect INITIAL outputs separately from any repair outputs.
 
 Interpretation:
 
-- If this also returns a sequence sheet:
-  current Project Instructions / Sources still contaminate even static single-pose generation; inspect the Project configuration again.
+- If F1-F4 now become one-person single-pose images:
+  - Project chat-history contamination becomes the leading explanation for the previous 8/8 sheet run;
+  - same-turn frame-first remains viable and should not be rejected from the first run.
 
-- If this returns one person / one portrait image:
-  current Sources can support single-pose generation, and the failure is specifically the same-turn motion/multi-job architecture. Mark `4 image-generation jobs in one motion turn` as REJECTED.
+- If F1-F4 still all become sequence sheets:
+  - retained chat history was not sufficient to explain the failure;
+  - current motion-level/same-turn architecture or remaining Project configuration becomes the next target.
 
-## Do not repeat
+- If behavior is mixed:
+  - do not collapse it to PASS/FAIL only;
+  - record which call first sheetified and whether later calls followed that pattern, because cross-call conditioning may be occurring within the new chat itself.
 
-- Do not run another 4 INITIAL + 4 REPAIR attempt with only stronger `no sheet / no 2x2` wording.
-- Do not claim `1 visual job = 1 frame` is working in ChatGPT Project until the isolation test above passes and a mechanism for actual per-job context isolation is demonstrated.
-- Do not blame the canonical image for the sheet behavior; the same high-resolution canonical produced a correct single-person image in the empty-Project isolation test.
+## Do not do before rerun result
 
-## Architectural implication if static-pose isolation passes
+- Do not add more `no sheet / no 2x2` wording.
+- Do not rewrite the architecture again solely from the first 8/8 run.
+- Do not mark frame-first as REJECTED yet.
+- Do not restore the retired layout guide.
+- Do not switch back to low-resolution canonical.
 
-The same-turn frame-first design cannot be the production automation without a real isolated worker/subagent or equivalent image-input execution boundary.
+## Follow-up logging rule
 
-Feasible directions then become:
-- one generated sequence-source image followed by deterministic cell extraction/recomposition, or
-- one user/assistant turn per raw frame (not same-turn automation), or
-- an execution environment with true isolated image-generation workers.
-
-Do not choose among these until the static-pose isolation test is recorded.
+When the post-deletion rerun finishes, append the exact result here before changing Project Sources or generation architecture. Record INITIAL F1-F4 separately from REPAIR so the first failure point is not hidden by the repair stage.
