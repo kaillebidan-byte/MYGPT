@@ -1,6 +1,6 @@
 # MYGPT調整プロジェクト 引継ぎ
 
-更新日: 2026-08-08 17:10 JST
+更新日: 2026-08-08 17:22 JST
 
 この文書はMYGPT調整の新しい会話を開始するときの作業コンテキスト。
 ChatGPT Project本番へ投入するProject Instructionsではない。
@@ -12,6 +12,7 @@ ChatGPT Project本番へ投入するProject Instructionsではない。
    - `research/experiments/2026-08-08-m1-motion-context-single-call.md`
    - `research/experiments/2026-08-08-m2a-visible-four-state-sheet-collapse.md`
    - `research/experiments/2026-08-08-m2b-repeated-static-calls-pass.md`
+   - `research/experiments/2026-08-08-m2c-routing-divergence-hybrid-motion.md`
 
 **Web調査を行う前に読む:**
 4. `research/chatgpt-project-practices/search-ledger.md`
@@ -86,12 +87,11 @@ frame-firstへ変更後も、INITIAL 4 + REPAIR 4の8/8がmulti-pose 2x2 sheet�
 ### 完全新規Project + current full Instructions/Sources
 
 2x2化を再現。
-したがって旧Project memory / 過去チャットだけが主因ではない。
+旧Project memory / 過去チャットだけが主因ではない。
 
 ### STATIC CONTROL
 
-同じ高解像度canonicalで単発静止ポーズ依頼:
-`このキャラクターが、正面を向いたまま右手を胸の高さに置いている全身画像を1枚作ってください。`
+同じ高解像度canonicalで単発静止ポーズ依頼。
 
 結果:
 - 1画像
@@ -126,7 +126,7 @@ canonical自体、新規Project自体、Sourcesの存在自体が常時sheet化�
 - 最初の生成群で明確な2x2を複数回生成
 - dividerあり
 - `POSE A/B/C/D`ラベルまで画像内へ取り込んだ
-- 後半は強い禁止文や象限切り出し指示で単独portraitへ回復したが、これはM2成功とは数えない
+- 後半は強い禁止文や象限切り出し指示で単独portraitへ回復したが、これは成功とは数えない
 
 結論:
 **4つのnamed chronological statesを生成前に同時露出するとmulti-panel表現を強く誘発する。**
@@ -138,12 +138,6 @@ canonical自体、新規Project自体、Sourcesの存在自体が常時sheet化�
 `motion / one-shot / sequence / 4状態 / POSE A-D`等は生成依頼へ入れない。
 canonicalは各回で再添付し、generated frameを正本へしない。
 
-時系列:
-1. 両腕下げた開始姿勢
-2. anatomical right handを上腹部方向へ上げる
-3. 胸紋の少し下
-4. 胸紋付近
-
 結果: PASS
 - 4/4単独portrait
 - 4/4人物1体・1ポーズ
@@ -152,63 +146,111 @@ canonicalは各回で再添付し、generated frameを正本へしない。
 - active limb左右交換なし
 
 注意:
-- 2枚目の手位置はみぞおち指定よりやや低く、waist寄り
+- 2枚目の手位置はみぞおち指定よりやや低くwaist寄り
 - body proportionsがcanonicalよりやや細長い
-- sleeve silhouette、手の見え方、腰の房/紐、attachment / occlusionにframe間driftあり
+- sleeve silhouette、手、腰の房/紐、attachment / occlusionにframe間driftあり
 - 背景は白へ変わったがM2bではchromaを制御変数にしていない
 
 結論:
 **同一チャットで4回生成すること自体はsheet化の十分条件ではない。**
 
-M2aとM2bの差から、現時点の最有力原因は:
+### M2c-R — hidden orchestration caused tool-routing divergence
 
-> global four-state / sequence-level intentが、個々のgeneration-facing contextへ見えていること。
+別の完全新規Project。
+ユーザーは自然言語motionを1回だけ依頼。
+Instructionsでは内部4状態化と4回生成を意図したが、実際の会話モデルは予定した4 image callsをそのまま実行しなかった。
+
+観測された思考/処理:
+- motionを「アニメーションを完成させる問題」として再解釈
+- PILでcanonicalを読み込み
+- ffmpeg確認
+- anatomical right arm / viewer-left sleeveのmanual mask作成
+- rotation / coordinate transform / warp / inpaintを検討
+- 別途生成されたpose imageを素材に採用
+- canonicalとpose imageをviewer-left領域でmask blend
+- smoothstep + Gaussian blurで中間frameを合成
+- ffmpegでMP4化
+- final-pose PNGも出力
+
+ユーザー提供の思考ログ最終コード:
+- 30 fps
+- move 0.55 sec
+- final hold 0.70 sec
+- output `right_hand_raise_oneshot.mp4`
+- output `right_hand_raise_final_pose.png`
+
+添付された生成画像は3枚とも単独portraitでsheetではないが、意図した4 chronological raw framesではない。
+neutral startも生成画像群には含まれず、手形状もclosed/openで揺れている。
+
+結論:
+**M2cは4-call hidden orchestrationのPASS/FAIL判定には使えない。main modelが別のtool routeへ逃げた。**
+
+新しい重要事項:
+> Project Instructionsで最終目的だけを強く示すと、main modelは要求された中間artifactを省略してPython/OpenCV/ffmpeg等で最終成果物を直接作ろうとすることがある。
+
+したがってsheet contaminationだけでなく**tool-routing / execution-boundary**もproduction設計上の問題。
+
+M2a / M2b / M2c-Rから現在の整理:
+
+1. motion request alone -> single portrait可能
+2. repeated same-chat calls alone -> 4/4 single portrait可能
+3. visible four-state plan -> sheet化強い
+4. hidden orchestration instructions -> sheet化以前に別tool routeへ分岐し得る
 
 ---
 
-## 4. 次回最優先テスト — M2c
+## 4. 次回最優先テスト — M2d
 
 **別の完全新規Projectを使う。productionは変更しない。**
 
 目的:
-ユーザーは自然言語motionを1回だけ依頼する。
-会話モデルは内部で4静止状態へ分解して4回画像生成するが、**4状態一覧を生成前に可視化しない**。
+M2c-Rのtool-routing divergenceを塞ぎつつ、4状態一覧を可視露出せずに4回のimage generationを実行できるか確認する。
 
 条件:
 - Project Sources 0
 - `four-pose-portrait.png`なし
 - 高解像度canonicalを生成chatへ直接添付
 - minimal Instructions
-- repair / audit / Python composeなし
-- generation中にboard / sheet / panel / 2x2 / compose / audit / repair等の語を使わない
 - generated frameをidentity canonicalへ昇格させない
+- generation phaseではrepair / audit / compose / video化をしない
+
+M2d Instructionsで明示する実行境界:
+- generation phaseは**image generationを4回呼び、4つの別々のstill image outputを作ることが必須**
+- 4枚が揃う前にPython / OpenCV / ffmpeg / image warping / crossfade / direct MP4/GIF constructionへ置き換えない
+- concreteな4状態一覧は画像生成前にユーザーへ表示しない
+- 各call直前に、そのcallの1静止姿勢だけを内部で決める
+- 各image callにはcanonical identity rule + そのcallの1姿勢だけを渡す
+- 他の3状態やsequence-level説明を各image callへ渡さない
+- 4枚生成したら停止する。M2d中はcompose / audit / repair / video化しない
 
 ユーザー依頼:
 `このキャラクターが、右手を胸の高さまで上げて、その位置で止まるone-shotモーションを作ってください。`
 
-会話モデル内部では4状態を作る:
-- state 1: 両腕下げた開始姿勢
-- state 2: anatomical right handを上腹部 / みぞおち付近
-- state 3: 胸紋の少し下、まだendpointではない
-- state 4: 胸紋付近で停止
-
-重要:
-- 4状態をユーザーへ一覧表示してから生成しない。
-- image call 1にはstate 1だけの静止画内容。
-- call 2にはstate 2だけ。
-- call 3にはstate 3だけ。
-- call 4にはstate 4だけ。
-- 各callのgeneration-facing local descriptionへ他の3状態やsequence概念を持ち込まない。
-
 判定:
-- **4/4単独portrait** → hidden/local frame-first orchestrationは成立。full current Instructions/Sourcesのglobal workflow contaminationが主因候補としてさらに強くなる。productionをgeneration phaseとpost-generation phaseへ分離する設計へ進む。
-- **sheet化再発** → assistant内部の4-state plan自体がconversation-level prompt rewrite経由で画像側へ漏れる可能性が高い。true isolated worker相当の境界を検討する。
+- **4/4単独portrait** -> hidden/local 4-call orchestrationは実行境界を強制すれば成立する可能性が高い
+- **sheet化** -> internal multi-state planの漏出が依然強い
+- **再びtool route分岐** -> Project自然言語Instructionsだけでは4 image-call execution boundaryを十分に強制できない。外部orchestrator等を検討
 
-M2cが終わるまでchroma、audit、repair、Python composeを戻さない。
+M2dが終わるまでchroma、audit、repair、Python composeは戻さない。
 
 ---
 
-## 5. identity監査基準
+## 5. M2c-RのMP4方式をproduction採用しない理由
+
+M2c-R最終コードは、4つの実画像poseから関節運動を作ったものではない。
+canonicalと1つのpose imageを大きなviewer-left領域で画像空間blendしている。
+
+そのため:
+- articulated motionではなくmorph / crossfadeに近い
+- mask内の袖、胴、腰、手の非一致pixelまで同時変形する
+- Gaussian blurはtransition artifactを隠すだけでtopology continuityを保証しない
+- canonical非mask領域を維持しやすい利点はあるが、motion semantics / topology面でproduction要件を満たさない
+
+この経路はtool-routing挙動の証拠として保存するが、本番motion architectureには採用しない。
+
+---
+
+## 6. identity監査基準
 
 「同じキャラっぽい」でPASSにしない。
 
@@ -231,31 +273,31 @@ M2cが終わるまでchroma、audit、repair、Python composeを戻さない。
 - 下衣
 - 靴
 
-sheet carrier問題とidentity / continuity問題は分ける。
-まず1 call = 1 portraitを成立させ、その後でidentity改善を行う。
+sheet carrier問題、tool-routing問題、identity / continuity問題は分ける。
+まず1 call = 1 portraitの実行境界を成立させ、その後でidentity改善を行う。
 
 ---
 
-## 6. 中国語圏Web調査から追加された別角度
+## 7. 中国語圏Web調査から追加された別角度
 
 詳細:
 `research/chatgpt-project-practices/china-imagegen-practices.md`
 
 新しい知見:
-- 中国圏AIGC実務ではidentity / pose / scene / styleを別referenceへ分離する運用が強い。
-- Seedream / Kling / Vidu等では複数referenceやpose/sketch controlを明示的に扱う。
-- `分镜 / 组图 / 四宫格`は成功用途として一般的で、複数状態の同時提示がmulti-panel表現へ寄ること自体は不自然ではない。
-- multi-round image editingではconsistency低下を別問題として扱う研究・実務知見がある。
+- 中国圏AIGC実務ではidentity / pose / scene / styleを別referenceへ分離する運用が強い
+- Seedream / Kling / Vidu等では複数referenceやpose/sketch controlを明示的に扱う
+- `分镜 / 组图 / 四宫格`は成功用途として一般的で、複数状態同時提示がmulti-panelへ寄ること自体は不自然ではない
+- multi-round image editingではconsistency低下を別問題として扱う研究・実務知見がある
 
 MYGPTへの未採用候補:
-M2c後もtext-only pose controlが不安定なら、
+M2d後もtext-only pose controlが不安定なら、
 **canonical identity image 1枚 + そのcall専用single-pose visual guide 1枚**
 という二入力を別実験する。
 4ポーズsheetをreferenceへ戻す案ではない。
 
 ---
 
-## 7. やらないこと
+## 8. やらないこと
 
 - 画像生成するなと明示されたturnで画像生成しない。
 - direct 2x2へ戻さない。
@@ -265,12 +307,13 @@ M2c後もtext-only pose controlが不安定なら、
 - `no sheet / no 2x2`を大量追加して同じ構造を再試行しない。
 - M2aの回復portraitをvisible-four-state方式の成功証拠にしない。
 - M2bのidentity driftをsheet化と混同しない。
-- M2cで4状態一覧を生成前にユーザーへ表示しない。
+- M2c-RのMP4/Python routeを4-call frame-first成功として扱わない。
+- M2dで4状態一覧を生成前にユーザーへ表示しない。
 - `search-ledger.md`でDONEのWeb論点を言い換えだけで再検索しない。
 
 ---
 
-## 8. Web調査の保存方法
+## 9. Web調査の保存方法
 
 Web検索したらGitHubへ残す。
 
@@ -285,7 +328,7 @@ Web検索したらGitHubへ残す。
 
 ---
 
-## 9. 報告順
+## 10. 報告順
 
 ユーザーへの報告はまず次にやる作業を先頭に置く。
 その後に結果、解釈、GitHub変更を書く。
