@@ -1,6 +1,6 @@
 # MYGPT調整プロジェクト 引継ぎ
 
-更新日: 2026-08-08 18:24 JST
+更新日: 2026-08-08 19:20 JST
 
 この文書はMYGPT調整の新しい会話を開始するときの最新作業コンテキスト。
 ChatGPT Project本番へ投入するProject Instructionsではない。
@@ -9,19 +9,21 @@ GitHub `main` の記録を正本とし、チャット記憶だけで過去方式
 
 ## 作業開始前に必ず読む
 
-1. `research/MOTION-GENERATION-EXPERIMENT-LOG.md`
-2. `research/decisions/2026-08-08-identity-continuity-direction.md`
-3. `research/experiments/2026-08-08-n0-custom-gpt-thinking-instant-result.md`
-4. `research/experiments/2026-08-08-n1-fresh-custom-gpt-instant-four-frame-result.md`
-5. `research/experiments/2026-08-08-native-chat-worker-isolation-plan.md`
-6. `research/incidents/2026-08-08-frame-first-same-turn-sheet-collapse.md`
+1. `research/decisions/2026-08-08-identity-continuity-direction.md`
+2. `research/experiments/2026-08-08-w4-endpoint-and-final-candidate-result.md`
+3. `research/experiments/2026-08-08-w3-ab-spatial-overconstraint-result.md`
+4. `research/experiments/2026-08-08-w2-hand-shape-position-result.md`
+5. `research/experiments/2026-08-08-w1-targeted-sleeve-invariant-result.md`
+6. `research/audits/2026-08-08-n1-raw-identity-continuity-audit.md`
+7. `research/experiments/2026-08-08-native-chat-worker-isolation-plan.md`
+8. `research/incidents/2026-08-08-frame-first-same-turn-sheet-collapse.md`
+9. `research/MOTION-GENERATION-EXPERIMENT-LOG.md`
 
 Web調査前:
 - `research/chatgpt-project-practices/search-ledger.md`
-- `research/chatgpt-project-practices/imagegen-orchestration-context.md`
-- `research/chatgpt-project-practices/china-imagegen-practices.md`
-- `research/chatgpt-project-practices/custom-gpt-thinking-imagegen-known-issue.md`
 - `research/chatgpt-project-practices/native-chat-context-isolation.md`
+- `research/chatgpt-project-practices/custom-gpt-thinking-imagegen-known-issue.md`
+- `research/chatgpt-project-practices/china-imagegen-practices.md`
 
 ---
 
@@ -29,12 +31,11 @@ Web調査前:
 
 - repo: `kaillebidan-byte/MYGPT`
 - ユーザー環境: ChatGPT Plus
-- 元の狙いは、Work / Codex系の週間agentic allowanceやOpenAI API別課金を前提にせず、通常Chat / Project / Custom GPT側の機能差分で成立させられるかを検証すること。
-- Work / Codex / Agents SDK / OpenAI APIをproduction前提にしない。
+- Work / Codex系の週間agentic allowanceやOpenAI API別課金をproduction前提にしない。
 - ユーザーが「画像生成するな」「画像生成依頼ではありません」と明示したturnでは画像生成を絶対に起動しない。
-- GitHub mainの実ファイルを直接fetchしてから設計判断する。
-- production Instructions / Sourcesは、現在のidentity/continuity方針が固まるまで変更しない。
-- 既知の失敗方式へ戻す場合は、過去の棄却理由を解消する新証拠が必要。
+- 設計判断前にGitHub mainの実ファイルをfetchする。
+- ユーザーへの報告は「次にユーザーがやる作業」を最初に出す。ユーザー側作業がなければ明記する。
+- 実画像・ログ・repoで確認可能なことを確認せず、直近発言だけで即断しない。
 
 ---
 
@@ -46,122 +47,145 @@ Web調査前:
 - 緑背景
 
 ルール:
-- 画像生成を行う現在のworker conversationへ直接添付する。
-- Project Source画像だけをidentity経路にしない。
+- 各generation worker conversationへ直接添付する。
 - generated frameをcanonicalへ昇格させない。
-- 高解像度canonicalは旧低解像度派生版よりidentity fidelityが明確に良い。
+- Project Source画像だけをidentity経路にしない。
 
 ---
 
-## 2. sheet / carrier問題の確定事項
+## 2. carrier / context問題
 
-### 失敗
+### 確定した失敗
 
 - direct 2x2 generation
-- `four-pose-portrait.png`のgeneration reference利用
-- visible 4-state exposure（POSE A/B/C/D等を同時に見せる）
-- Project内でglobal 4-state intentを強く保持したままsingle-frame generationをさせる方式
+- visible four-state planをgeneration-facing contextへ入れる
+- `four-pose-portrait.png`をgeneration referenceとして使う
+- global motion planとsingle-frame generationを同じconversationへ置く
 - full-board repair
-- 4独立repair boardから象限を寄せ集める方式
-- M2c-Rの広域mask crossfade / morphをarticulated motionの代用にすること
+- generated-frame identity chaining
+- M2c-Rの広域crossfade/morphをarticulated motionとして採用する
 
-### 実機で確認した切り分け
+### 解決した境界
 
-- STATIC CONTROL: 1人物・1姿勢portrait PASS
-- M1: motion request + 1 image callでもsingle portrait PASS
-- M2a: visible 4 states -> 2x2 sheet FAIL
-- M2b: 同じchatでも各turnをlocal static poseだけにすれば4/4 single portrait PASS
-- M2c-R: hidden orchestrationはPython/OpenCV/ffmpeg routeへ逸脱
-- M2d: standalone carrierは改善したが時間状態がendpoint寄り
-- M2e: 0/35/70/100の時間役割は効いたが2x2 sheet化が再発。再送でも再現
-
-強い結論:
-**4状態を十分に理解させるglobal contextと、1枚だけを描かせるgeneration-facing contextを同じconversationへ置くとsheet化しやすい。**
-
----
-
-## 3. Custom GPT workerの切り分け
-
-旧Custom-GPT本番 architecture（Actions / Knowledge / GitHub / file-transfer orchestration）は復活させない。
-
-今回使ったのは別物:
-- image generationだけON
-- Actionsなし
-- Appsなし
-- Knowledgeなし
-- Webなし
-- Code/Data Analysisなし
-- 1 current static poseだけを見るstateless worker
-
-### N0 — Thinking vs Instant
-
-Custom GPT / Thinking:
-- image generation途中で停止
-- `画像生成ツールがこの環境で利用できないため、画像ファイルを返せません。`
-- tool availability FAIL
-- context-isolation architectureの失敗とは数えない
-
-Custom GPT / Instant:
-- single portrait generation成功
-- anatomical right arm、みぞおち付近のpose精度、主要identityを維持
-- N0 PASS
-
-現行workerはInstantを使う。
-Thinkingの再repair試験を繰り返さない。
-
----
-
-## 4. N1 — fresh Custom-GPT conversations
-
-条件:
-- 同じminimal worker GPT
+N1で実機確認:
+- minimal Custom GPT
 - Instant
-- 各frameごとに完全な新規conversation
-- canonicalを毎回直接添付
-- 各workerにはその回の1 static poseだけを見せる
-- full motion / 他3姿勢 / progress% / F1-F4 / sequence / board / sheetを見せない
+- fresh conversation per frame
+- canonical直接添付
+- workerはcurrent single static poseだけを見る
+- Knowledgeなし / Webなし / Codeなし / Actionsなし / Appsなし
 
 結果:
 - 4/4 standalone portrait
-- 2x2 / divider / labelなし
-- right-hand motionは時間順に進行
+- 2x2 / labels / dividersなし
+- right-hand progression成立
 
 結論:
-**Plus内のfresh Custom-GPT conversationで「今はこの1姿勢だけ考えろ」というcontext boundaryを実機で作れた。**
+**fresh Custom-GPT / Instant conversationで「今はこの1姿勢だけ考えろ」の境界をPlus内に作れる。**
 
-carrier/context isolationは現在の第一問題ではない。
-
----
-
-## 5. 現在の主問題 — identity / temporal continuity
-
-N1で残った問題:
-- independent redrawによるproportion drift
-- active right sleeveのsilhouette / opening / fold / motif位置の揺れ
-- hand shape / local occlusionの揺れ
-- waist ornament / tassel / cord / fastener等は厳密監査が必要
-
-特にneutral startを再生成したframeは、canonicalより細身・縦長へ全身再解釈された。
-
-したがって開始姿勢を再生成しない。
+Custom GPT / Thinkingは画像生成tool availability FAIL。現行workerでは使わない。
 
 ---
 
-## 6. CURRENT production candidate
+## 3. identity / continuityの実画像監査
 
-one-shotでcanonical自体が開始姿勢の場合:
+N1 raw auditで確定:
+- regenerated neutral frameはcanonicalより全身再解釈が大きい -> F1として不採用
+- moving framesのglobal identityは概ね安定
+- 主問題はactive anatomical-right large sleeveとvisible hand articulation
+- broad identity Knowledge追加は過剰修正
+
+したがってF1はcanonicalそのものを使う。
+
+---
+
+## 4. W1-W4で行った最小調整
+
+### W1 — targeted active-sleeve invariant
+
+workerへ大袖だけの短い不変条件を追加。
+
+要点:
+- 腕に伴うたわみ / 向き変更は許可
+- 正本の大袖としての基本構造を維持
+- sleeve opening / gold trim / grey lining / motifを別構造へ描き替えたり消したりしない
+
+結果: PASS。旧N1よりactive sleeve continuityが改善。
+
+### W2 — hand shape packet
+
+worker設定は変更せず、local packetへneutral hand articulationを明示。
+
+結果:
+- sleeve improvement維持
+- hand shape改善
+- hand positionはF3として高め
+
+### W3 — A/B spatial constraint
+
+`entire hand below flower + visible gap`を要求。
+
+A/Bとも同じ方向へ手が下がった。
+解釈:
+- prompt ignoringではない
+- text-only placement failureとも断定しない
+- packet自体がF3ではなくF2相当のgeometryを記述していた
+
+BをF2候補として採用。
+
+### W4 — endpoint
+
+hand over chest flowerを要求。
+
+結果: PASS。
+- endpoint明確
+- neutral hand shape概ね維持
+- W1 active-sleeve structure維持
+- carrier regressionなし
+
+W-series generation tuningは終了。
+
+---
+
+## 5. CURRENT final candidate
+
+使用する4状態:
+- F1 = canonical `kokyo_base_20260805.png`
+- F2 = W3-B `19_12_14 (2)`
+- F3 = W2 `19_07_53`
+- F4 = W4 `19_17_55`
+
+時間進行:
+1. F1 neutral start
+2. F2 upper-waist / lower-torso early raise
+3. F3 near-flower late raise
+4. F4 hand over chest flower endpoint
+
+目視結果:
+- right handは単調に上がる
+- endpoint reversionなし
+- side swapなし
+- moving large sleeveはopen/lining/trim/motifを同じ衣装構造として維持
+- handはnear-fist -> wide-palmの余計なgesture変化を大幅に解消
+- non-active sleeve / hat / hair / waist / lower garment / shoesはproduction-blockingな崩れなし
+
+細かなindependent-redraw差は残るので、pixel一致とは扱わない。
+
+---
+
+## 6. CURRENT production candidate architecture
 
 ```text
 natural motion request
         ↓
-planner: global motionを理解し、生成対象の3 local pose packetを作る
+planner: global motionを理解
         ↓
-F1 = canonicalそのもの（生成しない）
-F2 = fresh Custom GPT / Instant conversation
-F3 = fresh Custom GPT / Instant conversation
-F4 = fresh Custom GPT / Instant conversation
+F1 = canonicalそのもの
         ↓
-各workerは canonical + その1 local poseだけを見る
+plannerがF2/F3/F4のlocal static packetを個別作成
+        ↓
+各frame = fresh Custom GPT / Instant conversation
+          canonical + current one pose only
         ↓
 identity / continuity audit
         ↓
@@ -169,153 +193,86 @@ remove_chroma_key.py
         ↓
 common scale / baseline normalization
         ↓
-compose_keypose_board_from_frames.py または build_motion_strip.py
+compose_keypose_board_from_frames.py / build_motion_strip.py
         ↓
-machine geometry/chroma audit + visual identity/motion audit
+visual identity/motion audit + machine geometry/chroma audit
 ```
 
-4 keypose one-shotを3 image generationsで作る候補。
-
-生成promptは短く保つ。
-`project/sources/production/01-character-identity.md`の詳細contract全文をworker promptへ貼らない。
-canonicalを主anchorとし、詳細contractは監査に使う。
+4 keypose one-shotを3 image generationsで作る。
 
 ---
 
-## 7. 次にやること — C0 / C1
+## 7. worker設定 — 現状を維持
 
-### C0 — 新規画像生成なし
+- Instant
+- Image generation ON
+- Web OFF
+- Code/Data Analysis OFF
+- Actions NONE
+- Apps NONE
+- Knowledge NONE
+- fresh conversation per generated frame
+- same high-resolution canonical directly attached every time
+- generated frameを次のidentity sourceへしない
+- full motion / other packets / progress% / F1-F4 / sequence / board / sheetをworkerへ見せない
+- worker promptは短く保つ
+- 追加するidentity ruleは現時点ではproven targeted active-sleeve invariantのみ
 
-現在すでにある:
-- F1 = canonical
-- N1のmoving 3 frames
+`project/sources/production/01-character-identity.md`全文をworker promptやKnowledgeへ入れない。監査契約として使う。
 
-を使ってcandidate 4-state sequenceを作る。
+visible handについては各local packetへabsolute hand-shape / palm-orientationを書く。別frameとの比較をworkerへ要求しない。
 
-再稼働する既存資産:
-- `audit/scripts/remove_chroma_key.py`
-- `audit/scripts/compose_keypose_board_from_frames.py`
-- `audit/scripts/build_motion_strip.py`
-- `audit/scripts/machine_audit_board.py`（geometry/chroma専用）
+---
 
-監査対象:
-- proportions
-- silhouette
-- topology
-- part count
-- attachment positions
-- left/right
-- overlap order
-- occlusion map
+## 8. 次にやること — C0 deterministic post-processing
+
+**新規画像生成なし。**
+
+final candidateの4枚を使い:
+1. `audit/scripts/remove_chroma_key.py`
+2. common scale / baseline normalization
+3. `audit/scripts/build_motion_strip.py` または `compose_keypose_board_from_frames.py`
+4. `machine_audit_board.py`でgeometry/chromaのみ監査
+5. `01-character-identity.md`基準でvisual identity/motion監査
+
+重点:
+- active sleeve opening / grey lining / gold trim / motif
+- hand articulation / arm-torso occlusion
+- non-active sleeve
 - hat/hair boundary
-- chest flower emblem
-- large sleeves
-- waist circular medallion
-- tassel/cord/fastener count/connectivity
-- lower garment
-- shoes
+- waist medallion / tassel / cord / fastener
+- lower garment / shoes
+- monotonic motion / endpoint
 
-### C1 — identity/continuity machine assistance
-
-既存`machine_audit_board.py`はidentityを扱わない。
-次にコードを追加するならgenerator promptではなくadvisory continuity audit。
-
-候補metric:
-- foreground bbox / center
-- normalized width-height ratio
-- silhouette overlap after alignment
-- stable-region structural similarity
-- canonical / adjacent-frame comparison
-
-単一SSIMやpixel一致率だけでidentity PASSを決めない。
-topology / attachment / occlusionはvisual auditを残す。
+C0 composed candidateが許容なら、generation-control追加はしない。
 
 ---
 
-## 8. C0が許容外だった場合だけ行う改善
+## 9. C0が失敗した場合だけ
 
-### C2 — local edit diagnostic
+C2 local edit diagnostic、さらに必要ならC3 canonical identity + one single-pose visual guideを検討。
 
-canonicalを基準にanatomical-right arm/sleeve周辺だけを局所編集し、whole-body redraw driftが減るかを見る。
+今は:
+- broad identity Knowledgeを追加しない
+- pose guideを追加しない
+- F2/F3を微差だけのため再生成しない
+- direct 2x2へ戻さない
+- Branch testへ進まない
 
-注意:
-- manual editor selectionはautomation前提にしない
-- selected area外へ変更が漏れる可能性あり
-- まず品質診断であり、production architecture確定ではない
-
-### C3 — role-separated two-reference
-
-C2でも不足する場合のみ:
-- Reference A = canonical identity / costume / proportions / topology
-- Reference B = 1枚だけのsingle-pose visual guide
-- local text = current still pose
-
-Bはskeletal / mannequin / silhouette等、identity情報の少ないguideを優先。
-4 pose guideを同時に渡さない。
-`four-pose-portrait.png`は戻さない。
+Branch / automationはcomposed candidate品質が通った後の操作省力化フェーズ。
 
 ---
 
-## 9. Branch / automationは後回し
+## 10. 直近の重要な運用反省
 
-N1でmanual fresh-conversation boundaryは証明済み。
+この案件では「答えてから調べて訂正する」順序を取らない。
 
-ただし今はN2 Branch testを進めない。
-identity/continuity品質がC0/C1で成立してから、操作省力化として:
-- clean seedからBranch
-- canonical添付の継承可否
-- model mode維持
-を調べる。
+正しい順序:
+1. GitHub CURRENT確認
+2. 実画像 / ログ確認
+3. 問題を局所化
+4. 既存方針との整合確認
+5. 必要最小限の変更を提案
+6. ユーザー作業を回答先頭に提示
 
-通常Chatが親chatから4つの独立worker conversationをzero-clickでspawnする機能は確認できていない。
-Work/APIは元制約外。
-
----
-
-## 10. やらないこと
-
-- 明示なしに画像生成しない。
-- direct 2x2へ戻さない。
-- visible four-state planをgeneration-facing contextへ入れない。
-- `no 2x2 / no sheet`を大量追加してrepairループしない。
-- low-resolution canonicalへ戻さない。
-- generated frameを次のidentity sourceへしない。
-- full-board repairへ戻さない。
-- M2c-R morph/crossfadeをmotion productionに使わない。
-- Custom GPT Thinkingをprompt修正で何度も再試験しない。
-- identity driftをcarrier failureと混同しない。
-- C0前にpose reference等の新変数を増やさない。
-- search ledgerでDONEのWeb検索を言い換えだけで繰り返さない。
-
----
-
-## 11. Web調査ルール
-
-外部検索する前に`research/chatgpt-project-practices/search-ledger.md`を読む。
-
-現時点で既に調査済み:
-- Project context / memory
-- image-generation multi-panel誘発
-- canonical直接添付
-- China-region identity/pose role separation
-- Custom GPT fresh conversation boundary
-- Custom GPT Thinking imagegen known issue
-- reference start-frame / continuity方向
-
-次に検索するなら新しい因果仮説に限定する。
-候補:
-- ChatGPT Imagesでidentity reference + single-pose guideを役割分離した実機例
-- local editによるunchanged-region preservationの実例
-- garment/accessory topologyを測るfine-grained consistency手法
-
----
-
-## 12. 報告順
-
-ユーザーへの報告は:
-1. 次にやる作業
-2. 結果
-3. 解釈
-4. GitHub変更
-
-ユーザー側作業がない場合は「ユーザー側の作業なし」と明記する。
+ユーザーの指摘へ単純に迎合して結論を反転させず、誤っていた前提を特定して証拠から再判断する。
