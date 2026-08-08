@@ -29,10 +29,16 @@
     return getComposer(doc)?.querySelector(FILE_INPUT_SELECTOR) || null;
   }
 
+  function getPromptRoot(doc = document) {
+    return doc.querySelector(PROMPT_ROOT_SELECTOR);
+  }
+
+  // AutoGPT dispatches paste to the first paragraph inside #prompt-textarea.
+  // Keep that event target, but never use a single paragraph as full-draft evidence.
   function getPromptEditor(doc = document) {
     const paragraph = doc.querySelector(PROMPT_PARAGRAPH_SELECTOR);
     if (paragraph) return paragraph;
-    const root = doc.querySelector(PROMPT_ROOT_SELECTOR);
+    const root = getPromptRoot(doc);
     if (!root) return null;
     if (root.matches?.('textarea, input, [contenteditable="true"]')) return root;
     return root.querySelector?.('p, [contenteditable="true"]') || root;
@@ -67,7 +73,7 @@
   }
 
   function composerDraftText(doc = document) {
-    return editorText(getPromptEditor(doc));
+    return editorText(getPromptRoot(doc) || getPromptEditor(doc));
   }
 
   async function waitFor(test, options = {}) {
@@ -179,8 +185,8 @@
     });
     if (!editor) return { ok: false, reason: "PROMPT_EDITOR_NOT_FOUND" };
 
-    if (editorText(editor)) {
-      return { ok: false, reason: "COMPOSER_NOT_EMPTY", observed: editorText(editor) };
+    if (composerDraftText(doc)) {
+      return { ok: false, reason: "COMPOSER_NOT_EMPTY", observed: composerDraftText(doc) };
     }
 
     editor.click?.();
@@ -218,7 +224,8 @@
     let observed = "";
     const reflected = await waitFor(() => {
       const current = getPromptEditor(doc);
-      observed = editorText(current);
+      const readback = getPromptRoot(doc) || current;
+      observed = editorText(readback);
       return observed === expected ? current : null;
     }, {
       timeout: options.reflectTimeout || 5000,
@@ -255,6 +262,7 @@
     normalizeText,
     getComposer,
     getFileInput,
+    getPromptRoot,
     getPromptEditor,
     getSubmitButton,
     isUploading,
