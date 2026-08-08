@@ -1,6 +1,6 @@
 # MYGPT Worker Fanout
 
-Status: **Gate 0 implementation — live Vivaldi verification pending**
+Status: **Gate 0 v0.0.2 — live Vivaldi re-verification pending**
 
 This is a separate Manifest V3 extension for the MYGPT project. Gate 0 deliberately implements only Custom GPT route identity capture and one-tab open/verify.
 
@@ -12,6 +12,7 @@ Implemented:
 - create exactly one new tab at the same normalized worker root;
 - bind that tab ID to one ephemeral Gate 0 `runToken` in `chrome.storage.session`;
 - content script reports its destination route/worker identity to the background service worker;
+- after ownership is persisted, background also probes the owned tab directly with `GET_IDENTITY` when the tab is already complete or when its single `complete` lifecycle event arrives;
 - PASS only when the owned destination tab reports the same worker identity;
 - fail closed on invalid/mismatched destination identity or owned-tab close before verification;
 - observe SPA route changes with DOM mutation/popstate/hashchange/pageshow signals, without a one-second ping loop.
@@ -29,7 +30,15 @@ Not implemented in Gate 0:
 - CSP/security-header modification;
 - visibility/focus spoofing;
 - telemetry or external upload;
-- automatic retry.
+- automatic retry loop.
+
+## Live result that led to v0.0.2
+
+The first Vivaldi run opened exactly one destination tab and preserved the expected worker path, but the popup stayed at `AWAITING_DESTINATION` with `Observed: -`.
+
+That showed `chrome.tabs.create()` was working without adding the `tabs` permission, while the destination report handshake could still be lost if `document_idle` and `tabs.onUpdated("complete")` both occurred before `openedTabId` finished persisting.
+
+v0.0.2 closes that race by querying the owned destination content script directly after ownership is persisted. It still has no periodic polling or automatic retry loop.
 
 ## Vivaldi live test
 
@@ -37,13 +46,15 @@ Not implemented in Gate 0:
 2. Open `vivaldi://extensions`.
 3. Enable Developer mode.
 4. Choose **Load unpacked** and select the `extensions/mygpt-worker-fanout/` directory.
-5. Manually open the existing `MYGPT Single Frame Worker Test` Custom GPT page.
-6. Reload that ChatGPT tab once after loading/updating the unpacked extension. This is required because Gate 0 intentionally does not request `scripting` permission for retroactive injection.
-7. Open the extension popup. Before starting, confirm the page is the intended Custom GPT and not a ChatGPT Project route.
-8. Click **Gate 0を実行** once.
-9. Expected behavior: exactly one new tab opens at the normalized `/g/<same-worker>` root. The extension does not type, attach, or send anything.
-10. Visually confirm the opened page is `MYGPT Single Frame Worker Test`.
-11. Reopen the extension popup in that tab. `Status` must be `PASS`, and `Expected` and `Observed` must show the same `/g/...` worker root.
+5. If v0.0.1 is already loaded, replace/update the files and press the extension's **Reload** button in `vivaldi://extensions`.
+6. Manually open the existing `MYGPT Single Frame Worker Test` Custom GPT page.
+7. Reload that ChatGPT tab once after loading/updating the unpacked extension. This is required because Gate 0 intentionally does not request `scripting` permission for retroactive injection.
+8. Open the extension popup. Before starting, confirm the page is the intended Custom GPT and not a ChatGPT Project route.
+9. If an old run remains, click **Gate 0状態をリセット** once.
+10. Click **Gate 0を実行** once.
+11. Expected behavior: exactly one new tab opens at the normalized `/g/<same-worker>` root. The extension does not type, attach, or send anything.
+12. Visually confirm the opened page is `MYGPT Single Frame Worker Test`.
+13. Reopen the extension popup in that tab. `Status` must be `PASS`, and `Expected` and `Observed` must show the same `/g/...` worker root.
 
 ### PASS
 
@@ -57,6 +68,7 @@ All of the following are true:
 ### FAIL / stop
 
 Do not proceed to Gate 1 if any of these occurs:
+- popup remains `AWAITING_DESTINATION` after the destination page is fully loaded;
 - popup reports `PROJECT_ROUTE_REJECTED`, `NOT_CUSTOM_GPT_ROUTE`, `WORKER_IDENTITY_MISMATCH`, or another `FAIL`;
 - destination is a different GPT or ordinary chat;
 - more than one new tab opens;
