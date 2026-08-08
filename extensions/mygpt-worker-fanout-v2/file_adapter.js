@@ -2,9 +2,17 @@
 
 (function installMygptFileAdapter(globalScope) {
   const FILE_INPUT_SELECTORS = Object.freeze([
-    'form input[type="file"]',
     'input[type="file"][accept*="image"]',
+    'form input[type="file"]',
     'input[type="file"]'
+  ]);
+
+  const ATTACHMENT_UI_SELECTORS = Object.freeze([
+    '[data-testid*="attachment"]',
+    '[data-testid*="file-preview"]',
+    '[data-testid*="upload-preview"]',
+    'img[src^="blob:"]',
+    'img[src^="data:image/"]'
   ]);
 
   function decodeDataUrl(dataUrl) {
@@ -61,13 +69,39 @@
     return null;
   }
 
-  function filenameVisible(fileName, doc) {
+  function evidenceRoot(doc) {
     const documentRef = doc || document;
-    const form = documentRef.querySelector("form");
-    const root = form || documentRef.body;
+    return documentRef.querySelector("form") || documentRef.body || documentRef.documentElement;
+  }
+
+  function filenameVisible(fileName, doc) {
+    const root = evidenceRoot(doc);
     if (!root || !fileName) return false;
     const text = root.innerText || root.textContent || "";
-    return text.includes(fileName);
+    if (text.includes(fileName)) return true;
+    const labeled = root.querySelectorAll?.("[aria-label], [title]") || [];
+    for (const node of labeled) {
+      const aria = node.getAttribute?.("aria-label") || "";
+      const title = node.getAttribute?.("title") || "";
+      if (aria.includes(fileName) || title.includes(fileName)) return true;
+    }
+    return false;
+  }
+
+  function attachmentUiCount(doc) {
+    const root = evidenceRoot(doc);
+    if (!root || !root.querySelectorAll) return 0;
+    const found = new Set();
+    for (const selector of ATTACHMENT_UI_SELECTORS) {
+      let nodes = [];
+      try {
+        nodes = root.querySelectorAll(selector);
+      } catch (_) {
+        continue;
+      }
+      for (const node of nodes) found.add(node);
+    }
+    return found.size;
   }
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
@@ -80,6 +114,7 @@
     const made = createFile(fileSpec);
     if (!made.ok) return made;
 
+    const beforeUiCount = attachmentUiCount(documentRef);
     const transfer = new DataTransfer();
     transfer.items.add(made.file);
 
@@ -93,13 +128,15 @@
       };
     }
 
-    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    // AutoGPT's proven ChatGPT path dispatches the file input's change event.
+    // Do not fire an input event first: React can remount the file input between
+    // the two events, leaving change attached to a stale node.
     input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
 
-    const timeout = Number.isFinite(options.verifyTimeout) ? options.verifyTimeout : 4000;
+    const timeout = Number.isFinite(options.verifyTimeout) ? options.verifyTimeout : 10000;
     const interval = Number.isFinite(options.verifyInterval) ? options.verifyInterval : 150;
     const startedAt = Date.now();
-    let inputEvidence = false;
+    let inputAssigned = false;
 
     while (Date.now() - startedAt < timeout) {
       if (filenameVisible(made.file.name, documentRef)) {
@@ -112,37 +149,41 @@
         };
       }
 
+      if (attachmentUiCount(documentRef) > beforeUiCount) {
+        return {
+          ok: true,
+          evidence: "visible-attachment-ui",
+          name: made.file.name,
+          size: made.file.size,
+          type: made.file.type
+        };
+      }
+
       const selected = input.files && input.files.length
         ? Array.from(input.files).find((candidate) =>
             candidate.name === made.file.name && candidate.size === made.file.size)
         : null;
-      if (selected) inputEvidence = true;
+      if (selected) inputAssigned = true;
 
       await sleep(interval);
     }
 
-    if (inputEvidence) {
-      return {
-        ok: true,
-        evidence: "input-files",
-        name: made.file.name,
-        size: made.file.size,
-        type: made.file.type
-      };
-    }
-
     return {
       ok: false,
-      reason: "FILE_ATTACHMENT_EVIDENCE_MISSING",
+      reason: "FILE_ATTACHMENT_UI_NOT_CONFIRMED",
       name: made.file.name,
-      size: made.file.size
+      size: made.file.size,
+      type: made.file.type,
+      inputAssigned
     };
   }
 
   const api = Object.freeze({
     FILE_INPUT_SELECTORS,
+    ATTACHMENT_UI_SELECTORS,
     decodeDataUrl,
     findFileInput,
+    attachmentUiCount,
     attachFile
   });
 
