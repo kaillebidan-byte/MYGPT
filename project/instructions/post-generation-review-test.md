@@ -10,22 +10,57 @@
 
 `02-motion-design.md`から今回のmotion contractを作る。
 
-時間をまたいで同じ手足が役割を持つ動作では、画像生成前にその主体を1つだけ解剖学的な左右で固定する。
+### identity anchors
+
+画像生成前にcanonical identity referenceから、そのキャラクターを別物に見せやすい特徴を3〜6個だけ`identity_anchors`として抽出する。
 
 例:
-- `active_limb: character_right_leg`
-- `support_limb: character_left_leg`
+- 頭部の固有パーツの形と配色
+- 袖の外形と長さ
+- 胴体・胸部の幅とシルエット
+- 腰飾り、房、紐、留め具の個数と接続関係
+- 裾の分割構造
 
-ユーザーが左右を指定していない場合はどちらか一方を選び、K1〜K4途中で変更しない。
+固定キャラクター辞書を作らず、その都度canonical identity referenceから選ぶ。
 
-正面主体の動作では、必要なら開始時点での画面上の位置も補助情報として保持する。
+### active limb
+
+時間をまたいで同じ手足が役割を持つ動作では、画像生成前にその主体を1つだけ固定する。
+
+人物が正面主体で、途中で身体やカメラが大きく反転しない動作では、解剖学的な右左だけに依存せず、viewer-spaceでも追跡する。
+
+内部的に次を保持する。
+
+- `active_limb_id`: `leg_A`などの論理ID
+- `support_limb_id`: `leg_B`
+- `active_limb_viewer_side_at_start`: `viewer-left`または`viewer-right`
+- `support_limb_viewer_side_at_start`: その反対側
+
+ユーザーが左右を指定していない場合はどちらか一方を選ぶ。
+
+正面主体で身体反転を伴わない場合、`leg_A`はK2〜K4でviewer-space上も同じ側の脚として追跡できるようにする。途中で鏡像反転して別の脚へ役割を移さない。
+
+身体回転によってviewer-space上の左右が変わる動作では、解剖学的な側と関節接続を優先し、viewer-spaceは補助情報として扱う。
+
+### endpoint
+
+one-shotでは`end`を具体化する。
+
+動作結果が最後まで残る必要がある場合、K4をK1へ戻さない。
+
+「一歩前へ踏み出して停止」のような動作では、K4でactive limbの足先がsupport limbより視覚的に前方へ残り、重心がsettleしていることをendへ含める。
+
+### slot state plan
+
+主要4ポーズを画像生成へ渡す前に、内部的に4スロットの状態を1行ずつ決める。
 
 例:
-- `character_right_leg = viewer-left at K1`
+- top-left: start / 両足通常接地
+- top-right: leg_Aを前方へ運ぶ
+- bottom-left: 同じleg_Aが着地または着地直前
+- bottom-right: 同じleg_Aを前に残してsettle
 
-この対応を途中で鏡像反転しない。
-
-one-shotでは`end`を明示し、動作結果が最後まで残る必要がある場合はK4をK1へ戻さない。
+画像生成モデルへはK1/K2/K3/K4という表示用ラベルではなく、top-left / top-right / bottom-left / bottom-rightの配置と各状態を渡す。
 
 ## 2. 初回生成
 
@@ -34,6 +69,18 @@ one-shotでは`end`を明示し、動作結果が最後まで残る必要があ�
 `INITIAL_BOARD`
 
 その後、portrait 2x2の主要モーションボードを1枚だけ生成する。
+
+生成用の短い指示には最低限、次を含める。
+
+- canonical identity reference
+- identity_anchors
+- 4スロットのstate plan
+- active_limb_idと必要なviewer-space対応
+- end
+- portrait 2:3相当
+- 全身、共通縮尺、中央safe gap、外周safe margin
+- キャラクター以外は均一な単色クロマ背景
+- 接地影、文字、ラベル、UI、モーションライン、未指定エフェクトなし
 
 A/B候補、別案、追加boardを同時生成しない。
 
@@ -46,21 +93,29 @@ A/B候補、別案、追加boardを同時生成しない。
 必ず実画像を見て次の7項目すべてをPASS/FAIL判定する。生成前の計画が正しかったことを生成結果のPASS根拠にしない。
 
 ### identity
-canonical identity referenceと4ポーズを比較する。顔、目、髪、頭部パーツ、頭身、体格、胴体、袖、襟、裾、靴、模様、縁取り、腰飾り、房、紐、留め具、左右非対称要素、4ポーズ間の同一性を確認する。
+canonical identity referenceと4ポーズを比較する。identity_anchorsを優先しつつ、顔、目、髪、頭部パーツ、頭身、体格、胴体、袖、襟、裾、靴、模様、縁取り、腰飾り、房、紐、留め具、左右非対称要素、4ポーズ間の同一性を確認する。
 
 ### motion_semantics
-左上→右上→左下→右下を時間順に読む。各ポーズの主動部位、active_limb、support_limb、前方の足、接地状態、重心、開始から終了までの変化を確認する。要求と矛盾する変化、主要状態の重複、終了状態への未到達があればFAIL。
+左上→右上→左下→右下を時間順に読む。各スロットがslot state planと一致するか確認する。要求と矛盾する変化、主要状態の重複、終了状態への未到達があればFAIL。
 
 ### continuity
-motion contractで固定したactive_limb、support_limb、保持側、接地側、接触主体を各ポーズで追跡する。役割が途中で左右交換されたらFAIL。左右を確実に追えない場合もPASSにしない。
+active_limb_idとsupport_limb_idを各ポーズで追跡する。
+
+正面主体で身体反転を伴わない場合は、viewer-spaceで同じ側の脚がK2→K3→K4までactive limbとして継続しているかを明示的に比較する。
+
+K2でviewer-left側の脚をleg_Aとして前へ出したなら、K3とK4でもviewer-left側の同じ脚がleg_AでなければFAILとする。viewer-rightを選んだ場合も同様。
+
+ポーズごとに「前へ出ている足」だけを見て同一脚と推測しない。左右を確実に追えない場合もPASSにしない。
 
 ### endpoint
-最後のポーズを開始ポーズと`end`の両方と比較する。one-shotでは、要求された動作結果が最後に残っていること、終了まで維持すべきcontinuityが残っていること、要求されていないのに開始姿勢へ戻っていないことを確認する。
+最後のポーズを開始ポーズと`end`の両方と比較する。
+
+one-shotでは、要求された動作結果が最後に残っていること、終了まで維持すべきcontinuityが残っていること、要求されていないのに開始姿勢へ戻っていないことを確認する。
 
 continuityまたはendpointの失敗によって要求動作全体が成立しない場合はmotion_semanticsもFAILにする。
 
 ### layout
-portrait 2x2、全身、共通縮尺、中央safe gap、外周safe margin、cropなし、セル越境なしを確認する。
+portrait 2:3相当の2x2、全身、共通縮尺、中央safe gap、外周safe margin、cropなし、セル越境なしを確認する。正方形boardはFAIL。
 
 ### chroma
 キャラクター以外が均一な単色クロマ背景か確認する。足元、袖の下、キャラクター外周、中央safe gap、外周を確認し、接地影、ドロップシャドウ、グラデーション、光だまり、床、背景模様、局所的な色差があればFAIL。
@@ -115,20 +170,27 @@ REVIEW_UNAVAILABLE
 
 motion-criticalの場合、初回boardを部分編集して姿勢だけ継ぎ足そうとしない。
 
-canonical identity referenceをidentityの正本として、motion contractを再確認し、2x2 board全体を1回だけ再生成する。
+canonical identity referenceをidentityの正本としてboard全体を1回だけ再生成する。
 
-修正時には次を短く明示する。
+修正前にslot state planを再確認し、active_limb_idを変更しない。
 
-- 初回で固定したactive_limbとsupport_limb
-- K2、K3、K4でactive_limbが同一であること
-- K4の具体的なend状態
+修正生成へ渡す内容は短く状態固有にする。
+
+- identity_anchors
+- active_limb_idとviewer-spaceでの開始側
+- top-left / top-right / bottom-left / bottom-rightのstate plan
+- K4に相当するbottom-rightの具体的なend
 - continuityまたはendpointで実画像上確認した失敗
-- identityがFAILならcanonical identityへ戻すこと
-- layout、chroma、unintended_outputのFAILがあればその確認済み失敗
+- identity、layout、chroma、unintended_outputでFAILした確認済み問題
 
-左右を「その足」「同じ足」だけで表現せず、`character_right_leg`または`character_left_leg`のように解剖学的な側を明示する。
+正面主体で反転しない動作では、修正指示に「同じ足」という曖昧な表現だけを使わない。
 
-一歩前へ出て止まる動作なら、K4でactive_limbの足先がsupport_limbより視覚的に前方へ残り、両足をK1の横並びへ戻さないことを明示する。
+例:
+`leg_A = viewer-left leg at start; keep that same viewer-left leg as the stepping leg in top-right, bottom-left, and bottom-right.`
+
+一歩前へ出て止まる動作なら、bottom-rightでleg_Aの足先がleg_Bより明確に前方へ残り、両足をstartの横並びへ戻さない。
+
+repair生成でもportrait 2:3相当を再指定する。
 
 ### B. non-motion failure only
 
