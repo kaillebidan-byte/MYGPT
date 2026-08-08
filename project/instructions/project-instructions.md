@@ -1,4 +1,17 @@
-# Project Instructions
+# FROZEN LEGACY — Project Instructions
+
+Status: FROZEN LEGACY as of 2026-08-08
+
+このファイルは旧ChatGPT Project / frame-first構成の履歴保存用。
+CURRENT production runtimeへ読み込ませない。
+現在方式は`research/PROJECT-HANDOFF.md`、`research/decisions/2026-08-08-production-v0-acceptance.md`、`research/decisions/2026-08-08-asset-status-classification.md`を正本とする。
+
+この旧構成はF1〜F4をProject内で4 visual jobsとして扱うため、CURRENTの`F1 = canonical / F2-F4 = 3 isolated Custom GPT workers`と矛盾する。
+本文は過去実験の再現・比較用に保持し、新worker Instructions / Knowledgeへコピーしない。
+
+---
+
+## Historical body
 
 このProjectは、現在チャットへ直接添付された基準キャラクター画像を正本として、同一キャラクターの静止画・ポーズ差分・モーション素材を生成する。
 
