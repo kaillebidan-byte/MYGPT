@@ -1,0 +1,222 @@
+name: temp-install-worker-fanout-v034
+on:
+  push:
+    paths:
+      - research/temp-extension-sources/v034-trigger.txt
+permissions:
+  contents: write
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Patch v0.3.4
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          root = Path('extensions/mygpt-worker-fanout-v3')
+
+          p = root/'chatgpt_adapter.js'
+          s = p.read_text()
+          s = s.replace("  const SUBMIT_SELECTOR = '#composer-submit-button';", """  const SUBMIT_SELECTOR = '#composer-submit-button';
+  const ATTACHMENT_UI_SELECTORS = Object.freeze([
+    '[data-testid*=\"attachment\"]',
+    '[data-testid*=\"file-preview\"]',
+    '[data-testid*=\"upload-preview\"]',
+    'button[aria-label*=\"Remove file\" i]',
+    'button[aria-label*=\"Remove attachment\" i]',
+    'button[aria-label*=\"削除\"]'
+  ]);""")
+          old = '''  // AutoGPT supplies the upload mechanics/spinner predicate. Translation Loop
+  // supplies the stronger positive ready evidence: a real composer-local send
+  // control must exist and be enabled. A temporarily absent React button is
+  // therefore never accepted as upload completion.
+  function uploadReady(doc = document) {
+    return !isUploading(doc) && Boolean(getTranslationLoopSendButton(doc));
+  }'''
+          new = '''  function attachmentSnapshot(doc = document) {
+    const composer = getComposer(doc);
+    if (!composer?.querySelectorAll) return { markers: 0, images: 0 };
+    const markerNodes = new Set();
+    for (const selector of ATTACHMENT_UI_SELECTORS) {
+      let nodes = [];
+      try { nodes = composer.querySelectorAll(selector); } catch (_) { continue; }
+      for (const node of nodes) markerNodes.add(node);
+    }
+    return { markers: markerNodes.size, images: composer.querySelectorAll("img").length };
+  }
+
+  function attachmentVisible(fileName, before, doc = document) {
+    const composer = getComposer(doc);
+    if (!composer) return null;
+    const text = composer.innerText || composer.textContent || "";
+    if (fileName && text.includes(fileName)) return { kind: "visible-filename" };
+    const current = attachmentSnapshot(doc);
+    if (current.markers > (before?.markers || 0)) return { kind: "attachment-marker", ...current };
+    if (current.images > (before?.images || 0)) return { kind: "attachment-image", ...current };
+    return null;
+  }
+
+  function uploadReady(fileName, before, doc = document) {
+    return !isUploading(doc) && attachmentVisible(fileName, before, doc);
+  }
+
+  async function waitForSendReady(doc = document, timeout = 10000) {
+    const button = await waitFor(() => getTranslationLoopSendButton(doc), { timeout, interval: 100 });
+    if (!button) return null;
+    return {
+      evidence: "translation-loop-send-ready",
+      testId: button.getAttribute?.("data-testid") || null,
+      ariaLabel: button.getAttribute?.("aria-label") || null,
+      type: button.getAttribute?.("type") || null
+    };
+  }'''
+          assert old in s
+          s = s.replace(old, new)
+          s = s.replace('''    const transfer = new DataTransfer();
+    transfer.items.add(made.file);''', '''    const beforeAttachment = attachmentSnapshot(doc);
+    const transfer = new DataTransfer();
+    transfer.items.add(made.file);''')
+          old = '''    // AutoGPT performs the upload; Translation Loop's send-control monitor is
+    // the final positive READY gate. Do not accept a transient missing button.
+    await sleep(250);
+    const ready = await waitFor(() => uploadReady(doc), {
+      timeout: options.uploadTimeout || 90000,
+      interval: options.uploadInterval || 250
+    });
+    if (!ready) {
+      return { ok: false, reason: "UPLOAD_READY_TIMEOUT", name: made.file.name };
+    }
+
+    return {
+      ok: true,
+      evidence: "autogpt-upload-ready",'''
+          new = '''    await sleep(250);
+    const ready = await waitFor(() => uploadReady(made.file.name, beforeAttachment, doc), {
+      timeout: options.uploadTimeout || 90000,
+      interval: options.uploadInterval || 250
+    });
+    if (!ready) {
+      return { ok: false, reason: "ATTACHMENT_UI_NOT_CONFIRMED", name: made.file.name };
+    }
+
+    return {
+      ok: true,
+      evidence: "autogpt-upload+visible-attachment",
+      attachmentUiEvidence: ready.kind,'''
+          assert old in s
+          s = s.replace(old, new)
+          s = s.replace('''    SUBMIT_SELECTOR,
+    normalizeText,''','''    SUBMIT_SELECTOR,
+    ATTACHMENT_UI_SELECTORS,
+    normalizeText,''')
+          s = s.replace('''    getTranslationLoopSendButton,
+    isUploading,''','''    getTranslationLoopSendButton,
+    attachmentSnapshot,
+    attachmentVisible,
+    isUploading,''')
+          s = s.replace('''    uploadReady,
+    editorText,''','''    uploadReady,
+    waitForSendReady,
+    editorText,''')
+          p.write_text(s)
+
+          p = root/'background.js'
+          s = p.read_text()
+          s = s.replace('const MAIN_FILES = ["page_observer.js", "chatgpt_adapter.js"];', 'const MAIN_FILES = ["page_observer.js", "translation_loop_send_guard.js", "chatgpt_adapter.js"];')
+          s = s.replace('func: () => Boolean(globalThis.MYGPTChatGPTAdapter)', 'func: () => Boolean(globalThis.MYGPTTranslationLoopSendGuard && globalThis.MYGPTChatGPTAdapter)')
+          old = '''      if (!pasted.ok) {
+        return {
+          ...pasted,
+          attachment,
+          runToken: args.runToken,
+          slotId: args.slotId,
+          submitted: false
+        };
+      }
+
+      return {'''
+          new = '''      if (!pasted.ok) {
+        return {
+          ...pasted,
+          attachment,
+          runToken: args.runToken,
+          slotId: args.slotId,
+          submitted: false
+        };
+      }
+
+      const sendReady = await adapter.waitForSendReady(document, 10000);
+      if (!sendReady) {
+        return {
+          ok: false,
+          reason: "COMPOSER_SEND_NOT_READY",
+          attachment,
+          pasted,
+          runToken: args.runToken,
+          slotId: args.slotId,
+          submitted: false
+        };
+      }
+
+      return {'''
+          assert old in s
+          s = s.replace(old, new)
+          s = s.replace('''        pasteEvidence: pasted.evidence,
+        packetChars: pasted.observedChars,''','''        pasteEvidence: pasted.evidence,
+        sendReadyEvidence: sendReady.evidence,
+        sendButton: sendReady,
+        packetChars: pasted.observedChars,''')
+          s = s.replace('''    result.attachment?.evidence === "autogpt-upload-ready" &&
+    result.insertionMethod === "autogpt-synthetic-paste" &&''','''    result.attachment?.evidence === "autogpt-upload+visible-attachment" &&
+    result.insertionMethod === "autogpt-synthetic-paste" &&
+    result.sendReadyEvidence === "translation-loop-send-ready" &&''')
+          p.write_text(s)
+
+          p = root/'manifest.json'
+          m = json.loads(p.read_text())
+          m['version'] = '0.3.4'
+          m['description'] = 'Three-slot MYGPT Custom GPT preparer using AutoGPT upload/paste plus visible attachment evidence and Translation Loop final send-readiness.'
+          p.write_text(json.dumps(m, ensure_ascii=False, indent=2) + '\n')
+
+          p = root/'tests/test_chatgpt_adapter.js'
+          s = p.read_text().replace('assert.match(source, /autogpt-upload-ready/);', 'assert.match(source, /autogpt-upload\\+visible-attachment/);\nassert.match(source, /function attachmentVisible/);\nassert.match(source, /function waitForSendReady/);\nassert.match(source, /translation-loop-send-ready/);')
+          p.write_text(s)
+
+          p = root/'tests/test_v3_safety.js'
+          s = p.read_text().replace('assert.ok(source.includes("autogpt-upload-ready"));', 'assert.ok(source.includes("autogpt-upload+visible-attachment"));\nassert.ok(source.includes("translation-loop-send-ready"));\nassert.ok(source.includes("COMPOSER_SEND_NOT_READY"));')
+          s = s.replace('MYGPT Worker Fanout v3.3 safety contract: PASS', 'MYGPT Worker Fanout v3.4 safety contract: PASS')
+          p.write_text(s)
+
+          p = root/'README.md'
+          s = p.read_text()
+          s = s.replace('v0.3.3 STATIC PASS candidate — paragraph readback + Translation Loop upload-ready guard live re-test pending', 'v0.3.4 STATIC PASS candidate — corrected READY ordering live re-test pending')
+          s = s.replace('This is the stripped-AutoGPT rebuild. v0.3.3 keeps the proven MAIN-world AutoGPT upload/paste path and replaces only the weak READY/readback checks.', 'This is the stripped-AutoGPT rebuild. v0.3.4 keeps the proven MAIN-world AutoGPT upload/paste path and fixes the READY check ordering.')
+          note = '''\n## v0.3.4 live-fix\n\nv0.3.3 incorrectly required an enabled send button before prompt insertion, which can deadlock in PREPARING. v0.3.4 restores the correct order: AutoGPT file change -> visible attachment UI + no upload spinner -> synthetic paste -> Translation Loop enabled send button -> READY.\n\nAttachment completion now requires positive composer-local UI evidence (filename, attachment marker, or newly added image) instead of button state. Translation Loop send-button monitoring is used only as the final combined attachment+prompt READY gate.\n\n'''
+          s = s.replace('\n## v0.3.3 live-fix\n', note + '## v0.3.3 live-fix\n')
+          s = s.replace('## v0.3.3 live scope', '## v0.3.4 live scope')
+          s = s.replace('6. wait for AutoGPT upload completion plus Translation Loop composer-send readiness;\n7. paste a distinct packet with a synthetic paste event;\n8. verify normalized readback;\n9. require `submitted:false` and no active generation;\n10. final phase = `READY` only when all three slots pass.', '6. wait for visible attachment UI plus no upload spinner;\n7. paste a distinct packet with a synthetic paste event;\n8. verify normalized paragraph readback;\n9. require a real enabled composer send control via Translation Loop, while keeping `submitted:false`;\n10. require no active generation and final phase = `READY` only when all three slots pass.')
+          s = s.replace('- attachment: `autogpt-upload-ready` (now gated by Translation Loop enabled-send readiness)', '- attachment: `autogpt-upload+visible-attachment`\n- final READY gate: `translation-loop-send-ready`')
+          s = s.replace('but v0.3.3 does not trigger submission', 'but v0.3.4 does not trigger submission')
+          p.write_text(s)
+          PY
+      - name: Static tests
+        run: |
+          set -e
+          cd extensions/mygpt-worker-fanout-v3
+          python -m json.tool manifest.json >/dev/null
+          for f in *.js tests/*.js; do node --check "$f"; done
+          for t in tests/*.js; do node "$t"; done
+      - name: Commit and self-clean
+        run: |
+          rm .github/workflows/temp-install-worker-fanout-v034.yml
+          rm -f research/temp-extension-sources/v034-trigger.txt
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add extensions/mygpt-worker-fanout-v3 .github/workflows/temp-install-worker-fanout-v034.yml research/temp-extension-sources/v034-trigger.txt
+          git commit -m "Worker Fanout v0.3.4: correct READY gate ordering"
+          git push origin HEAD:main
