@@ -78,6 +78,17 @@ However, it is strong prior-art evidence that:
 
 This invalidates the earlier broad claim that the user's no-API constraint closes browser-side orchestration.
 
+## Terms / safety boundary
+
+OpenAI's current consumer Terms of Use prohibit automatically or programmatically extracting data or Output and prohibit reverse engineering / bypassing protective measures.
+
+Therefore:
+- do not treat hidden ChatGPT backend endpoints or automated output scraping/downloading as an accepted production route
+- UI automation research should focus first on ordinary visible actions such as opening isolated chats, selecting the GPT, attaching the canonical, and submitting the local packet
+- automatic collection/extraction of generated outputs requires separate terms review before production use
+
+This boundary is one reason to prefer visible UI-level automation over reverse-engineered web calls.
+
 ## Reopened candidate — N3-B1 local browser automation
 
 Goal:
@@ -119,7 +130,7 @@ Do not assume hidden/internal ChatGPT backend endpoints are stable production AP
 ### B1-b — internal-web-call techniques only as research evidence
 
 Community projects may call ChatGPT web endpoints directly using logged-in browser state.
-Treat that only as evidence of feasibility until current behavior, account safety, file/image support, and stability are verified.
+Treat that only as evidence of feasibility until current behavior, account safety, file/image support, stability, and terms compatibility are verified.
 Do not make it production architecture merely because old tooling once worked.
 
 ## Acceptance test for N3-B1
