@@ -1,6 +1,7 @@
 # Project内の画像参照・キャラクター生成メモ
 
-調査日: 2026-08-07
+初回調査日: 2026-08-07
+更新日: 2026-08-08
 
 MYGPTの目的に近い「同じキャラクターを複数回生成する」用途へ絞った調査メモ。
 
@@ -15,7 +16,7 @@ MYGPTの目的に近い「同じキャラクターを複数回生成する」用
 
 この結果から、本番ではProject Sources内の画像だけをキャラクター正本の受け渡し経路として使わない。
 
-基準画像は、画像生成を行う現在のチャットへ直接添付する。Project Sourcesは同一性判断、動作設計、2×2出力条件などのテキスト資料へ使う。
+基準画像は、画像生成を行う現在のチャットへ直接添付する。Project Sourcesは同一性判断、動作設計等のテキスト資料へ使う。
 
 この試験は「Project Sourcesの画像が常に視覚参照不能」という一般仕様を証明するものではない。静止画では参照できたため、現時点のモーション生成経路に本番信頼性がないという判断として記録する。
 
@@ -39,7 +40,7 @@ Christy TuckerのChatGPT画像生成に関するLinkedIn議論で、利用者Sco
 Source:
 https://www.linkedin.com/posts/christytucker_like-many-ld-folks-ive-been-experimenting-activity-7333144599097417729-Ksso
 
-これは公式推奨ではなく個人の実践例。MYGPTには現時点で正面正本しかなく、未設定の別角度を新規作成して正本化する理由はないため、本番要件には採用しない。
+これは公式推奨ではなく個人の実践例。MYGPTには現時点で高解像度の正面canonicalがあり、未設定の別角度を新規作成して正本化する理由はないため、本番要件には採用しない。
 
 ## 3. 各生成でreference imageを再添付する実践例
 
@@ -88,8 +89,18 @@ baseline → surprised expression
 
 これにより、生成Aの小さな崩れを生成Bが継承し、さらに生成Cへ累積させる連鎖を避ける。
 
-## 6. 2×2キーポーズとの関係
+## 6. 旧2×2結論はSUPERSEDED
 
-Projectへ移行しても、画像生成モデルへ厳密な最終ストリップを直接描かせず、4つの主要キーポーズを2×2で生成し、後段で分離・正規化する方針は維持する。
+2026-08-07時点では、4つの主要キーポーズを画像生成モデルに直接2×2で作らせ、後段で分離・正規化する方針を候補としていた。
 
-画像参照の実機結果と、2×2キーポーズ自体の品質問題は分けて扱う。
+その後の2026-08-08実機試験でdirect 2×2方式には、active limb左右交換、endpoint復帰、identity drift、divider / label / shadow、chroma不均一等が繰り返し確認された。
+さらにframe-firstへ移行した後も、full motion orchestration contextでは各単独frame callが2×2 sequence sheetへ崩れる現象を確認した。
+
+したがって、このファイルの旧「2×2キーポーズ維持」結論は現行production判断では使わない。
+
+現行正本:
+- `../MOTION-GENERATION-EXPERIMENT-LOG.md`
+- `../incidents/2026-08-08-frame-first-same-turn-sheet-collapse.md`
+- `imagegen-orchestration-context.md`
+
+現在は、まず`1 image call = 1 portrait`を安定させ、その後にPython compose等の後処理へ進む方向を検証している。
