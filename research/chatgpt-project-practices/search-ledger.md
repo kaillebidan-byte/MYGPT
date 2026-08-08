@@ -220,6 +220,45 @@ MYGPTへの新候補仮説:
 
 ---
 
+### R05 — single-frame hand placement relative to a visible landmark
+Status: PARTIAL — no documented guarantee found
+
+調査日: 2026-08-08
+
+調査目的:
+W2でhand shapeは改善したが、`胸の花紋の少し下 / 明確な隙間 / 重ねない`というtext-only spatial constraintでも指先が花紋へ近づきすぎたため、次のlocal-packet refinement前に公式OpenAI資料で既存の位置指定原則を確認する。
+
+主要検索語:
+
+```text
+site:developers.openai.com/cookbook image generation prompting guide spatial relationship hands relative position landmark
+site:developers.openai.com image generation prompt explicit spatial relationship position relative to object hands
+site:developers.openai.com/cookbook/examples/multimodal/image-gen-models-prompting-guide hands pose spatial relationship exact placement
+```
+
+確認した一次資料:
+- OpenAI Developers / GPT Image 2 entry and image-generation guidance
+- 既にR03で確認済みの OpenAI Cookbook `GPT Image Generation Models Prompting Guide`
+
+確認できたこと:
+- 既存OpenAI guidanceは、長い複雑promptへ一度に条件を積むより、working promptからsmall/single-change iterationで評価する方向を支持する。
+- 人物のpose/action/handsは具体的に書く方針と整合する。
+- GPT Image 2はinstruction followingとhigh-fidelity image inputを主要能力としている。
+
+確認できなかったこと:
+- ChatGPT / GPT Imageで、textだけから「手の最上端を胸紋の最下端より一定距離下へ置く」といった厳密なlandmark spacingを保証する公式機構。
+- `明確な隙間`や自然言語距離表現のどれが最も再現性が高いかという公式best practice。
+
+MYGPTへの意味:
+- W2の位置FAILに対してworker architectureやKnowledgeを変える根拠はない。
+- 次に試すなら、local packetのspatial relationだけをより強いwhole-hand / non-overlap / visible-gap表現へ変更するsingle-variable testが妥当。
+- それでも位置精度が足りなければ、textをさらに積むよりsingle-pose visual guide / local edit等の別control channelへ移る判断材料になる。
+
+同じ一般検索は繰り返さない。
+次に検索するなら、ChatGPT Imagesでlandmark-relative poseをvisual guideで制御した実機例という別角度にする。
+
+---
+
 ## Web調査運用ルール
 
 今後Web検索したturnでは、MYGPTの設計判断に使った情報だけをこの台帳かtopic noteへ追記する。
