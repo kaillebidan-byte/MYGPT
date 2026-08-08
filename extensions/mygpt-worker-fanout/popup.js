@@ -25,6 +25,8 @@ const gate1ErrorEl = document.getElementById("gate1Error");
 const gate1InsertButton = document.getElementById("gate1Insert");
 const gate1ResetButton = document.getElementById("gate1Reset");
 
+let lastRenderedAt = 0;
+
 function formatError(error) {
   if (!error) {
     return "";
@@ -33,6 +35,16 @@ function formatError(error) {
 }
 
 function renderState(state) {
+  const incomingUpdatedAt = Number.isFinite(state && state.updatedAt)
+    ? state.updatedAt
+    : 0;
+  if (incomingUpdatedAt && incomingUpdatedAt < lastRenderedAt) {
+    return;
+  }
+  if (incomingUpdatedAt) {
+    lastRenderedAt = incomingUpdatedAt;
+  }
+
   const gate1 = state && state.gate1 ? state.gate1 : { status: "IDLE" };
 
   statusEl.textContent = state && state.status ? state.status : "UNKNOWN";
@@ -162,6 +174,17 @@ gate1ResetButton.addEventListener("click", async () => {
   } catch (error) {
     gate1ErrorEl.textContent = error instanceof Error ? error.message : String(error);
   }
+});
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "session") {
+    return;
+  }
+  const change = changes && changes.gate0State;
+  if (!change || !change.newValue) {
+    return;
+  }
+  renderState(change.newValue);
 });
 
 refreshState().catch((error) => {
