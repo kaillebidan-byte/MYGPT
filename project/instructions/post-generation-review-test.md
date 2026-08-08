@@ -1,8 +1,8 @@
-# 一時検証モード: post-generation review / split-cell repair / re-audit
+# 一時検証モード: post-generation review / split repair / canonical compose
 
 このファイルは実験用Project Instructions。通常の`04-imagegen-workflow.md`より優先する。
-初回は2×2主要boardを1枚生成する。FAIL後は2×2全体を再生成せず、raw boardを4セルへ機械分割し、必要なセルだけを個別repairしてPythonで再合成する。
-同一ターン内で「生成→視覚レビュー→機械監査→分割repair→再合成→再監査→初回比較→採用」まで行う。
+初回は2×2主要boardを1枚生成する。FAIL後は2×2全体をそのまま再生成して採用せず、repair jobをK1〜K4単位へ分け、必要セルだけを最終boardへ採用する。
+同一ターン内で「生成→実画像レビュー→機械監査→repair job→セル抽出/準備→Python再合成→再監査→初回比較→採用」まで行う。
 
 ## 0. 終了条件
 
@@ -13,7 +13,7 @@
 2. 初回`MACHINE_AUDIT`が`IMAGE_UNAVAILABLE / EXECUTION_UNAVAILABLE / ERROR`
 3. 初回7項目が全PASSで`SELECTED_BOARD stage:INITIAL`
 4. `AUDIT_SOURCE_CHECK status:UNAVAILABLE`
-5. split / composeに実エラーが発生し、その実エラーを報告したとき
+5. split / prepare / composeに実エラーが発生し、その実エラーを報告したとき
 6. repair後に`REPAIR_DELTA`と最終`SELECTED_BOARD`を出した後
 
 ## 1. motion contract
@@ -36,11 +36,11 @@ portrait 2:3相当の2×2主要motion boardを1枚だけ生成する。
 
 生成指示にはcanonical reference、identity anchors、slot state plan、active/support limb、end、全身、共通縮尺、中央safe gap、外周safe margin、均一単色クロマ背景を含める。
 グリッド、枠、文字、ラベル、接地影、床、モーションライン、未指定エフェクトは禁止。
-未加工画像を`raw INITIAL_BOARD`として保持し、以後の監査・splitは必ずrawを使う。
+未加工画像を`raw INITIAL_BOARD`として保持する。監査・splitは必ずrawを使う。
 
 ## 3. INITIAL_VISUAL_REVIEW
 
-raw INITIAL_BOARDを見て7項目を必ず判定する。
+raw INITIAL_BOARDそのものを見て必ず次を判定する。
 
 - identity
 - motion_semantics
@@ -50,12 +50,12 @@ raw INITIAL_BOARDを見て7項目を必ず判定する。
 - chroma
 - unintended_output
 
-identityはcanonical referenceと4ポーズ相互の両方を比較する。顔、髪、頭部部品、体格、胴体、袖、裾、靴、模様、腰飾り、房、紐、留め具、左右非対称部品の増減・形状・接続差を見る。主要固有部品が変わっていれば似ていてもFAIL。
-motion_semanticsは左上→右上→左下→右下をslot state planと照合する。
-continuityはactive/support limbを接続関係まで追う。
+identityはcanonical referenceと4ポーズ相互の両方で比較する。顔、目、髪、頭部固有部品、体格、胴体シルエット、袖、裾、靴、模様、腰飾り、房、紐、留め具、左右非対称部品の増減・形状・接続を見る。主要固有部品が変わっていれば似ていてもPASSにしない。
+motion_semanticsは左上→右上→左下→右下をslot_state_planと照合する。
+continuityはactive/support limb等を身体への接続まで追う。
 endpointはK4を`end`と開始姿勢の両方に照合する。
-layoutはportrait、全身、safe gap、外周、crop、セル越境を見る。
-chromaは影、濃淡、床、gradientを見る。
+layoutはportrait 2:3、全身、safe gap、外周余白、crop、セル越境を見る。
+chromaは影、背景濃淡、床、gradientを見る。
 unintended_outputは文字、ラベル、枠、grid、矢印、UI等を見る。
 
 ```text
@@ -71,24 +71,17 @@ issues:
 - 実画像で確認した問題
 ```
 
-視覚確認できなければ`REVIEW_UNAVAILABLE`。それ以外は直ちにMACHINE_AUDITへ進む。
-
 ## 4. MACHINE_AUDIT / INITIAL_REVIEW
 
-GitHubの現在の`audit/scripts/machine_audit_board.py`を取得し、raw INITIAL_BOARD実ファイルへ実行する。
-canonical reference、別画像、stamped copyを監査しない。JSONを推測しない。
+raw INITIAL_BOARDの実ファイルへ、このターンでGitHubから取得した
+`audit/scripts/machine_audit_board.py`
+を実行する。canonical reference、別画像、表示用コピーを監査しない。実ファイルを渡せなければ実行済みにしない。
 
-`python audit/scripts/machine_audit_board.py <raw> --output <json>`
-
-成功時は`MACHINE_AUDIT status:RAN`と主要数値・true flagを出す。
-実画像不可→`IMAGE_UNAVAILABLE`、コード実行不可→`EXECUTION_UNAVAILABLE`、取得/実行失敗→`ERROR`。この3状態だけ終了。
-
-RANなら統合する。
-
-- wrong_aspect / outer_edge_contact / center_*_contamination → layout
-- border_not_uniform / background_not_uniform / shadow_like_background → chroma
-- divider_like_*_white_band → unintended_output
-- machine flagがfalseでも目視FAILを打ち消さない
+成功時は`MACHINE_AUDIT status:RAN`と主要値・true flagを出す。
+`wrong_aspect / outer_edge_contact / center_*_contamination`→layout。
+`border_not_uniform / background_not_uniform / shadow_like_background`→chroma。
+`divider_like_*_white_band`→unintended_output。
+machine flagがfalseでも目視FAILを打ち消さない。
 
 ```text
 INITIAL_REVIEW
@@ -104,21 +97,15 @@ issues:
 - 確認したFAIL
 ```
 
-続けて`stamp_review_board.py`で表示専用`review_initial_*.png`を作る。rawは変更しない。
-全PASSなら`SELECTED_BOARD stage:INITIAL reason:initial_pass`で終了。FAILなら次へ進む。
+全PASSなら`SELECTED_BOARD stage:INITIAL reason:initial_pass`で終了する。
 
 ## 5. AUDIT_SOURCE_CHECK / REPAIR_PRESERVE
 
-FAIL時だけGitHubの`project/sources/production/05-post-generation-audit.md`を取得する。
+初回FAIL時だけGitHubの
+`project/sources/production/05-post-generation-audit.md`
+を取得する。LOADEDなら今回のFAILへ直接使う規則だけを示す。
 
-```text
-AUDIT_SOURCE_CHECK
-status: LOADED / UNAVAILABLE
-applied_rules:
-- 今回のFAILへ直接適用する規則だけ
-```
-
-UNAVAILABLEなら終了。LOADEDなら初回PASS項目を具体的な維持条件へ変換する。
+INITIAL_REVIEWでPASSだった項目は、raw INITIAL_BOARDで成立していた具体的状態へ変換する。
 
 ```text
 REPAIR_PRESERVE
@@ -126,96 +113,96 @@ items:
 - <PASS項目>: <壊してはいけない具体的状態>
 ```
 
-FAIL項目をpreserveへ混ぜない。
+FAIL項目はpreserveへ混ぜない。
 
-## 6. REPAIR_SPLIT
+## 6. REPAIR_SPLIT / CELL_REPAIR_PLAN
 
-GitHubの現在の`audit/scripts/split_repair_board.py`を取得し、raw INITIAL_BOARDをK1〜K4へ機械分割する。
+`audit/scripts/split_repair_board.py`でraw INITIAL_BOARDをK1〜K4へ機械分割しmetadataを保存する。
 
-`python audit/scripts/split_repair_board.py <raw-initial> --output-dir <dir>`
-
-出力されたK1/K2/K3/K4とmetadata以外を推測で作らない。
-
-```text
-REPAIR_SPLIT
-status: RAN
-source: <raw INITIAL path>
-cells: K1,K2,K3,K4
-metadata: <path>
-```
-
-split失敗時だけ実エラーを出して終了する。
-
-## 7. CELL_REPAIR_PLAN
-
-初回FAILを「どのセルの何を変える必要があるか」へ割り当てる。
-各セルを`KEEP_RAW`または`REPAIR`にする。問題がないセルを再生成しない。
+各セルを`KEEP_RAW`または`REPAIR`にする。
 
 ```text
 CELL_REPAIR_PLAN
-K1: KEEP_RAW / REPAIR
-  change: <修正対象 or none>
-  lock: <維持するpose/state>
-K2: ...
-K3: ...
-K4: ...
+K1:
+  action: KEEP_RAW / REPAIR
+  change:
+  - <直す状態>
+  lock:
+  - <維持する状態>
 ```
 
-規則:
+一般則:
 
-- identityの正本は常にcanonical reference
-- poseの修正元は当該raw split cell
-- motion/continuityの時間文脈はmotion contractとraw INITIAL_BOARD、必要なら隣接セル
-- 隣接セルや修正版をidentity正本へ昇格しない
-- `REPAIR_PRESERVE`に関係するセル状態は`lock`へ入れる
-- layout/chroma/unintended_outputのPASS状態も壊さない
-- 変更不要セルはsplitしたrawセルをそのまま最終合成へ使う
+- identity FAIL: driftがあるセルだけREPAIR。全セルなら全セル。
+- motion_semantics FAIL: 誤ったslot stateのセル。
+- continuity FAIL: 役割が切り替わった境界を特定し、必要最小限のセル。
+- endpoint FAIL: 原則K4。
+- layout/chroma/unintended_outputの局所FAIL: 該当セル。
+- 問題のないセルを「念のため」で再生成しない。
+- PASS状態は該当セルの`lock`へ具体化する。
 
-## 8. REPAIR_CELLS
+## 7. REPAIR_JOB K1〜K4
 
-`REPAIR`指定セルだけを1セルずつ別々に生成/編集する。2×2 boardを再生成しない。
-各jobはportrait 2:3の単独全身ポーズ1枚。文字・Kラベル・枠・影・床・未指定エフェクトは禁止。
+REPAIRセルごとに別jobを1回だけ行う。理想出力は人物1体の単独portrait 2:3ポーズだが、画像生成側が2×2 boardを返しても直ちに失敗扱いにしない。
 
-各セルでは最低限次を渡す。
+参照の役割:
 
-1. canonical identity reference
-2. 当該raw split cellをrepair target
-3. そのセルの`change`
-4. そのセルの`lock`
-5. 必要なmotion contract / 隣接状態
-6. INITIAL MACHINE_AUDITの`key_hex`を背景目標色
+- canonical identity reference: identity正本
+- raw INITIAL_BOARD: motion全体の視覚参照
+- motion contract / 隣接slot: 時間関係とcontinuity
+- split cell: repair targetとして使える場合のみ使用
 
-修正対象以外を新しく設計しない。各セルのrepairは1回だけ。セルrepairの再試行は禁止。
+重要: Pythonで作ったsplit cellが画像生成toolへ実際の画像入力として渡っていない場合、「split cellを視覚参照した」と主張しない。path名を文章で書くだけでは視覚参照にならない。その場合はcanonical reference、raw INITIAL_BOARD、対象slotの状態記述でrepairする。
 
-本文には各生成直前に`REPAIR_CELL K1`等と出す。
-未加工出力を`raw REPAIR_K1`等として保持する。
+repair指示にはcanonical anchors、対象slot、change、lock、必要なactive/support limb、end、初回`key_hex`、全身、影・床・文字・枠・UI・未指定エフェクト禁止を含める。
+
+## 8. REPAIR_OUTPUT_PREPARE
+
+各repair jobの実画像を見て出力形式を判定する。
+
+- 人物1体の単独ポーズ → `mode: cell`
+- 4ポーズの2×2 board → `mode: board`
+- その他の形式 → `REPAIR_CELL_OUTPUT_INVALID`として終了
+
+GitHubの`audit/scripts/prepare_repair_cell.py`を使う。
+
+REPAIRセル:
+```text
+python prepare_repair_cell.py <repair-output> --slot K# --mode <cell-or-board> \
+  --target-key <INITIAL key_hex> --output prepared_K#.png
+```
+
+`mode: board`なら、そのrepair job全体を採用せず、対象K#の象限だけを抽出する。
+
+KEEP_RAWセル:
+splitしたrawセルへ`mode: cell`を使い、同じく512×768へ準備する。
+
+`prepare_repair_cell.py`は縦横比を歪めず、512×768のクロマcanvasへfitする。近似key色以外の影や濃淡を勝手に消して監査を回避しない。
 
 ## 9. REPAIR_COMPOSE
 
-GitHubの現在の`audit/scripts/compose_repair_board.py`を取得する。
-各Kについて、`REPAIR`ならraw repaired cell、`KEEP_RAW`ならsplit raw cellを入力し、metadataの元2×2幾何へPythonで再合成する。
-
-`python audit/scripts/compose_repair_board.py --metadata <metadata> --cells <K1> <K2> <K3> <K4> --output <raw-repair-board>`
-
-画像生成モデルに最終2×2配置をさせない。合成結果を`raw REPAIR_BOARD`とする。
+GitHubの`audit/scripts/compose_repair_board.py`でprepared K1〜K4を再合成する。
 
 ```text
-REPAIR_COMPOSE
-status: RAN
-output: <raw REPAIR_BOARD path>
+python compose_repair_board.py \
+  --metadata <split-metadata> \
+  --cells prepared_K1.png prepared_K2.png prepared_K3.png prepared_K4.png \
+  --output raw_repair_board.png
 ```
 
-compose失敗時だけ実エラーを出して終了する。
+最終boardは初回boardの誤ったgeometryを継承しない。既定出力は1024×1536、各セル512×768。
+初回`wrong_aspect`でも、再合成によって正規2:3へ戻せる。
+画像生成モデルへ最終2×2配置を任せない。
 
-## 10. POST_REPAIR
+## 10. POST_REPAIR_REVIEW
 
-raw REPAIR_BOARDを同じ7項目で視覚レビューし、同じmachine auditを再実行する。初回JSONを再利用しない。
+合成された`raw REPAIR_BOARD`そのものを同じ7項目で視覚レビューし、同じmachine auditを実行する。初回JSONを再利用しない。
 
 ```text
 POST_REPAIR_MACHINE_AUDIT
 status: RAN / IMAGE_UNAVAILABLE / EXECUTION_UNAVAILABLE / ERROR
 mechanical_flags:
-- RAN時のみtrue flag
+- true flag
 
 POST_REPAIR_REVIEW
 identity: PASS / FAIL
@@ -226,19 +213,16 @@ layout: PASS / FAIL
 chroma: PASS / FAIL
 unintended_output: PASS / FAIL
 overall: PASS / FAIL
-repair_mode: split_cell_repair
-repaired_cells:
-- <K or none>
+repair_mode: split_cell_compose
 issues:
 - 残った問題
 ```
 
 追加repairは禁止。
-続けて`stamp_review_board.py`で表示専用`review_repair_*.png`を作る。
 
 ## 11. REPAIR_DELTA / SELECTED_BOARD
 
-INITIAL_REVIEWとPOST_REPAIR_REVIEWを7項目ごとに比較する。
+INITIAL_REVIEWとPOST_REPAIR_REVIEWの7項目を比較する。
 
 - fixed = FAIL→PASS
 - remaining = FAIL→FAIL
@@ -248,7 +232,7 @@ INITIAL_REVIEWとPOST_REPAIR_REVIEWを7項目ごとに比較する。
 採用規則:
 
 1. REPAIR overall PASS → IMPROVED / REPAIR
-2. regressedあり → WORSE / INITIAL
+2. regressedが1件以上 → WORSE / INITIAL
 3. regressionなし、fixedあり → IMPROVED / REPAIR
 4. regressionなし、fixedなし → NO_CHANGE / INITIAL
 
@@ -268,8 +252,9 @@ selected_board: INITIAL / REPAIR
 SELECTED_BOARD
 stage: INITIAL / REPAIR
 reason: repair_pass / no_regression_and_fixed / regression_detected / no_change
-review_copy: <対応するreview_*.png>
 ```
+
+修正版だからという理由だけでは採用しない。ここで終了する。
 
 ## 12. 固定実行順序
 
@@ -277,16 +262,15 @@ review_copy: <対応するreview_*.png>
 → `INITIAL_VISUAL_REVIEW`
 → `MACHINE_AUDIT`
 → `INITIAL_REVIEW`
-→ `REVIEW_STAMP(INITIAL)`
-→ 初回PASSなら`SELECTED_BOARD(INITIAL)`
+→ 初回PASSなら`SELECTED_BOARD`
 → `AUDIT_SOURCE_CHECK`
 → `REPAIR_PRESERVE`
 → `REPAIR_SPLIT`
 → `CELL_REPAIR_PLAN`
-→ `REPAIR_CELL`（必要セルだけ）
+→ 必要な`REPAIR_JOB K#`
+→ 各`REPAIR_OUTPUT_PREPARE`
 → `REPAIR_COMPOSE`
 → `POST_REPAIR_MACHINE_AUDIT`
 → `POST_REPAIR_REVIEW`
-→ `REVIEW_STAMP(REPAIR)`
 → `REPAIR_DELTA`
 → `SELECTED_BOARD`
