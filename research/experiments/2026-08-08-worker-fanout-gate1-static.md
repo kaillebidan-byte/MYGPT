@@ -1,7 +1,7 @@
 # MYGPT Worker Fanout — Gate 1 implementation record
 
 Date: 2026-08-08 / 2026-08-09 JST
-Status: **v0.1.1 STATIC RECHECK REQUIRED / VIVALDI LIVE TEST PENDING**
+Status: **v0.1.1 STATIC PASS / VIVALDI LIVE TEST PENDING**
 
 ## Prior accepted gate
 
@@ -139,7 +139,7 @@ Manifest permissions remain exactly:
 
 No `tabs`, `scripting`, `alarms`, `downloads`, or `declarativeNetRequest` permission is added.
 
-Gate 1 production source must contain no:
+Gate 1 production source contains no:
 - internal `/backend-api` access;
 - Bearer capture;
 - fetch/XHR/WebSocket interception;
@@ -152,23 +152,38 @@ Gate 1 production source must contain no:
 - response scraping/download;
 - automatic retry/rate-driving.
 
-## Next verification
+## v0.1.1 static verification
 
-Before another Vivaldi run, v0.1.1 must pass local static checks:
+The packaged v0.1.1 build passed:
 
 ```text
-python -m json.tool manifest.json
-node --check route_adapter.js
-node --check prompt_stacker_insert_runner.js
-node --check content.js
-node --check background.js
-node --check popup.js
-node tests/test_route_adapter.js
-node tests/test_prompt_stacker_insert_runner.js
-node tests/test_gate1_safety.js
+python -m json.tool manifest.json                         PASS
+node --check route_adapter.js                            PASS
+node --check prompt_stacker_insert_runner.js             PASS
+node --check content.js                                  PASS
+node --check background.js                               PASS
+node --check popup.js                                    PASS
+node tests/test_route_adapter.js                         PASS
+node tests/test_prompt_stacker_insert_runner.js          PASS
+node tests/test_gate1_safety.js                          PASS
+chrome.tabs.create occurrence count = 1                  PASS
+manifest permissions = ["storage"]                      PASS
+forbidden production-source scan                         PASS
 ```
 
-Then perform only Gate 0 + Gate 1 insertion-only live verification.
+Packaged test ZIP SHA-256:
+
+```text
+b41409ee1ba9e75f2053acc5408ff860d4e14617f23043729b921c9267acc602
+```
+
+## CURRENT stopping point
+
+**Gate 1 v0.1.1 = STATIC PASS. Gate 1 Vivaldi insertion-only live test = pending.**
+
+The next browser run must verify both:
+- Gate 0 popup updates live to PASS / Observed without requiring close-reopen;
+- Gate 1 inserts the exact default packet as an unsent draft using `translation-loop-prompt-stacker-insert-only`.
 
 Do not start canonical attachment or controlled submit until Gate 1 live PASS.
 
