@@ -6,16 +6,18 @@
 
 ## 1. 監査の前提
 
-監査対象は実際に生成されたboardである。
+監査対象は実際に生成されたraw boardである。
 
 次を同時に参照する。
 
 - 現在のチャットへ直接添付されたcanonical identity reference
 - 生成前に決めたmotion contract、identity anchors、slot state plan、active/support limb、end
-- 実際に生成されたboard
+- 実際に生成されたraw board
 - 実行できた場合は`audit/scripts/machine_audit_board.py`のJSON結果
 
 生成前の計画が正しいことを、生成画像が正しいことの根拠にしない。
+
+表示用にスタンプを付けた派生コピーは監査・repair入力へ使わない。
 
 ## 2. 視覚監査と機械監査の責務
 
@@ -25,7 +27,7 @@
 - `motion_semantics`
 - `continuity`
 - `endpoint`
-- 接地影など、機械判定だけではキャラクター本体と分離しにくい`chroma`問題
+- 非常に薄い接地影など、機械判定だけでは取りこぼす可能性がある`chroma`問題
 
 機械監査は次の機械的事実を補助判定する。
 
@@ -34,6 +36,8 @@
 - 中央縦横safe gapへの非クロマ画素侵入
 - 中央の白いdivider/gridに相当する帯
 - borderのクロマ色均一性
+- 高信頼foreground周辺を除外した背景領域の色ずれ
+- key色とほぼ同色相のまま暗くなったshadow-like背景画素
 - 各象限のforeground bbox
 
 機械監査をidentity、motion semantics、limb continuity、endpointの判定へ使わない。
@@ -102,7 +106,12 @@ one-shotの最後は`end`を満たす必要がある。
 
 crop、セル越境、正方形boardはFAIL。
 
-機械監査で`wrong_aspect`、`outer_edge_contact`、`center_vertical_contamination`、`center_horizontal_contamination`のいずれかがtrueなら、対応するlayout問題として扱う。
+機械監査で次がtrueならlayoutのFAIL根拠へ追加する。
+
+- `wrong_aspect`
+- `outer_edge_contact`
+- `center_vertical_contamination`
+- `center_horizontal_contamination`
 
 ## 9. chroma
 
@@ -110,15 +119,26 @@ crop、セル越境、正方形boardはFAIL。
 
 接地影、ドロップシャドウ、床、グラデーション、光だまり、背景模様、局所的な明度差があればFAIL。
 
-機械監査で`border_not_uniform`がtrueならchroma FAILの根拠にできる。
+機械監査で次がtrueならchromaのFAIL根拠へ追加する。
 
-機械監査がborderをPASSしても、足元などに接地影が視覚確認できる場合はchromaをPASSにしない。
+- `border_not_uniform`
+- `background_not_uniform`
+- `shadow_like_background`
+
+`background_not_uniform`は、高信頼foreground周辺のアンチエイリアス帯を除外した背景領域で、key色から外れた画素が一定割合以上あることを示す。
+
+`shadow_like_background`は、key色とほぼ同じ色相方向を保ちながら暗くなった背景画素が一定割合以上あることを示し、接地影や背景濃淡の補助検出として使う。
+
+機械監査がPASSでも、目視で確認できる接地影や濃淡を打ち消してはいけない。非常に薄い影は目視判定を優先する。
 
 ## 10. unintended output
 
 文字、K1-K4ラベル、説明文、UI、枠線、矢印、モーションライン、記号、未指定エフェクトがあればFAIL。
 
-機械監査で`divider_like_vertical_white_band`または`divider_like_horizontal_white_band`がtrueなら、中央divider/gridの機械的証拠として扱う。
+機械監査で次がtrueならunintended_outputのFAIL根拠へ追加する。
+
+- `divider_like_vertical_white_band`
+- `divider_like_horizontal_white_band`
 
 ## 11. repair方式
 
@@ -145,3 +165,26 @@ repair noteは実画像または機械監査で確認したFAILだけを短く�
 修正後は同じ7項目を実画像で再監査する。機械監査を実行できる場合は修正版にも再実行する。
 
 修正後がFAILでも追加repairは行わない。
+
+## 13. display-only review copy
+
+人間が初回boardと修正版を取り違えないよう、監査結果確定後に`audit/scripts/stamp_review_board.py`で表示専用コピーを作る。
+
+例:
+
+```text
+raw_initial.png -> review_initial_FAIL.png
+raw_repair.png  -> review_repair_PASS.png
+```
+
+表示専用コピーは元画像の外側へ`INITIAL | PASS/FAIL`または`REPAIR | PASS/FAIL`の帯を追加する。
+
+重要:
+
+- raw boardそのものへ文字を焼き込まない
+- stamped copyをmachine auditへ入力しない
+- stamped copyをrepair対象にしない
+- stamped copyをcanonical identity referenceにしない
+- stamped copy上の帯を`unintended_output`判定へ含めない
+
+監査・repairでは常に未加工のraw boardを使う。
