@@ -1,8 +1,19 @@
 # P1-R1 — mirrored unilateral motion plan
 
 Date: 2026-08-08 JST
-Status: READY TO RUN
+Status: COMPLETED — FINAL PASS AFTER LOCAL B RETRIES
 Purpose: production v0 generalization gate R1
+
+Final result:
+- `research/experiments/2026-08-08-p1-r1-first-pass-result.md`
+- `research/audits/2026-08-08-p1-r1-final-composed-audit.md`
+
+Important accounting:
+- first-pass B FAIL remains recorded
+- retry-1 B FAIL remains recorded
+- retry-2 B PASS
+- worker global configuration was not changed
+- no broad Knowledge / global prompt tuning was added
 
 ## Controlled variable
 
@@ -41,80 +52,48 @@ F2/F3/F4相当の3枚だけ生成する。
 
 `動かす腕の大袖は、腕の屈曲に伴ってたわみ・向きが変わってよいが、基準画像の大袖としての基本構造を維持する。袖口の開口、金色の縁取り、灰色の内側、袖の模様を、別構造へ描き替えたり消したりしない。`
 
-## Local packet A — early raise
+## Original local packets
 
-Workerへはこのpacketだけ送る:
+### A — early raise
 
 `正面向きの立ち姿を維持してください。解剖学的な左肘だけを自然に曲げ、左手を上腰部・下腹部上端付近まで持ち上げてください。左手の指は自然にそろえて軽く伸ばし、握りこぶしにも大きく開いた掌にもせず、掌は胴体側へ向け、手の甲が概ねこちらから見える向きにしてください。解剖学的な右腕は基準画像どおり下ろしたまま維持してください。それ以外の身体部分、表情、衣装構造は基準画像を維持してください。人物1体、1姿勢、全身、正面向き、縦長の1枚だけを生成してください。`
 
-Expected state:
-- anatomical-left active
-- hand at upper-waist / lower-torso early state
-- anatomical-right remains canonical/down
-
-## Local packet B — late raise
-
-Workerへはこのpacketだけ送る:
+### B — original late raise
 
 `正面向きの立ち姿を維持してください。解剖学的な左肘を曲げ、左手を胸の花紋のすぐ下付近まで持ち上げてください。指先は花紋へまだ触れず、手は上腹部より明確に高い位置にしてください。左手の指は自然にそろえて軽く伸ばし、握りこぶしにも大きく開いた掌にもせず、掌は胴体側へ向け、手の甲が概ねこちらから見える向きにしてください。解剖学的な右腕は基準画像どおり下ろしたまま維持してください。それ以外の身体部分、表情、衣装構造は基準画像を維持してください。人物1体、1姿勢、全身、正面向き、縦長の1枚だけを生成してください。`
 
-Important:
-- W3で使った`手全体を花紋より下`や`指1本分の隙間`は書かない
-- intended late stateをearly stateへ押し下げない
+This packet failed by reaching/overlapping the flower too early.
 
-Expected state:
-- anatomical-left active
-- hand near flower, not endpoint
-- higher than packet A
-
-## Local packet C — endpoint
-
-Workerへはこのpacketだけ送る:
+### C — endpoint
 
 `正面向きの立ち姿を維持してください。解剖学的な左肘を曲げ、左手を胸の花紋まで持ち上げ、左手を花紋の上へ自然に重ねて停止してください。左手の指は自然にそろえて軽く伸ばし、握りこぶしにも大きく開いた掌にもせず、掌は胴体側へ向け、手の甲が概ねこちらから見える向きにしてください。解剖学的な右腕は基準画像どおり下ろしたまま維持してください。それ以外の身体部分、表情、衣装構造は基準画像を維持してください。人物1体、1姿勢、全身、正面向き、縦長の1枚だけを生成してください。`
 
-Expected state:
-- anatomical-left active
-- hand visibly reaches / overlaps chest flower
-- clear endpoint
-- anatomical-right remains canonical/down
+## Final selected sequence
 
-## R1 audit
+- F1 = canonical
+- F2 = A2 `20_29_13 (2)`
+- F3 = B retry-2 `20_39_04`
+- F4 = C `20_31_39`
 
-First-passで記録:
-- carrier: standalone portrait 3/3
-- correct anatomical-left active 3/3
+Final B success came from using the lower-chest / white-garment lower edge region as the positive landmark instead of trying to enforce a tiny gap directly under the flower.
+
+Do not promote that retry wording to global worker prose. It remains a local packet solution.
+
+## Final R1 result
+
+PASS:
+- standalone portrait carrier
+- anatomical-left active side
 - anatomical-right non-active retention
-- monotonic hand height A -> B -> C
-- endpoint only at C
+- monotonic hand progression
+- endpoint only at F4
 - no endpoint reversion
-- active left large-sleeve opening / gold trim / grey lining / motif continuity
+- active left large-sleeve topology
 - visible left-hand articulation
-- hat / hair
-- chest flower except intended endpoint occlusion
-- waist medallion / major tassel-cord layout
-- lower garment / shoes
+- stable major identity structures
+- deterministic compose
+- machine geometry/chroma audit: all flags false
 
-After raw visual audit:
-- chroma removal with despill
-- common scale / foot baseline
-- deterministic board / strip
-- machine audit
+R1 establishes mirrored-side generalization but not perfect first-pass small-landmark spatial reliability.
 
-## Failure interpretation
-
-If A/B/C violates carrier or wrong anatomical side:
-- generation / isolation failure candidate
-
-If B is too low while wording itself encodes the intended near-flower state:
-- spatial compliance failure candidate
-- do not immediately add global prose
-
-If a local packet accidentally describes the wrong state:
-- planner/local-state design failure
-- correct packet interpretation before changing worker architecture
-
-If active sleeve changes topology:
-- continuity failure against the already validated invariant
-
-Do not change worker global configuration during R1.
+Next gate: R2 torso-dominant shallow bow.
