@@ -52,6 +52,63 @@ manual Branch x3
 manual packet send x3
 ```
 
+## Why Custom GPT still matters if fresh-chat creation is automated
+
+Custom GPT is **not logically required for fan-out itself**. A browser tool that can open fresh ordinary ChatGPT conversations could in principle automate the same tab/chat creation primitive.
+
+However, CURRENT evidence gives Custom GPT an important isolation role beyond convenience.
+
+OpenAI's current GPT documentation states that GPTs:
+- do not use saved memory
+- do not use the account's normal custom instructions
+- do not use previous conversations
+- each GPT conversation starts fresh
+
+Official source:
+- https://help.openai.com/en/articles/8554407
+
+By contrast, ordinary ChatGPT chats can use personalization / memory and normal custom instructions.
+Temporary Chat disables use/creation of personalization memory, but OpenAI explicitly states that Temporary Chat still follows enabled custom instructions.
+
+Official source:
+- https://help.openai.com/en/articles/8914046-temporary-chat-faq
+
+Therefore the current minimal Custom GPT provides a stronger and simpler isolation boundary:
+
+```text
+account memory / normal custom instructions / previous chats
+                    X
+                    ↓
+minimal Custom GPT worker instructions only
++ canonical
++ current one local pose packet
+```
+
+It also freezes the worker-side configuration that was validated in R0-R2:
+- image generation ON
+- Web OFF
+- Code/Data Analysis OFF
+- Actions NONE
+- Apps NONE
+- Knowledge NONE
+- targeted active-large-sleeve invariant only
+
+### Consequence
+
+If browser automation can operate on `/g/...` Custom GPT conversations, **keep Custom GPT**. There is no quality or isolation reason to remove a proven boundary merely because chat creation is automated.
+
+If the browser automation works only on ordinary ChatGPT fresh chats, regular chat becomes a **fallback candidate**, not an automatic replacement.
+It would require a separate single-variable equivalence test because the system context differs.
+
+Closest fallback:
+- fresh Temporary Chat
+- canonical direct attachment
+- explicit minimal worker preamble + current local packet
+- image generation only
+
+But this is still not identical to the Custom GPT worker because Temporary Chat continues to inherit normal custom instructions.
+Do not assume a user-level prompt can reliably neutralize higher-level custom instructions.
+
 ## Chinese-language / community precedent A — OpenGPTs
 
 `hzeyuan/OpenGPTS` is a Chinese open-source browser-plugin project and was not considered in the earlier N3 closure.
@@ -160,10 +217,27 @@ Then file/image check:
 
 Only after 1-8 pass should one already-validated static-pose generation be used to prove that the resulting chat still invokes the Custom GPT image worker correctly.
 
-### B1-b — own browser automation if extension compatibility fails
+### B1-b — ordinary ChatGPT fallback comparison
+
+Use only if current automation cannot target Custom GPT pages but can reliably open independent ordinary chats.
+
+Test one known R0/R1 static pose with:
+- A = validated Custom GPT worker
+- B = automated fresh Temporary Chat + canonical + copied minimal worker preamble + same local packet
+
+Compare:
+- carrier
+- identity / sleeve topology
+- unintended context influence
+- model/tool availability
+- operational stability
+
+Do not replace Custom GPT unless B is materially equivalent or better and the remaining custom-instruction inheritance is shown not to affect the worker.
+
+### B1-c — own browser automation if extension compatibility fails
 
 If AutoGPT or similar extensions do not support `/g/...` Custom GPT pages, the precedent still demonstrates the required browser primitives.
-At that point evaluate a minimal local extension / userscript / visible-UI automation that targets the Custom GPT page directly.
+At that point evaluate a minimal local extension / visible-UI automation that targets the Custom GPT page directly.
 
 Do not begin with hidden/internal ChatGPT endpoints.
 
@@ -188,7 +262,9 @@ Only after these pass should click-count reduction be measured.
 
 **Browser-side automation feasibility: supported by existing Chinese-language implementations, including a current 2026 ChatGPT automation extension.**
 
-**Custom-GPT-specific compatibility: unverified.**
+**Custom GPT remains the preferred isolation boundary if automation can target it.**
+
+**Ordinary fresh/Temporary Chat is a testable fallback, not yet a validated replacement.**
 
 **Overall orchestration ceiling under the user's Plus/no-separate-API constraint: NOT CLOSED.**
 
