@@ -81,13 +81,11 @@
 
   async function preflightComposer() {
     promptRunner.start();
-    const editor = await globalThis.MYGPTPromptStackerInsert.waitFor(
-      () => promptRunner.getEditor(),
-      {
-        timeout: 10000,
-        interval: 150
-      }
-    );
+    const editor = await promptRunner.waitForStableEditor({
+      timeout: 10000,
+      interval: 100,
+      stableMs: 400
+    });
     if (!editor) {
       promptRunner.stop();
       return { ok: false, reason: "COMPOSER_NOT_FOUND" };
@@ -124,7 +122,7 @@
 
     const attachment = await MYGPTFileAdapter.attachFile(message.file, {
       document,
-      verifyTimeout: 4000,
+      verifyTimeout: 10000,
       verifyInterval: 150
     });
     if (!attachment.ok) {
@@ -143,8 +141,9 @@
     try {
       inserted = await promptRunner.insertOnly(message.packet, {
         editorTimeout: 10000,
-        editorInterval: 150,
-        reflectTimeout: 3000,
+        editorInterval: 100,
+        editorStableMs: 500,
+        reflectTimeout: 4000,
         reflectInterval: 100
       });
     } finally {
@@ -171,6 +170,7 @@
       insertionMethod: inserted.method,
       exactMatch: inserted.exactMatch === true,
       packetChars: inserted.observedChars,
+      editorRemounted: inserted.editorRemounted === true,
       submitted: false,
       generationActive: generationIsActive(),
       observedAt: Date.now()
