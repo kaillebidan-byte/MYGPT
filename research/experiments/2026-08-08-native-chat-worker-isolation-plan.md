@@ -1,7 +1,7 @@
 # Native Chat worker isolation on Plus
 
 Date: 2026-08-08
-Status: N0/N1 COMPLETED — context boundary proven; N2/N3 DEFERRED until identity/continuity quality passes
+Status: N0/N1/N2 COMPLETED — fresh-worker and clean-seed Branch boundaries proven; N3 remains open
 Constraint: no ChatGPT Work / no Codex agentic allowance / no OpenAI API billing
 
 Basis:
@@ -12,6 +12,7 @@ Basis:
 - `research/chatgpt-project-practices/custom-gpt-thinking-imagegen-known-issue.md`
 - `research/experiments/2026-08-08-n0-custom-gpt-thinking-instant-result.md`
 - `research/experiments/2026-08-08-n1-fresh-custom-gpt-instant-four-frame-result.md`
+- `research/experiments/2026-08-08-n2-branch-thinking-followup-result.md`
 - `research/decisions/2026-08-08-identity-continuity-direction.md`
 
 ## Original question
@@ -42,19 +43,21 @@ Do not include motion / four-state / progress / board / sheet / compose / audit 
 
 ---
 
-## N0 result — model/runtime gate
+## N0 result — historical model/runtime gate
 
 ### Custom GPT / Thinking
 
-Result: FAIL for tool availability.
+Historical observed result: FAIL for tool availability.
 
 Observed:
 `画像生成ツールがこの環境で利用できないため、画像ファイルを返せません。`
 
-Interpretation:
-- consistent with the separately recorded Custom-GPT Thinking image-generation issue
-- not a failure of the isolated-worker context design
-- do not keep prompt-repairing Thinking for this path
+At N0 time this was treated as a runtime/tool-availability failure, not a context-isolation failure.
+
+**Follow-up correction:**
+N2 later produced a successful image-generation response after a clean-seed Branch chat was switched to Thinking. Therefore the N0 failure is not a universal Custom-GPT/Thinking limitation and must not be used as a permanent prohibition.
+
+No evidence currently establishes that Branch itself caused the later Thinking success.
 
 ### Custom GPT / Instant
 
@@ -72,8 +75,9 @@ Important:
 - this was a redraw, not unchanged-pixel preservation
 - one frame cannot establish temporal continuity
 
-Decision:
-Use Instant for the worker path.
+Decision after the full project evidence chain:
+Use Instant as the validated production default because N1/W1-W4/C0 were completed on that path.
+Do not interpret this as proof that Thinking cannot work.
 
 ---
 
@@ -97,106 +101,119 @@ Observed:
 Core conclusion:
 **A fresh Custom-GPT / Instant conversation can act as the missing native context boundary inside ChatGPT Plus.**
 
-This resolves the main sheet-carrier question enough to move on.
+This resolved the sheet-carrier question enough to continue to identity/continuity work.
 
 ---
 
-## N1 quality finding — why the project does not move directly to automation
+## N1 quality finding
 
 The regenerated neutral-start frame drifted more strongly from the canonical in body width/proportions and other whole-body geometry.
 
-The moving frames were more stable overall, but independent redraw still leaves continuity risk in:
+The moving frames were more stable overall, but independent redraw left continuity risk in:
 - active anatomical-right sleeve silhouette/opening/folds
 - hand shape
 - local arm/torso occlusion
 - fine accessory topology such as tassels/cords/fasteners
 
-Therefore the next problem is identity/temporal continuity, not chat spawning UX.
-
-Current candidate changes the four-frame plan to:
+This led to the later production candidate:
 - F1 = canonical itself, no generation
-- F2/F3/F4 = three fresh Custom-GPT / Instant workers
+- F2/F3/F4 = three isolated Custom-GPT workers
 
-See:
-`research/decisions/2026-08-08-identity-continuity-direction.md`
+W1-W4 and C0 subsequently closed the generation-quality stage.
 
 ---
 
 ## N2 — Branch-from-clean-seed friction reduction
 
-Status: DEFERRED.
+Status: **PASS**.
 
-Do not run N2 yet.
+See:
+`research/experiments/2026-08-08-n2-branch-thinking-followup-result.md`
 
-Reason:
-Proving Branch convenience before the candidate frames pass identity/continuity quality would optimize an architecture that may still need a different image-control mechanism.
+Execution:
+- start the same minimal Custom GPT in a fresh conversation
+- attach canonical directly
+- before any motion context, send only the clean seed that declares the attachment to be the sole canonical and says no image should be generated yet
+- branch from that clean-seed point
 
-Run N2 only after C0/C1 passes.
+Verified in branch:
+- same Custom GPT remained active
+- Instant remained available / usable
+- canonical attachment was inherited
+- canonical remained an effective image-generation reference
+- no global motion / F1-F4 / board / sequence context had been introduced before the branch
 
-When resumed:
-- branch only from a clean pre-motion seed
-- no global motion plan in inherited context
-- verify Custom GPT configuration remains correct
-- verify Instant remains selected/usable
-- verify canonical attachment remains an effective reference
-- first test one branch, then four only if the first passes
+Result:
+**A clean pre-motion seed can be branched and used as the same isolated worker boundary without reattaching the canonical.**
 
-If branch inheritance is unreliable, keep explicit fresh conversations.
+Practical benefit:
+- removes repeated canonical attachment
+- gives workers the same clean inherited starting context
+
+Limit:
+- still requires manual branch creation
+- still requires manually sending separate local pose packets
+- does not provide zero-click worker fan-out
+
+Fresh conversations remain valid and proven. Branch is an optional friction reduction, not a replacement requirement.
+
+### N2 Thinking follow-up
+
+After Branch PASS, the branch was switched to Thinking and a single-pose request was run.
+
+Observed:
+- image generation succeeded
+- two alternatives (A/B) were returned
+- both were standalone 1024x1536 portraits
+- both used the correct anatomical-right active arm
+- both preserved canonical identity strongly enough to show effective reference inheritance
+- visible redraw amount and active-sleeve geometry differed between the two alternatives
+
+Interpretation:
+- supersedes any stable claim that Thinking cannot generate images in this Custom GPT
+- does not prove Thinking is more reliable than Instant
+- does not prove Branch caused Thinking availability
+- does not establish A/B multiplicity as a guaranteed output contract
+
+Production default stays Instant because that is the mode with the completed N1/W1-W4/C0 evidence chain.
 
 ---
 
 ## N3 — automation ceiling assessment
 
-Status: DEFERRED.
+Status: OPEN.
 
 Known so far:
 - manual fresh worker boundary works inside Plus
-- normal Chat has no confirmed documented primitive for a parent chat to programmatically spawn multiple independent Custom-GPT conversations and send separate packets into them
-- `@workerGPT` is rejected because current conversation context is retained
-- branching after planner output is rejected because the global plan would be inherited
+- clean-seed Branch boundary works inside Plus
+- normal Chat still has no confirmed documented primitive in this project for a parent chat to programmatically spawn multiple independent Custom-GPT conversations and send separate packets into them
+- `@workerGPT` remains rejected because current conversation context is retained
+- branching after planner output remains rejected because the global plan would be inherited
 
-UX levels remain:
+UX levels:
 A. manual fresh-worker boundary — proven
-B. clean-seed branch boundary — not yet tested
-C. zero-click orchestration — not documented in normal Chat
+B. clean-seed branch boundary — proven, optional friction reduction
+C. zero-click orchestration — not established in normal Chat
 
 Work/API remain outside the original constraint unless the user explicitly changes it.
 
 ---
 
-## Immediate next stage outside N-series
-
-Do not generate new test images first.
-
-C0:
-- use F1 canonical + existing N1 moving frames
-- run deterministic chroma removal / normalization / board or strip composition
-- visually audit identity/continuity
-
-C1:
-- add machine-assisted continuity signals if useful
-- do not lengthen worker prompt
-
-Only if C0 fails:
-- C2 local edit diagnostic
-- then C3 canonical identity + one single-pose visual guide role-separated reference test
-
----
-
-## Rejected shortcuts
+## Rejected shortcuts / constraints retained
 
 - `@workerGPT` from planner chat
 - branch after planner output
 - same Project for planner and worker isolation proof
 - scheduled Tasks for immediate canonical-image frame generation
-- interpreting Custom-GPT Thinking failure as architecture failure
-- interpreting Instant single-frame success as production continuity proof
+- interpreting a single Instant frame as production continuity proof
 - direct 2x2 generation
 - four-pose visual guide as generation reference
 - generated-frame chaining as identity source
+- treating the historical N0 Thinking failure as a permanent platform rule
+- switching production from Instant to Thinking based on one later success
 
 ## Operational rule
 
 Save every generated image immediately.
 If a fail condition is already clear, stopping is allowed after the evidence needed for diagnosis has been saved.
-Do not change production MYGPT Instructions/Sources until the current C0/C1 identity-continuity decision is evaluated.
+Do not reopen W-series tuning unless new composed evidence shows a production-blocking failure.
