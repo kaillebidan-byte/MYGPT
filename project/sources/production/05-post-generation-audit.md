@@ -13,10 +13,34 @@
 - 現在のチャットへ直接添付されたcanonical identity reference
 - 生成前に決めたmotion contract、identity anchors、slot state plan、active/support limb、end
 - 実際に生成されたboard
+- 実行できた場合は`audit/scripts/machine_audit_board.py`のJSON結果
 
 生成前の計画が正しいことを、生成画像が正しいことの根拠にしない。
 
-## 2. 7項目
+## 2. 視覚監査と機械監査の責務
+
+視覚監査は次を主に判定する。
+
+- `identity`
+- `motion_semantics`
+- `continuity`
+- `endpoint`
+- 接地影など、機械判定だけではキャラクター本体と分離しにくい`chroma`問題
+
+機械監査は次の機械的事実を補助判定する。
+
+- 画像サイズとaspect ratio
+- 外周への非クロマ画素接触
+- 中央縦横safe gapへの非クロマ画素侵入
+- 中央の白いdivider/gridに相当する帯
+- borderのクロマ色均一性
+- 各象限のforeground bbox
+
+機械監査をidentity、motion semantics、limb continuity、endpointの判定へ使わない。
+
+機械監査が実行できない場合に、推測値を作ってはいけない。
+
+## 3. 7項目
 
 必ず次を独立して判定する。
 
@@ -30,7 +54,7 @@
 
 重要なFAILが1つでもあればoverallはFAIL。
 
-## 3. identity
+## 4. identity
 
 canonical identity referenceを正本とする。
 
@@ -42,7 +66,7 @@ canonical identity referenceを正本とする。
 
 4ポーズ間で同じ部品構成が維持されていなければFAIL。
 
-## 4. motion semantics
+## 5. motion semantics
 
 左上 → 右上 → 左下 → 右下を時間順として読む。
 
@@ -50,11 +74,11 @@ canonical identity referenceを正本とする。
 
 continuityまたはendpointの失敗によって要求動作全体が成立しない場合はmotion_semanticsもFAIL。
 
-## 5. continuity
+## 6. continuity
 
 時間をまたいで同じ役割を持つ身体部位を追跡する。
 
-正面主体で身体反転を伴わない場合は、解剖学的な左右だけでなくviewer-space上の対応も使う。
+正面主体で身体反転を伴わない場合は、解剖学的な左右だけでなくviewer-space上の対応も補助に使う。
 
 `leg_A`などのactive limbをK2で選んだ後、K3/K4で別の脚へ役割を移してはいけない。
 
@@ -62,7 +86,7 @@ continuityまたはendpointの失敗によって要求動作全体が成立し�
 
 確実に同一脚と追跡できない場合はPASSにしない。
 
-## 6. endpoint
+## 7. endpoint
 
 one-shotの最後は`end`を満たす必要がある。
 
@@ -70,7 +94,7 @@ one-shotの最後は`end`を満たす必要がある。
 
 「一歩前へ踏み出して停止」なら、active limbの足先がsupport limbより前方へ残り、重心がsettleしている必要がある。
 
-## 7. layout
+## 8. layout
 
 主要boardはportrait 2:3相当の2x2。
 
@@ -78,19 +102,27 @@ one-shotの最後は`end`を満たす必要がある。
 
 crop、セル越境、正方形boardはFAIL。
 
-## 8. chroma
+機械監査で`wrong_aspect`、`outer_edge_contact`、`center_vertical_contamination`、`center_horizontal_contamination`のいずれかがtrueなら、対応するlayout問題として扱う。
+
+## 9. chroma
 
 キャラクター以外は均一な単色クロマ背景であること。
 
 接地影、ドロップシャドウ、床、グラデーション、光だまり、背景模様、局所的な明度差があればFAIL。
 
-## 9. unintended output
+機械監査で`border_not_uniform`がtrueならchroma FAILの根拠にできる。
+
+機械監査がborderをPASSしても、足元などに接地影が視覚確認できる場合はchromaをPASSにしない。
+
+## 10. unintended output
 
 文字、K1-K4ラベル、説明文、UI、枠線、矢印、モーションライン、記号、未指定エフェクトがあればFAIL。
 
-## 10. repair方式
+機械監査で`divider_like_vertical_white_band`または`divider_like_horizontal_white_band`がtrueなら、中央divider/gridの機械的証拠として扱う。
 
-初回レビューで確認したFAILだけを修正対象にする。
+## 11. repair方式
+
+初回レビューと機械監査で確認したFAILだけを修正対象にする。
 
 ### motion-critical
 
@@ -104,12 +136,12 @@ repair時もcanonical identity referenceをidentityの正本とし、active/supp
 
 motion系3項目がすべてPASSで、それ以外だけFAILなら、初回boardを編集対象として使い、PASSだったmotion状態を再設計しない。
 
-## 11. repair note
+## 12. repair note
 
-repair noteは実画像で確認したFAILだけを短く列挙する。
+repair noteは実画像または機械監査で確認したFAILだけを短く列挙する。
 
 一般論、未確認の問題、別案、新しい演出を追加しない。
 
-修正後は同じ7項目を実画像で再監査する。
+修正後は同じ7項目を実画像で再監査する。機械監査を実行できる場合は修正版にも再実行する。
 
 修正後がFAILでも追加repairは行わない。
