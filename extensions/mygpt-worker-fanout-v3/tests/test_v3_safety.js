@@ -6,18 +6,21 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const files = [
   "manifest.json", "route_adapter.js", "runtime_guard.js", "page_observer.js",
-  "chatgpt_adapter.js", "content.js", "background.js", "popup.js"
+  "translation_loop_send_guard.js", "chatgpt_adapter.js", "content.js", "background.js", "popup.js"
 ];
 const source = files.map((name) => fs.readFileSync(path.join(root, name), "utf8")).join("\n");
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
 
 assert.deepStrictEqual(manifest.permissions, ["storage", "tabs", "scripting", "unlimitedStorage"]);
 assert.equal(manifest.content_scripts[0].world, "MAIN");
+assert.ok(manifest.content_scripts[0].js.includes("translation_loop_send_guard.js"));
 assert.ok(manifest.content_scripts[0].js.includes("chatgpt_adapter.js"));
 assert.ok(!manifest.content_scripts[1].js.includes("chatgpt_adapter.js"));
 assert.ok(source.includes('world: "MAIN"'));
 assert.ok(source.includes('executionWorld: "MAIN"'));
 assert.ok(source.includes("autogpt-upload-ready"));
+assert.ok(source.includes("MYGPTTranslationLoopSendGuard"));
+assert.ok(source.includes("enabledCandidate"));
 assert.ok(source.includes("autogpt-synthetic-paste"));
 assert.ok(source.includes("TranslationLoopRuntimeGuard"));
 assert.ok(source.includes("MYGPT_V3_PAGE_OBSERVED"));
@@ -54,4 +57,4 @@ assert.equal((source.match(/chrome\.tabs\.create\s*\(/g) || []).length, 1);
 assert.ok(source.includes("openSlotTab"));
 assert.ok(source.includes("verifySlotTab"));
 assert.ok(source.includes("prepareStagedSlot"));
-console.log("MYGPT Worker Fanout v3.2 safety contract: PASS");
+console.log("MYGPT Worker Fanout v3.3 safety contract: PASS");
