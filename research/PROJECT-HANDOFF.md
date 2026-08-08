@@ -1,6 +1,6 @@
 # MYGPT調整プロジェクト 引継ぎ
 
-更新日: 2026-08-08 21:00 JST
+更新日: 2026-08-08 21:08 JST
 
 GitHub `main` を正本とする。チャット記憶だけで過去方式へ戻さない。
 
@@ -28,6 +28,8 @@ GitHub `main` を正本とする。チャット記憶だけで過去方式へ戻
 - Work / Codex系週間agentic allowanceやOpenAI API別課金をproduction前提にしない。
 - 「画像生成するな」「画像生成依頼ではありません」と明示されたturnでは画像生成を絶対に起動しない。
 - 設計判断前にGitHub mainと実画像 / ログを確認する。
+- 既存検索・過去の棄却結果・外部事例が結論に関係する場合は、それらも照合してから設計判断する。
+- 公式機能だけを確認して、ユーザー制約内のcommunity / browser-side手段まで存在しないと一般化しない。
 - そのturnで実行できる確定作業を先送りしない。
 - ユーザー側の次作業がある場合は回答先頭に出す。
 
@@ -45,7 +47,7 @@ Validated v0 scope:
 - canonical静止姿勢 = F1
 - one-shot motion
 - 4 keyposes
-- F2/F3/F4だけを生成
+- F2/F3/F4だけ生成
 - front-facing baseline camera
 - chroma background
 - deterministic board / strip composition
@@ -268,46 +270,73 @@ First-pass failureは履歴に保持。
 
 ---
 
-## 9. N3 orchestration ceiling — CLOSED UNDER CURRENT CONSTRAINTS
+## 9. N3 orchestration — REOPENED FOR BROWSER-SIDE AUTOMATION
 
 正本:
 `research/experiments/2026-08-08-n3-orchestration-ceiling.md`
 
-2026-08-08にOpenAI公式仕様を再確認。
+### 公式built-in側
 
-確認結果:
-- Branchはmanual `Branch in new chat` 操作
-- bulk / multi-branch fan-outの公式機能は確認できない
-- regular chatで`@GPT`を呼ぶとcurrent conversation contextを維持するため、planner/full-motion chatからの呼び出しはworker isolationと衝突
-- Projectsはchat branchingを提供するがautomatic multi-chat fan-outではない
-- GPT-created chatをProjectへmoveできない
-- Scheduled TasksはGPTsをサポートしない
-- GPT Actionsはexternal API接続であり、ChatGPT UI内のisolated Custom GPT chatsをspawnする公式機構ではない
+2026-08-08のOpenAI公式仕様確認では:
+- Branchはmanual操作
+- bulk / multi-branch fan-outの公式機能は未確認
+- `@GPT`はcurrent conversation contextを維持し、planner/full-motion chatからの呼び出しはworker isolationと衝突
+- Projects / Tasks / ActionsにもCURRENT workerを3 isolated chatsへ自動fan-outする公式機構は未確認
 
-CURRENT制約内の最小運用:
+したがって**公式built-in機能だけ**ならmanual Branch x3が最小のproven workflow。
 
-```text
-planner outputs 3 copy-ready local packets
-        ↓
-clean Custom GPT seed + canonical once
-        ↓
-manual Branch x3
-        ↓
-manual send one packet per branch
-        ↓
-3 independent generations
-```
+### 前の誤判定
 
-Production v0はmanual-assisted。
-Branchでcanonical再添付は省けるが、3 branch作成と3 packet投入は残る。
+これをそのまま「ChatGPT Plus / no separate API条件でのorchestration ceiling」と一般化したのは誤り。
+中国語圏・community browser automationを照合せずN3をCLOSEDにした結論は撤回済み。
 
-N3を再開する条件:
-- official multi-chat / multi-GPT fan-out追加
-- bulk branch / prompt distribution追加
-- TasksがGPT + image/fileをサポート
-- ユーザーがno-API / no-agentic production制約を明示的に緩和
+### 中国語圏の既存事例
 
-それまではクリック削減のためにproven isolation boundaryを崩さない。
+`hzeyuan/OpenGPTS`:
+- browser-side ChatGPT / GPTs calls
+- one-input multi-GPT calls
+- multi-GPT chat
+- multiple windows
+- batch GPT/chat management
+- separate OpenAI API billingを必須にしないweb-session型のprior art
+
+ただし2024-eraで、multimodal/RPAの不足があるためproduction候補そのものではない。
+
+Autojourney `AutoGPT`:
+- 2026 current Chrome extension for ChatGPT / Sora
+- batch prompt send / task queue
+- text-to-image / image-to-image / image-to-text
+- ChatGPT `自动新对话` — configurable automatic new-chat switching
+- ChatGPT `新对话发送` — send a selected task in a new conversation
+- ChatGPT image-upload / image-generation compatibility fixes recorded
+- current Chrome Web Store version `0.0.69`, updated 2026-07-15
+
+これはcanonical upload + fresh chat + per-task packet sendというN3の不足操作にかなり近い。
+
+### 未確認のcritical gate
+
+AutoGPTの公開資料ではgeneric ChatGPT対応は確認できるが、user-created **Custom GPT (`/g/...`)** conversationへの明示対応は未確認。
+Instantの維持 / 選択も未確認。
+
+したがってCURRENT N3 verdict:
+- official built-in fan-out: not found
+- browser-side automation feasibility: existing Chinese implementations support the category
+- Custom-GPT-specific compatibility: UNVERIFIED
+- overall Plus/no-separate-API orchestration ceiling: **NOT CLOSED**
+
+次はN3-B1 Custom-GPT compatibility test。
+まず画像生成せず:
+1. extensionが`MYGPT Single Frame Worker Test` pageで認識 / 起動するか
+2. fresh Custom GPT conversationへtext taskを送れるか
+3. ordinary ChatGPTへfallbackしないか
+4. same Custom GPT identityを維持するか
+5. Instantを維持 / 選択できるか
+6. canonical attachmentを通常UI経由でfresh Custom GPT chatへ送れるか
+7. clean seedを送ってもfull-motion contextが混入しないか
+
+1-7を通してから、既知の1 static poseだけでimage-worker invocationを確認する。
+
+OpenAIのconsumer Terms上、programmatic extraction of Output / reverse engineering / protective-measure bypassは別問題になるため、hidden endpointやoutput scrapingをproduction前提にしない。まずvisible UI automationだけを評価する。
 
 ---
 
@@ -364,16 +393,13 @@ Frozen資産を再活性化する場合:
 
 ## 12. CURRENT stopping point
 
-Production v0のgeneration architecture、一般化gate、post-processing、Branch UX、現行制約下のorchestration ceilingまで確認済み。
+Generation品質・production v0 generalization・post-processingはPASS済み。
+N3は閉じていない。
 
-ここから先は自動的に範囲を広げない。
-次の作業はユーザーが求める方向で選ぶ:
-- production運用runbook / planner packet formatの固定
-- v0 scope拡張（loop / different start / prop等）
-- constraint relaxationを伴うautomation再設計
-- legacy / fixtureから特定資産をsingle-variableで再評価
+CURRENT unresolved task:
+**Custom GPT上でcurrent browser automation extension / local UI automationがworker isolationを壊さず使えるか。**
 
-新しいproduction evidenceがacceptance contractを壊さない限り、R0-R2 generation tuningへ戻らない。
+ここを確認する前にmanual Branch x3を最終運用形と固定しない。
 
 ---
 
@@ -391,7 +417,9 @@ Production v0のgeneration architecture、一般化gate、post-processing、Bran
 - Thinking成功だけでdefault切替
 - output A/B数を保証仕様化
 - first-pass failureをretry成功で消す
-- official supportなしにzero-click fan-outがあると仮定する
+- official built-in機能がないことを理由にcommunity/browser-side automationまで不可能と扱う
+- current verificationなしにold browser extensionをproduction採用する
+- hidden ChatGPT endpoint / automated output extractionをproduction前提にする
 
 ---
 
@@ -399,8 +427,9 @@ Production v0のgeneration architecture、一般化gate、post-processing、Bran
 
 1. GitHub CURRENT確認
 2. 実画像 / ログ確認
-3. 問題局所化
-4. 既存方針と照合
-5. 必要最小限の変更
-6. そのturnで実行可能なら実行
-7. ユーザー作業がある場合は回答先頭に提示
+3. 既存検索・外部事例が関係する場合は照合
+4. 問題局所化
+5. 既存方針と照合
+6. 必要最小限の変更
+7. そのturnで実行可能なら実行
+8. ユーザー作業がある場合は回答先頭に提示
