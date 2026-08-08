@@ -32,6 +32,27 @@
   let currentHref = location.href;
   let lastGeneration = false;
 
+  function currentWorkerIdentity() {
+    try {
+      return MYGPTWorkerRoute.normalizeCustomGptIdentity(location.href);
+    } catch (_) {
+      return { ok: false, reason: "WORKER_ROUTE_UNAVAILABLE", href: location.href };
+    }
+  }
+
+  function isWorkerContext() {
+    return currentWorkerIdentity()?.ok === true;
+  }
+
+  function safeRuntimeSendMessage(payload) {
+    try {
+      const pending = chrome.runtime.sendMessage(payload);
+      if (pending && typeof pending.catch === "function") pending.catch(() => {});
+    } catch (_) {
+      // Extension reload/invalidation can throw synchronously before a Promise exists.
+    }
+  }
+
   function normalizeText(value) {
     return String(value || "")
       .replace(/\u00a0/g, " ")
@@ -209,23 +230,35 @@
   });
 
   function reportObserved(reason, pageEvent = null) {
-    chrome.runtime.sendMessage({
+    if (!isWorkerContext()) return;
+    safeRuntimeSendMessage({
       type: MSG.OBSERVED,
       reason,
       report: { ...capture(), pageEvent }
-    }).catch(() => {});
+    });
   }
 
   window.addEventListener(PAGE_OBS_EVENT, (event) => reportObserved("page-observer", event?.detail || null));
 
   function postMonitorState(source) {
-    if (!monitorPort) return;
+    if (!monitorPort || !isWorkerContext()) return;
     try { monitorPort.postMessage({ type: "mygpt-worker-monitor-state", source, snapshot: capture() }); }
     catch (_) {}
   }
 
+  function disconnectMonitor() {
+    if (reconnectTimer !== null) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    if (!monitorPort) return;
+    const port = monitorPort;
+    monitorPort = null;
+    try { port.disconnect(); } catch (_) {}
+  }
+
   function connectMonitor() {
-    if (monitorPort) return;
+    if (!isWorkerContext() || monitorPort) return;
     try { monitorPort = chrome.runtime.connect({ name: MONITOR_PORT }); }
     catch (_) { scheduleReconnect(); return; }
     monitorPort.onMessage.addListener((message) => {
@@ -234,14 +267,17 @@
     });
     monitorPort.onDisconnect.addListener(() => {
       monitorPort = null;
-      scheduleReconnect();
+      if (isWorkerContext()) scheduleReconnect();
     });
     postMonitorState("connect");
   }
 
   function scheduleReconnect() {
-    if (reconnectTimer !== null) return;
-    reconnectTimer = setTimeout(() => { reconnectTimer = null; connectMonitor(); }, 1000);
+    if (!isWorkerContext() || reconnectTimer !== null) return;
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      if (isWorkerContext()) connectMonitor();
+    }, 1000);
   }
 
   function scheduleLocalScan(delay = 250) {
@@ -250,8 +286,12 @@
       const hrefChanged = location.href !== currentHref;
       const generation = generationIsActive();
       const generationChanged = generation !== lastGeneration;
-      if (hrefChanged || generationChanged) {
+      if (hrefChanged) {
         currentHref = location.href;
+        if (isWorkerContext()) connectMonitor();
+        else disconnectMonitor();
+      }
+      if (hrefChanged || generationChanged) {
         lastGeneration = generation;
         reportObserved(hrefChanged ? "route" : "generation");
       }
@@ -264,5 +304,5 @@
   observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
   addEventListener("popstate", () => reportObserved("popstate"));
   addEventListener("hashchange", () => reportObserved("hashchange"));
-  connectMonitor();
+  if (isWorkerContext()) connectMonitor();
 })();
