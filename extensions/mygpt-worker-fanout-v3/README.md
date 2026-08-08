@@ -1,6 +1,6 @@
 # MYGPT Worker Fanout v4
 
-Status: **v0.4.0 STATIC PASS candidate — full 3-worker submit/monitor live test pending**
+Status: **v0.4.1 STATIC PASS candidate — full 3-worker submit/monitor live test pending**
 
 This version stops treating READY as the end goal. It reuses the supplied extensions as an integrated worker system:
 
@@ -104,3 +104,7 @@ Partial failures become `PARTIAL_MONITORING` / `PARTIAL_COMPLETE` rather than de
 8. generation continues in isolated tabs and each slot should eventually become `COMPLETE`.
 
 The source tab is restored after all three submits are attempted.
+
+## v0.4.1 non-worker context fix
+
+ChatGPT-wide content-script matches remain for SPA navigation compatibility, but runtime reporting and VoiceBridge-style monitor ports are now active only while the tab is on a valid Custom GPT worker route. `/gpts` and other non-worker pages no longer send `MYGPT_V4_OBSERVED` events or keep monitor ports alive. `chrome.runtime.sendMessage` fire-and-forget reporting is also wrapped for synchronous extension-context invalidation during reload.
