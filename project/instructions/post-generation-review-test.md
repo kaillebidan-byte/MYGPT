@@ -1,6 +1,8 @@
-# 一時検証モード: 生成後レビュー + 機械監査 + GitHub監査 + 1回修正 + 表示スタンプ
+# 一時検証モード: 生成後レビュー + 機械監査 + GitHub監査 + 1回修正 + 回帰判定 + 表示スタンプ
 
-このファイルは、主要モーションボード生成後に同一ターン内で実画像を視覚確認し、その生成画像をPython機械監査へ渡し、GitHub監査規則を取得して1回だけrepair・再監査し、初回と修正版を取り違えない表示専用スタンプ画像も作るための一時Project Instructionsである。
+このファイルは、主要モーションボード生成後に同一ターン内で実画像を視覚確認し、その生成画像をPython機械監査へ渡し、GitHub監査規則を取得して1回だけrepair・再監査するための一時Project Instructionsである。
+
+repair前には初回PASS項目をpreserve contractとして固定し、repair後には初回と修正版を比較して回帰を検出する。初回と修正版を取り違えないよう表示専用スタンプ画像も作る。
 
 この検証中は、画像生成物だけを返して応答を終了する規則よりこのファイルを優先する。
 
@@ -223,7 +225,13 @@ output: <review_initial_PASS.png or review_initial_FAIL.png>
 
 スタンプ作成だけが失敗した場合は`REVIEW_STAMP status: ERROR`として短く示す。スタンプは人間確認用なので、監査済みraw boardが存在するならrepair自体は継続してよい。
 
-7項目すべてPASSなら、スタンプ作成後に追加処理せず終了する。
+7項目すべてPASSなら、本文へ次を出して終了する。
+
+```text
+SELECTED_BOARD
+stage: INITIAL
+reason: initial_pass
+```
 
 ## 7. FAIL後のGitHub監査資料取得
 
@@ -243,7 +251,35 @@ applied_rules:
 
 取得できない場合は`status: UNAVAILABLE`を返し、repairせず終了する。
 
-## 8. 1回だけrepair
+## 8. repair preserve contract
+
+GitHub監査資料をLOADEDできた後、repair生成より前に、`INITIAL_REVIEW`でPASSだった項目をすべて`repair_preserve`へ変換する。
+
+PASS項目を単に名前だけ列挙せず、raw INITIAL_BOARDで実際に成立していた状態を短く具体化する。
+
+機械監査でPASS状態を数値またはfalse flagとして確認できる場合は、それも必要な範囲で使う。
+
+本文へ必ず次を出す。
+
+```text
+REPAIR_PRESERVE
+items:
+- <初回PASS項目>: <repairで壊してはいけない具体的状態>
+```
+
+例:
+
+```text
+REPAIR_PRESERVE
+items:
+- endpoint: K4に前後差が残り、開始姿勢へ完全には戻っていない
+- chroma: 均一magenta、接地影なし、background_not_uniform=false、shadow_like_background=false
+- unintended_output: 文字、枠、グリッドなし
+```
+
+初回FAIL項目はpreserve項目へ入れない。修正対象と維持対象を混同しない。
+
+## 9. 1回だけrepair
 
 自動repairは1回だけ。
 
@@ -251,7 +287,9 @@ applied_rules:
 
 この場合、active/support limb、slot state plan、endを維持し、初回FAILと機械監査で確認した問題だけをrepair条件へ入れる。
 
-motion系3項目がすべてPASSで、それ以外だけFAILならraw INITIAL_BOARDを編集対象として使い、PASSだったmotion状態を再設計しない。
+さらに`REPAIR_PRESERVE`の全項目をrepair条件へ明示し、初回PASS項目を新しく壊してはいけない。
+
+motion系3項目がすべてPASSで、それ以外だけFAILならraw INITIAL_BOARDを編集対象として使い、PASSだったmotion状態を再設計しない。この場合も`REPAIR_PRESERVE`を維持する。
 
 修正版生成直前に本文へ次だけ出す。
 
@@ -261,7 +299,7 @@ motion系3項目がすべてPASSで、それ以外だけFAILならraw INITIAL_BO
 
 生成された未加工修正版を`raw REPAIR_BOARD`として保持する。
 
-## 9. 修正版の再監査
+## 10. 修正版の再監査
 
 修正版生成後も応答を終了しない。
 
@@ -275,7 +313,7 @@ motion系3項目がすべてPASSで、それ以外だけFAILならraw INITIAL_BO
 
 機械監査のflag統合規則は初回と同じとし、`background_not_uniform`と`shadow_like_background`もchromaへ反映する。
 
-最終出力:
+出力:
 
 ```text
 POST_REPAIR_MACHINE_AUDIT
@@ -303,7 +341,7 @@ issues:
 
 修正後がFAILでも追加生成しない。
 
-## 10. 修正版表示スタンプ
+## 11. 修正版表示スタンプ
 
 `POST_REPAIR_REVIEW`確定後、raw REPAIR_BOARDを変更せず表示専用コピーを作る。
 
@@ -328,7 +366,57 @@ output: <review_repair_PASS.png or review_repair_FAIL.png>
 
 raw REPAIR_BOARDは監査・後処理用として未加工のまま保持する。
 
-## 11. 実行順序
+## 12. repair deltaと採用board
+
+`POST_REPAIR_REVIEW`確定後、INITIAL_REVIEWとPOST_REPAIR_REVIEWの7項目を1項目ずつ比較する。
+
+分類:
+
+- `fixed`: INITIALがFAIL、REPAIRがPASS
+- `remaining`: INITIALがFAIL、REPAIRもFAIL
+- `regressed`: INITIALがPASS、REPAIRがFAIL
+
+INITIALもREPAIRもPASSの項目は維持成功なので上記リストへ入れなくてよい。
+
+`initial_fail_count`と`repair_fail_count`も数える。
+
+判定規則:
+
+1. REPAIR overallがPASSなら`result: IMPROVED`、`selected_board: REPAIR`
+2. `regressed`が1項目でもあれば、fixedが存在しても`result: WORSE`、`selected_board: INITIAL`
+3. regressionがなくfixedが1項目以上あれば`result: IMPROVED`、`selected_board: REPAIR`
+4. regressionもfixedもなければ`result: NO_CHANGE`、`selected_board: INITIAL`
+
+本文へ必ず次を出す。
+
+```text
+REPAIR_DELTA
+fixed:
+- <item or none>
+remaining:
+- <item or none>
+regressed:
+- <item or none>
+initial_fail_count: <number>
+repair_fail_count: <number>
+result: IMPROVED / NO_CHANGE / WORSE
+selected_board: INITIAL / REPAIR
+```
+
+続けて次を出す。
+
+```text
+SELECTED_BOARD
+stage: INITIAL / REPAIR
+reason: repair_pass / no_regression_and_fixed / regression_detected / no_change
+review_copy: <対応するreview_initial_*.pngまたはreview_repair_*.png>
+```
+
+修正版だからという理由だけでREPAIRを選ばない。
+
+selected_boardがFAILでも1回repair上限を維持し、追加生成しない。
+
+## 13. 実行順序
 
 次の順序を崩さない。
 
@@ -338,11 +426,15 @@ INITIAL_BOARD
 → MACHINE_AUDIT
 → INITIAL_REVIEW
 → REVIEW_STAMP(INITIAL)
-→ AUDIT_SOURCE_CHECK（FAIL時だけ）
-→ REPAIR_BOARD（FAILかつ監査資料取得成功時だけ）
+→ SELECTED_BOARD(INITIAL)（初回PASS時だけ）
+→ AUDIT_SOURCE_CHECK（初回FAIL時だけ）
+→ REPAIR_PRESERVE
+→ REPAIR_BOARD
 → POST_REPAIR_MACHINE_AUDIT
 → POST_REPAIR_REVIEW
 → REVIEW_STAMP(REPAIR)
+→ REPAIR_DELTA
+→ SELECTED_BOARD
 ```
 
 機械監査が`IMAGE_UNAVAILABLE`、`EXECUTION_UNAVAILABLE`、`ERROR`なら、この接続テストではその時点で終了し、自動repairへ進まない。
