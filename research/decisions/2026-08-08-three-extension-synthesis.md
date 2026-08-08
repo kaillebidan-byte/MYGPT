@@ -1,281 +1,195 @@
 # N3 synthesis — AutoGPT + VoiceBridge + Translation Loop
 
 Date: 2026-08-08 JST
+Revised: 2026-08-09 00:55 JST
 Status: CURRENT IMPLEMENTATION DIRECTION
 
 ## Decision
 
-Do not adopt any of the three extensions wholesale.
-Do not pick a single one as the universal base.
+Build `MYGPT Worker Fanout` primarily by **directly reusing the user's already-working extension code**, not by reimplementing equivalent mechanisms from scratch.
 
-Build a dedicated MYGPT worker-fanout extension by combining the strongest *behaviors / architecture patterns* from all three while preserving the validated Custom-GPT isolation boundary.
+Reuse policy:
+- **ChatGPT Translation Loop Test 0.5.1:** strong/direct reuse is the default. Reuse its control plane, runToken/runtime guard, tab ownership, prompt runner, composer handling, submission evidence, fail-closed behavior, bounded execution and tests unless a concrete MYGPT incompatibility requires adaptation.
+- **ChatGPT VoiceBridge 0.2.6:** strong/direct reuse is the default for generic ChatGPT DOM observation, SPA route watching, generation-state observation and multi-tab messaging. Do not rewrite these mechanisms merely for architectural neatness.
+- **Autojourney AutoGPT 0.0.71:** selective reuse only. Take the useful visible-UI primitives and proven browser techniques, but exclude the invasive/internal-network/account/telemetry mechanisms identified by audit.
 
-AutoGPT is used as prior-art evidence for visible ChatGPT UI primitives; do not copy its proprietary/minified implementation directly.
-VoiceBridge and Translation Loop are treated as local source candidates whose modules/patterns can be reused where appropriate.
+The fact that an implementation is broadly used or already proven in the user's own working extensions is positive engineering evidence. A model-generated preference for a narrower or more "clean-room" design is **not** by itself a reason to replace proven code. Reject or rewrite an existing mechanism only when there is concrete evidence of incompatibility, an actual security/privacy issue, a licensing constraint, or a requirement conflict.
+
+This revises the earlier wording that treated Translation Loop and VoiceBridge mainly as pattern/reference sources. They are implementation assets and may be copied/adapted directly.
 
 ## Evidence set
 
 ### Autojourney AutoGPT 0.0.71
 
-Verified strengths:
-- works on the Custom-GPT page at least at UI-injection level;
-- visible new-chat DOM control is automatable;
-- prompt composer can be filled through visible DOM events;
-- ChatGPT file input can be populated with a `File`/`DataTransfer` flow;
-- image-generation workflows can be initiated without a separately billed OpenAI API.
+Useful/proven parts that may be reused or adapted:
+- Custom-GPT UI operation;
+- visible new-chat navigation/control;
+- composer manipulation through visible DOM;
+- ChatGPT file input population with browser `File` / `DataTransfer`;
+- ordinary visible send-control activation;
+- browser-side orchestration that does not require separately billed OpenAI API calls.
 
-Rejected mechanisms:
+Do **not** import the audited invasive parts:
 - ChatGPT `fetch` interception;
 - Bearer Authorization capture;
 - direct `backend-api` calls;
 - response-stream parsing;
-- automatic generated-output extraction/download;
+- membership/account API integration;
+- external telemetry;
+- third-party upload helpers;
 - CSP / X-Frame-Options / COOP / COEP stripping;
 - visibility/focus spoofing;
-- membership/account telemetry infrastructure;
-- third-party upload path;
-- automatic retry/rate-driving behavior.
+- automatic generated-output scraping/download unless separately designed and accepted;
+- uncontrolled automatic retry/rate-driving.
 
 Record:
 - `research/audits/2026-08-08-autogpt-0.0.71-static-analysis.md`
 
 ### ChatGPT VoiceBridge 0.2.6
 
-Verified strengths:
-- low-privilege standard DOM content script on all ChatGPT routes, including `/g/...`;
-- MutationObserver-based assistant/generation observation;
+Direct-reuse candidates:
+- low-privilege standard DOM content-script structure;
+- `/g/...` Custom-GPT route coverage;
+- MutationObserver-based DOM observation;
 - SPA route-change awareness;
 - multi-tab content/background communication;
-- visible stop-button generation state detection;
-- local debug infrastructure;
-- no ChatGPT internal API interception.
+- visible stop-button generation-state detection;
+- local debugging patterns.
 
-Weakness for orchestration:
-- no tab creation;
-- no prompt insertion;
-- no file attachment;
-- no orchestration state machine;
-- long-lived one-second background ping is useful for its voice use case but not necessary for initial MYGPT fan-out.
+Do not bring speech-specific network behavior into Worker Fanout unless it becomes relevant.
+The one-second ping loop is not forbidden categorically; retain/reuse it if real Vivaldi lifecycle behavior shows it is useful. Do not remove proven lifecycle support solely for theoretical minimalism.
 
 Record:
 - `research/audits/2026-08-08-voicebridge-0.2.6-reuse-assessment.md`
 
 ### ChatGPT Translation Loop Test 0.5.1
 
-Verified strengths:
-- strongest control-plane implementation of the three;
-- `chrome.tabs` / scripting / alarms ownership;
-- robust prompt runner with native setter / contenteditable handling;
-- fail-closed draft protection;
-- positive post-submit evidence rather than composer-clear heuristics;
-- runToken / serialized mutation guard against stale async operations;
-- route/conversation verification;
-- bounded operation and safe stop behavior;
-- bundled tests; all included `test_*.js` tests pass under Node in this audit.
+This is the **primary implementation base** for Worker Fanout orchestration.
 
-Weakness for MYGPT:
-- current route parser and rotation semantics target Project `g-p-...` routes, not user-created Custom GPT workers;
-- text-completion loop is broader than the required three-frame fan-out;
-- settings use sync mirroring, which is unnecessary for MYGPT packet/canonical session data.
+Direct-reuse candidates include:
+- `prompt_stacker_runner.js` editor discovery and React-compatible native value setter/contenteditable insertion;
+- draft-presence fail-closed behavior;
+- wait/reflect verification;
+- send-control discovery and normal DOM activation when the controlled-submit gate is reached;
+- positive post-submit evidence;
+- `runtime_guard.js` serialized mutations and runToken stale-operation rejection;
+- tab ownership and route verification;
+- bounded operation;
+- cancellation/stop semantics;
+- existing unit-test patterns and test files;
+- relevant background/content messaging structure.
+
+Adapt only what MYGPT actually requires:
+- replace Project `g-p-...` identity assumptions with the already-validated Custom-GPT `/g/...` worker adapter;
+- replace translation-loop semantics with finite worker-slot/fanout semantics;
+- keep packet/canonical run data ephemeral/local rather than syncing it unnecessarily.
 
 Record:
 - `research/audits/2026-08-08-translation-loop-0.5.1-static-analysis.md`
+- temporary extracted source under `research/temp-extension-sources/translation-loop-0.5.1-extracted/` while implementation remains in progress.
 
 ## Resulting architecture
 
-Use separate modules. Do not merge overlapping code indiscriminately.
-
 ```text
 MYGPT planner
-  -> three copy-ready local packets
+  -> worker packets + canonical
         |
         v
 MYGPT Worker Fanout extension
   Control plane
-    - Translation-Loop-style run token / state machine
-    - bounded exactly-three worker slots
-    - fail closed on route/draft/state mismatch
+    - DIRECTLY reuse/adapt Translation Loop runtime guard / runToken / ownership
+    - bounded worker slots F2/F3/F4
+    - fail closed on concrete route/draft/state mismatch
 
   Route / identity adapter
-    - VoiceBridge-style generic ChatGPT route observation
-    - new Custom-GPT stable-ID parser (not g-p Project parser)
-    - verify every tab remains the same worker GPT
+    - existing validated Custom-GPT `/g/...` adapter
+    - VoiceBridge route observation where useful
+    - adapt away only the Translation Loop Project-specific `g-p-...` parser
 
-  DOM adapter
-    - Translation-Loop-style composer detection + native setter
-    - AutoGPT-proven visible file-input/DataTransfer technique, clean-room reimplemented
-    - visible ChatGPT controls only
+  Composer / submit adapter
+    - DIRECTLY reuse Translation Loop Prompt Stacker runner
+    - Gate 1 exposes insertion-only subset
+    - later controlled-submit gate re-enables its proven send/evidence path
+
+  File attachment adapter
+    - use AutoGPT's proven visible `input[type=file]` + `File` / `DataTransfer` technique
+    - exclude its internal API/token/telemetry machinery
 
   Observer
-    - MutationObserver + visible stop-button state
-    - no response interception
+    - DIRECTLY reuse VoiceBridge observation primitives where they already solve the problem
+    - visible generation state only
 
   Browser coordinator
-    - open 3 Custom-GPT tabs
-    - bind worker slot F2/F3/F4 to tab IDs
-    - attach same canonical independently
-    - insert one distinct packet per tab
-    - controlled submit
+    - reuse Translation Loop tab/runtime patterns
+    - adapt to exactly three Custom-GPT worker tabs
 
-  Session storage
-    - local/session only
+  Session/runtime data
+    - ephemeral/local for packets/canonical/slot state
     - no external telemetry
-    - no prompt/canonical sync to browser account
 ```
 
-## Division of responsibility
+## Engineering rule: reuse before reinvention
 
-### Take from Translation Loop
+Before implementing a browser/DOM/state primitive from scratch:
+1. check Translation Loop source for an existing implementation;
+2. check VoiceBridge source for an existing implementation;
+3. if neither solves it, check AutoGPT for a safe visible-UI implementation/technique;
+4. only then write a new mechanism.
 
-Primary control-plane concepts:
-- `runToken` / stale-operation rejection;
-- serialized runtime mutation;
-- explicit phases;
-- tab ownership;
-- route mismatch -> stop;
-- draft present -> stop;
-- send button not enabled -> stop;
-- positive submission evidence;
-- one worker failure isolated from the other slots;
-- deterministic max-worker count = 3;
-- unit-test-first module split.
+When existing code has already passed real browser use or bundled tests, preserve it unless a concrete MYGPT requirement disproves it.
 
-### Take from VoiceBridge
+Do not treat speculative concerns, stylistic preferences, or a desire for unusually narrow permissions as sufficient evidence to discard working code. Permissions and mechanisms should be judged against actual required browser behavior and observed risk.
 
-Observer concepts:
-- generic ChatGPT `/g/...` content-script coverage;
-- MutationObserver;
-- SPA route-change recognition;
-- stop-button generation start/end detection;
-- lightweight metadata-only debugging;
-- no hidden ChatGPT API dependency.
+## Gate sequence
 
-Do not carry over the VoiceBridge speech endpoint into the MYGPT extension.
-Do not carry over the one-second persistent ping unless real Vivaldi background-tab behavior proves it necessary.
+Gate 0 — worker identity/tab ownership:
+- already Vivaldi LIVE PASS;
+- do not rewrite without concrete regression evidence.
 
-### Learn from AutoGPT
+Gate 1 — packet insertion only:
+- use Translation Loop Prompt Stacker implementation directly/adapted;
+- no submit during this gate;
+- live Vivaldi test required.
 
-Clean-room reimplement only these user-visible UI primitives:
-- new/fresh ChatGPT worker navigation;
-- `input[type=file]` attachment through a browser `File` object and `DataTransfer`;
-- normal composer insertion;
-- normal send-button activation.
+Next gates after Gate 1 PASS:
+1. canonical selection + one-tab attachment using safe AutoGPT-derived visible file-input technique;
+2. attachment + packet preparation in one tab;
+3. exactly-three-tab fanout, still without auto-submit;
+4. non-generation isolation check;
+5. controlled submit using Translation Loop's existing send-control + positive-evidence logic;
+6. one known static image-generation packet;
+7. three-worker generation.
 
-Do not copy bundled/minified AutoGPT source into the MYGPT repository.
-Do not reuse its internal API/token/output-extraction path.
+## AutoGPT selection boundary
 
-## Custom GPT handling
+AutoGPT is the exception to the direct-reuse default because its audited bundle mixes useful UI automation with mechanisms that are unnecessary for MYGPT and expand the trust surface.
 
-Custom GPT remains the worker boundary.
+Safe/useful candidates:
+- visible new-chat control/navigation;
+- visible composer interaction;
+- visible file input;
+- `File` / `DataTransfer` attachment;
+- normal visible send-button activation;
+- ordinary DOM-based browser automation.
 
-The extension must derive the current worker identity from the user-opened `MYGPT Single Frame Worker Test` page and store a normalized Custom-GPT root/stable ID for the current run.
-
-Do not use the Translation Loop Project parser unchanged.
-
-First implementation test:
-1. user opens the worker GPT manually;
-2. extension captures its normalized `/g/...` identity;
-3. extension opens one new tab from that worker identity;
-4. content script reports the resulting route;
-5. PASS only if the same Custom-GPT identity remains present;
-6. no prompt is sent in this first test.
-
-Only after this passes may three-tab fan-out be enabled.
-
-## Canonical handling
-
-Goal:
-- user selects the canonical once in the extension UI for one run;
-- the extension recreates a `File` for each worker and supplies it to ChatGPT's own visible file input;
-- no external upload service;
-- no generated frame becomes canon.
-
-Storage rule:
-- canonical bytes and packets are ephemeral/local for the current run;
-- clear them on explicit reset/completion;
-- do not mirror to `chrome.storage.sync`.
-
-Exact transport mechanism between extension UI/background/content script must be implemented and tested against the actual canonical file size before finalizing storage representation.
-
-## Submission policy
-
-Initial version should support two modes:
-
-### Gate mode — first live tests
-- open tab;
-- verify worker identity;
-- attach canonical;
-- insert packet;
-- **do not submit automatically**;
-- user visually confirms all three prepared tabs.
-
-### Controlled-submit mode — only after Gate mode PASS
-- require all three slots to be READY;
-- send each through visible ChatGPT send controls;
-- verify positive evidence that each user turn was committed / generation started;
-- if any tab fails before commit, stop that slot without duplicating sends on the others;
-- no auto retry in v0.1.
-
-## Completion / output policy
-
-The first operational milestone does not need to scrape or download generated outputs.
-
-Do not implement:
-- backend response parsing;
-- image URL extraction;
-- automatic download;
-- hidden token/API access.
-
-Visible image results remain user-reviewed and user-saved.
-
-If later automation of post-generation handling is requested, it requires a separate design/terms review and separate acceptance gate.
-
-## Permission target
-
-Aim for a narrow Manifest V3 surface:
-- `storage`
-- `tabs` only if needed for reliable tab identity/coordinator behavior
-- `scripting` only if needed for already-open-tab injection / recovery
-- host permissions limited to ChatGPT domains
-
-Do not request:
-- `downloads`
-- `declarativeNetRequest`
-- broad all-sites host access
-
-Avoid `alarms` unless a real watchdog need appears; for the stated few-hours-per-day three-worker workflow, event-driven tab/content messages should be sufficient initially.
-
-## What is explicitly not being merged
-
-- AutoGPT membership/telemetry layer;
-- AutoGPT security-header rules;
-- AutoGPT internal ChatGPT API logic;
-- Translation Loop's automatic arbitrary multi-chat continuation loop;
-- Translation Loop Project `g-p` route model;
-- VoiceBridge speech network path;
-- VoiceBridge continuous one-second monitor ping;
-- any generated-output scraper.
-
-## Implementation order
-
-1. create a separate `MYGPT Worker Fanout` extension; do not modify the two working local add-ons first;
-2. implement Custom-GPT route normalization + one-tab open/verify;
-3. implement packet insertion without submit;
-4. implement one-time canonical selection + one-tab attachment;
-5. combine attachment + packet preparation in one tab;
-6. fan out to exactly three tabs, still no auto-submit;
-7. run the non-generation isolation check;
-8. add controlled submit using Translation-Loop-style positive evidence;
-9. invoke one known static image packet;
-10. only after single-slot PASS, invoke all three workers;
-11. keep output saving/manual review outside the extension for v0.1.
+Excluded unless separately justified later:
+- Bearer/token acquisition;
+- ChatGPT internal backend endpoints;
+- response interception/parsing;
+- security-header removal;
+- focus/visibility spoofing;
+- membership/account integration;
+- telemetry;
+- third-party upload;
+- automatic output extraction/download;
+- uncontrolled retry/rate-driving.
 
 ## Current decision
 
-**Yes: the correct path is a three-way synthesis, not selecting one extension wholesale.**
+**Primary base: Translation Loop 0.5.1, reused directly and adapted to Custom-GPT worker semantics.**
 
-Primary control plane: Translation Loop concepts.
-Primary DOM observer: VoiceBridge concepts.
-Missing file/new-chat primitives: clean-room reimplementation informed by AutoGPT behavior.
+**Observer/lifecycle support: VoiceBridge 0.2.6, reused directly where applicable.**
 
-This gives the shortest path to fan-out while preserving the production-v0 worker isolation and avoiding the invasive mechanisms found in the full AutoGPT product.
+**Missing UI primitives: take the safe visible-browser pieces from AutoGPT 0.0.71, while excluding its invasive/internal-service pieces.**
+
+The project should prefer proven existing code over reimplementation. New code is for actual gaps, not for replacing working mechanisms because of model-specific architectural taste.
