@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "ChatGPT VoiceBridge",
+  "version": "0.2.6",
+  "description": "ChatGPTブラウザ版の新しい最終回答を読み上げる。非表示タブでDOM本文が未反映の場合は完了通知だけを行い、再表示後に全文を読む。",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "ChatGPT VoiceBridge",
+    "default_popup": "popup.html"
+  }
+}
