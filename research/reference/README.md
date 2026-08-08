@@ -2,6 +2,17 @@
 
 This directory is for implementation lookup material that should prevent repeated re-analysis of supplied extension archives.
 
+## Worker Fanout reuse inventory — read first for implementation work
+
+1. `research/reference/2026-08-09-extension-reuse-inventory.md`
+   - Translation Loop / AutoGPT / VoiceBridge capability-by-capability reuse map;
+   - exact Translation Loop modules worth reusing directly;
+   - ownership split between control plane, ChatGPT page execution and lifecycle monitoring;
+   - Priority A/B/C reuse order;
+   - minimum-new-code plan for the next Worker Fanout implementation.
+
+When about to implement a browser/state/DOM mechanism, consult this inventory before writing a replacement.
+
 ## AutoGPT 0.0.71
 
 Read in this order:
