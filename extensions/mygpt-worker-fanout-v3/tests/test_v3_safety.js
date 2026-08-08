@@ -51,4 +51,7 @@ const noSubmit = [
 for (const pattern of noSubmit) assert.equal(pattern.test(source), false, `submission path present: ${pattern}`);
 
 assert.equal((source.match(/chrome\.tabs\.create\s*\(/g) || []).length, 1);
-console.log("MYGPT Worker Fanout v3.1 safety contract: PASS");
+assert.ok(source.includes("openSlotTab"));
+assert.ok(source.includes("verifySlotTab"));
+assert.ok(source.includes("prepareStagedSlot"));
+console.log("MYGPT Worker Fanout v3.2 safety contract: PASS");
