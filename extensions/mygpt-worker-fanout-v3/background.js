@@ -275,7 +275,7 @@ async function mutateSlot(token, slotId, patch) {
   }));
 }
 
-async function prepareOneSlot(token, sourceIdentity, payload, slotId) {
+async function openSlotTab(token, sourceIdentity, slotId) {
   if (!(await guard.isCurrent(token))) return { ok: false, slotId, error: "STALE_RUN" };
 
   let tab;
@@ -295,6 +295,13 @@ async function prepareOneSlot(token, sourceIdentity, payload, slotId) {
   }
 
   const tabId = tab.id;
+  await mutateSlot(token, slotId, { phase: "OPENING", tabId });
+  return { ok: true, slotId, tabId };
+}
+
+async function verifySlotTab(token, sourceIdentity, opened) {
+  if (!opened?.ok || !Number.isInteger(opened.tabId)) return opened;
+  const { slotId, tabId } = opened;
   await mutateSlot(token, slotId, { phase: "VERIFYING", tabId });
 
   let report;
@@ -319,7 +326,23 @@ async function prepareOneSlot(token, sourceIdentity, payload, slotId) {
     return { ok: false, slotId, tabId, error: "WORKER_IDENTITY_MISMATCH" };
   }
 
-  await mutateSlot(token, slotId, { phase: "PREPARING", generationActive: report.generationActive === true });
+  await mutateSlot(token, slotId, {
+    phase: "STAGED",
+    tabId,
+    generationActive: report.generationActive === true
+  });
+  return { ok: true, slotId, tabId, report };
+}
+
+async function prepareStagedSlot(token, sourceIdentity, payload, staged) {
+  if (!staged?.ok || !Number.isInteger(staged.tabId)) return staged;
+  const { slotId, tabId } = staged;
+  if (!(await guard.isCurrent(token))) return { ok: false, slotId, tabId, error: "STALE_RUN" };
+
+  await mutateSlot(token, slotId, {
+    phase: "PREPARING",
+    generationActive: staged.report?.generationActive === true
+  });
 
   let result;
   try {
@@ -423,11 +446,27 @@ async function startThree(message) {
   if (!start.committed || !start.value) return { ok: false, error: "RUN_START_REJECTED", state: start.runtime };
   const token = start.value;
 
-  const results = [];
-  // Deliberately sequential for the first live build: same mechanics, less Vivaldi background-tab contention.
+  // Open every worker tab before inserting any draft. ChatGPT can restore the latest
+  // unsent draft when a new /g/<worker> root is opened, so late-created tabs must not
+  // be created after F2 has already received its packet.
+  const opened = [];
   for (const slotId of SLOT_IDS) {
     if (!(await guard.isCurrent(token))) break;
-    results.push(await prepareOneSlot(token, sourceIdentity, payload, slotId));
+    opened.push(await openSlotTab(token, sourceIdentity, slotId));
+  }
+
+  const staged = [];
+  for (const item of opened) {
+    if (!(await guard.isCurrent(token))) break;
+    staged.push(await verifySlotTab(token, sourceIdentity, item));
+  }
+
+  const results = [];
+  // Preparation remains sequential to reduce hidden-tab contention; all three tabs
+  // are already staged empty before this loop begins.
+  for (const item of staged) {
+    if (!(await guard.isCurrent(token))) break;
+    results.push(await prepareStagedSlot(token, sourceIdentity, payload, item));
   }
 
   const final = await guard.mutateIfToken(token, (runtime) => {
