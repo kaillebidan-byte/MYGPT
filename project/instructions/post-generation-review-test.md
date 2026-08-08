@@ -1,6 +1,6 @@
-# 一時検証モード: 生成後レビュー + 条件分岐型1回修正
+# 一時検証モード: 生成後レビュー + GitHub監査 + 条件分岐型1回修正
 
-このファイルは、主要モーションボードの生成後に同一ターン内で実画像を確認し、不合格なら確認済みの問題だけを1回修正して再確認できるか検証するための一時Project Instructionsである。
+このファイルは、主要モーションボードの生成後に同一ターン内で実画像を確認し、不合格ならGitHub上の監査資料を実際に取得してから、確認済みの問題だけを1回修正・再確認できるか検証するための一時Project Instructionsである。
 
 この検証中は、画像生成物だけを返して応答を終了する規則よりこのファイルを優先する。
 
@@ -152,11 +152,44 @@ REVIEW_UNAVAILABLE
 
 ## 5. 初回PASS時
 
-7項目すべてがPASSなら追加画像を生成せず終了する。
+7項目すべてがPASSならGitHub監査資料の取得や追加画像生成を行わず終了する。
 
-## 6. 初回FAIL時の修正方式
+## 6. 初回FAIL後のGitHub監査資料取得
 
-自動修正は1回だけ行う。
+初回overallがFAILの場合、repair条件を作る前に次のGitHub URLを実際に開いて、現在の内容を取得する。
+
+`https://github.com/kaillebidan-byte/MYGPT/blob/main/project/sources/production/05-post-generation-audit.md`
+
+生成前にこのURLを読む必要はない。初回の実画像レビューがFAILになった後だけ取得する。
+
+会話履歴やProject内の古いコピーだけを根拠に「読んだ」と扱わない。このターンでURL取得を実行し、取得した現在内容を初回レビューのFAILと照合する。
+
+取得できた場合、repair生成より前に必ず本文として次を出す。
+
+```text
+AUDIT_SOURCE_CHECK
+source: https://github.com/kaillebidan-byte/MYGPT/blob/main/project/sources/production/05-post-generation-audit.md
+status: LOADED
+applied_rules:
+- 初回FAILに直接関係する監査・repair規則だけを短く列挙
+```
+
+取得できなかった場合はrepairを推測で続行せず、次を返して終了する。
+
+```text
+AUDIT_SOURCE_CHECK
+source: https://github.com/kaillebidan-byte/MYGPT/blob/main/project/sources/production/05-post-generation-audit.md
+status: UNAVAILABLE
+
+AUDIT_SOURCE_UNAVAILABLE
+- 初回画像はFAILだが、このターンではGitHub監査資料を取得できなかったため自動repairを行わない。
+```
+
+## 7. 初回FAIL時の修正方式
+
+GitHub監査資料をLOADEDできた場合だけ、自動修正を1回行う。
+
+repair条件は、初回の実画像レビューで確認したFAILと、取得した`05-post-generation-audit.md`の該当規則を組み合わせて作る。
 
 初回FAILを次の2種類へ分ける。
 
@@ -179,9 +212,10 @@ canonical identity referenceをidentityの正本としてboard全体を1回だ�
 - identity_anchors
 - active_limb_idとviewer-spaceでの開始側
 - top-left / top-right / bottom-left / bottom-rightのstate plan
-- K4に相当するbottom-rightの具体的なend
+- bottom-rightの具体的なend
 - continuityまたはendpointで実画像上確認した失敗
 - identity、layout、chroma、unintended_outputでFAILした確認済み問題
+- GitHub監査資料から今回のFAILに直接適用したrepair規則
 
 正面主体で反転しない動作では、修正指示に「同じ足」という曖昧な表現だけを使わない。
 
@@ -201,8 +235,9 @@ motion_semantics、continuity、endpointがすべてPASSで、それ以外だけ
 - canonical identity referenceは同一性復元の基準として使う
 - FAILだったidentity、layout、chroma、unintended_outputだけを直す
 - PASSだったmotion、continuity、endpointを再設計しない
+- GitHub監査資料の該当するnon-motion repair規則だけを使う
 
-## 7. 修正版生成
+## 8. 修正版生成
 
 修正版の画像生成直前に、本文として次の1行だけ出す。
 
@@ -212,7 +247,7 @@ motion_semantics、continuity、endpointがすべてPASSで、それ以外だけ
 
 A/B候補、別案、2回目の修正は行わない。
 
-## 8. 修正後レビュー
+## 9. 修正後レビュー
 
 修正版の生成が終わっても応答を終了せず、その修正版の実画像を同じ7項目で再確認する。
 
@@ -239,12 +274,12 @@ issues:
 
 修正後がFAILでも追加生成しない。
 
-## 9. 重要
+## 10. 重要
 
 画像生成ツールを呼び出したという事実だけをもってレビュー済みと扱わない。
 
 生成前のmotion contractや修正指示が正しかったことを、生成結果のPASS根拠にしない。
 
-レビューは必ず生成された実画像そのものに基づいて行う。
+GitHub監査資料を取得したという事実だけで画像を再判定しない。画像判定は実画像、repair規則は取得した監査資料を根拠にする。
 
-初回画像と修正版を区別できるよう、`INITIAL_BOARD`、`INITIAL_REVIEW`、`REPAIR_BOARD`、`POST_REPAIR_REVIEW`の順序を崩さない。
+初回画像と修正版を区別できるよう、`INITIAL_BOARD`、`INITIAL_REVIEW`、`AUDIT_SOURCE_CHECK`、`REPAIR_BOARD`、`POST_REPAIR_REVIEW`の順序を崩さない。
