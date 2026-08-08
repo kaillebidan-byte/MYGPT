@@ -14,6 +14,9 @@ Verdict:
 Acceptance contract:
 - `research/decisions/2026-08-08-production-v0-acceptance.md`
 
+Orchestration ceiling:
+- `research/experiments/2026-08-08-n3-orchestration-ceiling.md`
+
 Validated scope:
 - 1 canonical character
 - canonical pose = F1
@@ -49,6 +52,8 @@ planner emits independent local static packets for F2/F3/F4
         ↓
 raw visual identity / motion audit
         ↓
+failed local frame only: retry from canonical if needed
+        ↓
 remove_chroma_key.py (despill enabled)
         ↓
 common scale / common foot baseline
@@ -71,9 +76,7 @@ Workerへ見せない:
 
 Isolation起点:
 - fresh conversation + canonical再添付: proven
-- clean pre-motion seedからBranch: N2 PASS、canonical再添付を省けるoptional UX reduction
-
-Branchはworker自動spawn / packet自動配布ではない。
+- clean pre-motion seedからBranch: N2 PASS
 
 ## Validated worker default
 
@@ -115,6 +118,27 @@ R2 — torso-dominant shallow bow:
 This establishes production v0 generalization, not perfect first-pass reliability.
 Failed local states remain independently retryable from canonical without global worker tuning.
 
+## Orchestration status
+
+Current Plus / ordinary ChatGPT / Project / Custom GPT constraints do not provide a confirmed official zero-click multi-worker fan-out path.
+
+Minimum validated in-product workflow:
+
+```text
+planner outputs 3 copy-ready local packets
+        ↓
+clean Custom GPT seed + canonical once
+        ↓
+manual Branch x3
+        ↓
+manual send one packet per branch
+        ↓
+3 independent generations
+```
+
+Production v0 is therefore manual-assisted.
+Do not trade away worker isolation merely to reduce clicks.
+
 ## Active audit / post-processing
 
 CURRENT ACTIVE:
@@ -148,14 +172,13 @@ Do not return `four-pose-portrait` layout guides to generation references.
 4. `research/MOTION-GENERATION-EXPERIMENT-LOG.md`
 5. frozen legacy assets only when comparison is necessary
 
-## Next phase
+## Current stopping point
 
-Generation-quality generalization for v0 is closed unless new evidence breaks the acceptance contract.
+Generation architecture, production-v0 generalization, deterministic post-processing, Branch UX, and current no-code orchestration ceiling are all recorded.
 
-Next target:
-- N3 orchestration friction / automation ceiling within ChatGPT Plus
-
-Goal:
-- reduce manual creation / branching of three isolated workers
-- reduce manual distribution of three local pose packets
-- keep Work/Codex weekly agentic allowance and separate OpenAI API billing outside the production dependency
+Do not automatically reopen generation tuning.
+The next scope should be chosen explicitly from:
+- production runbook / planner packet-format hardening
+- v0 scope expansion
+- automation with relaxed constraints
+- single-variable reconsideration of a specific frozen legacy / fixture asset
