@@ -1,4 +1,4 @@
-# Identity / continuity direction after N1
+# Identity / continuity direction after W4
 
 Date: 2026-08-08 JST
 Status: CURRENT DECISION
@@ -6,188 +6,203 @@ Constraint: ChatGPT Plus / no Work / no Codex agentic allowance / no OpenAI API 
 
 ## Current decision in one sentence
 
-Carrier/context isolation is sufficiently proven by fresh Custom-GPT / Instant conversations; stop adding orchestration prompts and move to identity/continuity audit using `F1 = canonical` plus three isolated generated moving frames.
+Fresh Custom-GPT / Instant workers plus one targeted active-sleeve invariant now produce a usable four-state candidate; stop generation-prompt tuning and move to deterministic post-processing / composed-sequence audit.
 
 ## What is already solved enough to move on
 
-N1 established that fresh Custom-GPT / Instant conversations can create the missing generation boundary:
+### Carrier / context isolation
+
+N1 established that fresh Custom-GPT / Instant conversations provide the required generation boundary:
 - one worker conversation sees one local static pose only
-- 4/4 outputs were standalone portrait images
-- no 2x2 / multi-panel regression
-- anatomical right hand progressed through the requested motion states
+- standalone portrait output
+- no global 4-state / sheet contamination
+- no active-limb side swap
 
-Custom GPT / Thinking remains unusable in the tested runtime because image generation stopped with the tool-unavailable failure. Do not count that as failure of the context-boundary idea and do not spend further prompt-repair trials on Thinking now.
+Custom GPT / Thinking remains unusable in the tested runtime because image generation stopped with the tool-unavailable failure. Do not spend prompt-repair trials on Thinking now.
 
-Therefore sheet carrier / context isolation is no longer the first unresolved problem.
+### Broad identity
 
-## Current unresolved problem
+The raw N1 audit showed that the moving Instant frames do not suffer broad uncontrolled identity collapse. The regenerated neutral frame was the clear outlier, so the start frame is no longer generated when canonical already represents the start pose.
 
-The primary unresolved problem is identity / temporal continuity across independently redrawn frames.
+### Targeted active-sleeve continuity
 
-Observed N1 behavior:
-- the regenerated neutral start drifted more strongly in body width/proportions than the moving frames
-- the moving Instant outputs were much more stable overall
-- the main visible jitter is the active anatomical-right sleeve / hand / local occlusion and potentially fine accessory topology
-- identity is maintained by redraw, not by unchanged-pixel preservation
+W1 added only one worker invariant for the active anatomical-right large sleeve:
+- the sleeve may deform with arm motion
+- keep the same basic large-sleeve construction
+- preserve opening / gold trim / grey lining / motif rather than redesigning or deleting them
 
-Treat continuity as a separate quality problem from carrier.
+W1/W2/W3/W4 showed this targeted rule materially improves sleeve continuity without reintroducing sheetification.
 
-## Production candidate
+### Hand articulation / spatial packets
 
-When the canonical already represents the one-shot start state:
+W2 showed hand shape can be stabilized by local-packet wording.
+W3 showed that an over-strong landmark constraint can encode the wrong temporal state even when the model follows it; W3-B is therefore repurposed as the early state rather than treated as a placement failure.
+W4 produced a usable endpoint over the chest flower while retaining the sleeve improvement.
+
+## Current four-frame candidate
+
+Use exactly:
+- F1 = canonical `kokyo_base_20260805.png`
+- F2 = W3-B `19_12_14 (2)`
+- F3 = W2 `19_07_53`
+- F4 = W4 `19_17_55`
+
+Motion reads:
+- F1 neutral start
+- F2 early raise near upper waist / lower torso
+- F3 later raise near chest flower
+- F4 stop with hand over chest flower
+
+Do not use the regenerated neutral N1 frame as F1.
+Do not use the old N1 endpoint when W4 is available.
+
+## Production candidate architecture
+
+When canonical already represents the one-shot start state:
 
 ```text
 natural motion request
-→ planner creates three local target-pose packets after start
+→ planner understands the full motion
+→ planner emits three independent local pose packets
 → F1 = canonical itself, no generation
 → F2 = fresh Custom-GPT / Instant conversation
 → F3 = fresh Custom-GPT / Instant conversation
 → F4 = fresh Custom-GPT / Instant conversation
 → each worker sees canonical + one local pose only
-→ identity / continuity audit
-→ deterministic chroma / scale / baseline normalization
-→ deterministic board / strip compose
+→ deterministic chroma removal
+→ common scale / baseline normalization
+→ deterministic strip / board composition
+→ visual identity / motion audit
+→ machine geometry / chroma audit
 ```
 
 This uses three image generations for a four-keypose one-shot.
 
-Worker rules:
-- direct-attach the same high-resolution canonical every time
+## Worker configuration to keep
+
+- model mode: Instant
+- direct-attach the same high-resolution canonical every generated frame
+- fresh conversation per generated frame
+- Image generation ON
+- Web OFF
+- Code/Data Analysis OFF
+- Actions NONE
+- Apps NONE
+- Knowledge NONE
 - never use a generated frame as the next identity source
-- do not show full motion, other pose packets, progress percentages, F1-F4 labels, sequence/sheet concepts
-- keep worker prompts short
-- do not paste the full `01-character-identity.md` contract into image-generation prompts
+- never show full motion / other packets / progress percentages / F1-F4 / sequence / board / sheet concepts
+- keep worker prompt short
+- retain only the proven targeted active-sleeve invariant beyond the minimal single-frame worker rules
 
-## Dormant GitHub assets to reactivate now
+Do not add the full `01-character-identity.md` contract to the worker prompt. Use it as an audit contract.
 
-1. `project/sources/production/01-character-identity.md`
-   - use as the audit contract
-   - canonical remains the visual identity anchor
+## Local packet rule for visible hands
 
-2. `audit/scripts/remove_chroma_key.py`
-   - per-frame background removal
+When hand shape matters, state the hand articulation absolutely inside each isolated local packet. Do not tell a worker to match other frames.
 
-3. `audit/scripts/compose_keypose_board_from_frames.py`
-   - common scale, baseline, safe gaps, deterministic board geometry
+For this motion class, the useful invariant is approximately:
+- fingers naturally together and lightly extended
+- not a fist
+- not a dramatically splayed palm
+- palm orientation explicitly stated when needed
 
-4. `audit/scripts/build_motion_strip.py`
-   - normalized chronological strip and later inbetween assembly
+Spatial wording must encode the desired temporal state itself. Avoid adding geometric exclusions that accidentally push a hand into an earlier/later state.
 
-5. `audit/scripts/machine_audit_board.py`
-   - geometry/chroma checks only
-   - never treat it as identity or motion-semantic audit
+## Immediate next stage — C0 deterministic post-processing
 
-Do not reactivate:
-- `four-pose-portrait.png` as generation reference
-- direct 2x2 generation
-- generated-frame identity chaining
-- full-board repair
-- broad-region M2c-style crossfade/morph
+No new generation first.
 
-## Stage C0 — immediate next step, no new image generation
+Use the final candidate set:
+- F1 canonical
+- F2 W3-B
+- F3 W2
+- F4 W4
 
-Use the images already available:
-- F1 = original canonical image
-- F2 = N1 early moving frame
-- F3 = N1 late moving frame
-- F4 = N1 endpoint moving frame
+Reactivate existing assets:
+1. `audit/scripts/remove_chroma_key.py`
+2. `audit/scripts/compose_keypose_board_from_frames.py`
+3. `audit/scripts/build_motion_strip.py`
+4. `audit/scripts/machine_audit_board.py` for geometry/chroma only
+5. `project/sources/production/01-character-identity.md` as visual audit contract
 
-Apply only deterministic post-processing:
+Apply:
 - chroma removal
 - common scale / baseline normalization
 - chronological strip and/or deterministic board compose
 
-Then visually audit against `01-character-identity.md`.
-
-Primary review targets:
+Then audit:
 - proportions
 - silhouette
 - hat/hair boundary
 - chest flower emblem
 - non-active sleeve
-- active sleeve silhouette / opening / fold
+- active sleeve opening / grey lining / gold trim / motif
+- hand articulation / local arm-torso occlusion
 - waist medallion
 - tassel / cord / fastener count and attachment
-- overlap / occlusion around active arm and torso
 - lower garment
 - shoes
+- motion progression / endpoint
 
-If this set is acceptable after normalization, do not add a new generation-control mechanism.
+## Stage C1 — machine-assisted continuity audit if useful
 
-## Stage C1 — add machine-assisted continuity audit
-
-The missing code component is an advisory identity/continuity audit, not another generator prompt.
-
-Useful signals:
-- foreground bbox width/height/center
-- normalized character width-height ratio
-- stable anchors after alignment
-- silhouette overlap after translation/scale normalization
-- stable-region structural similarity against canonical and adjacent frames
-- chroma/background diagnostics
+Existing `machine_audit_board.py` does not determine identity.
+If additional code is added, keep it advisory:
+- foreground bbox / center
+- normalized width-height ratio
+- silhouette overlap after alignment
+- stable-region structural similarity
+- canonical / adjacent-frame comparison
 
 Do not use one SSIM or pixel score as the identity verdict.
 Topology / part count / attachment / overlap / occlusion remain visual audit items.
 
-## Stage C2 — only if C0 fails because of global redraw drift
+## C2 / C3 only if the composed candidate still fails
 
-Test local edit on the canonical, selecting only the anatomical-right arm/sleeve region and requesting one target still pose.
+### C2 local edit diagnostic
 
-Purpose:
-- determine whether local selection materially reduces whole-body redraw drift
+Only if post-processing reveals unacceptable whole-redraw drift, test local edit around the active arm/sleeve. This remains a quality diagnostic; do not assume manual selection is automatable or perfectly confined.
 
-This is a diagnostic quality test first.
-Do not assume manual selection is automatable.
-Do not assume selected-area edits are perfectly confined outside the mask.
+### C3 role-separated two-reference
 
-## Stage C3 — only if C2/text-only path is still insufficient
-
-Test role-separated two-reference generation with exactly:
-- Reference A = canonical identity / costume / proportions / colors / topology
+Only if text-only isolated generation remains insufficient:
+- Reference A = canonical identity / costume / proportions / topology
 - Reference B = one single-pose visual guide
 - local text = current still pose
 
-Priority:
-- A wins for identity/outfit/proportions/topology
-- B controls pose/limb angles/hand location only
-- B should preferably be skeletal/mannequin/silhouette and carry minimal identity/style information
-
+Prefer a skeletal/mannequin/silhouette pose guide with minimal identity/style information.
 Never provide all four pose guides together.
 Never return `four-pose-portrait.png` as a generation reference.
 
 ## Branch / automation decision
 
-N1 proved the manual fresh-conversation boundary.
-Do not run N2 Branch merely because carrier passed.
-First establish that the identity/continuity quality of the candidate pipeline is acceptable.
-
-Only after C0/C1 passes should Branch be tested as friction reduction:
-- clean seed only
-- no global motion context
-- verify canonical attachment inheritance
-- verify Instant/model configuration remains correct
+Do not test Branch before the final candidate passes deterministic composed-sequence audit.
+After that, Branch may be tested only as friction reduction from a clean pre-motion seed.
 
 Zero-click spawning of multiple independent worker chats is still not documented in normal Chat. Work/API remain outside the original constraint.
 
-## External evidence already consulted
+## Do not do now
 
-OpenAI official:
-- ChatGPT Images supports local editing but warns changes can extend outside the selected area.
-  - https://help.openai.com/en/articles/11084440
-- OpenAI Academy recommends explicitly assigning roles when multiple reference images are used.
-  - https://openai.com/academy/image-generation/
-- GPT Image documentation treats high-fidelity image input as a distinct capability.
-  - https://developers.openai.com/api/docs/models/gpt-image-2
+- no broad identity Knowledge
+- no additional global worker prose
+- no new pose-reference image yet
+- no rerun of F2/F3 merely to chase small redraw differences
+- no direct 2x2 generation
+- no generated-frame identity chaining
+- no full-board repair
+- no Custom GPT Thinking prompt repair
 
-Existing MYGPT external research:
-- `research/chatgpt-project-practices/china-imagegen-practices.md`
-  - identity and pose/structure are often separated into different visual control channels
-  - candidate fallback: canonical identity + one single-pose visual guide
+## Evidence
 
-Do not repeat the same external searches unless new evidence requires another angle.
+See:
+- `research/audits/2026-08-08-n1-raw-identity-continuity-audit.md`
+- `research/experiments/2026-08-08-w1-targeted-sleeve-invariant-result.md`
+- `research/experiments/2026-08-08-w2-hand-shape-position-result.md`
+- `research/experiments/2026-08-08-w3-ab-spatial-overconstraint-result.md`
+- `research/experiments/2026-08-08-w4-endpoint-and-final-candidate-result.md`
 
 ## Operational rule
 
-No new generation experiment before C0/C1 unless the current saved frames are unavailable.
 Save every generated image immediately in future tests.
-If a test has already produced enough evidence for FAIL, stop only after needed images/logs have been saved.
+If a fail condition is already clear, stop after evidence needed for diagnosis has been saved.
+Do not reopen generation-control experiments until the final candidate has been evaluated after deterministic normalization / composition.
