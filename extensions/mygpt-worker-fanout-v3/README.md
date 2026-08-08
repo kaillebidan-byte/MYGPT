@@ -1,8 +1,8 @@
 # MYGPT Worker Fanout v3
 
-Status: **v0.3.2 STATIC PASS candidate — full-root readback + pre-staged tabs live re-test pending**
+Status: **v0.3.3 STATIC PASS candidate — paragraph readback + Translation Loop upload-ready guard live re-test pending**
 
-This is the stripped-AutoGPT rebuild. v0.3.2 keeps the MAIN-world AutoGPT path and fixes the remaining READY verification/tab-staging issues.
+This is the stripped-AutoGPT rebuild. v0.3.3 keeps the proven MAIN-world AutoGPT upload/paste path and replaces only the weak READY/readback checks.
 
 ## Architecture
 
@@ -14,10 +14,29 @@ This is the stripped-AutoGPT rebuild. v0.3.2 keeps the MAIN-world AutoGPT path a
   - passive page-world fetch/WebSocket observation without Bearer capture
 - Translation Loop 0.5.1:
   - `runtime_guard.js` reused for serialized state mutation / runToken
+  - Prompt Stacker `enabledCandidate/getSendButton` logic directly adapted into `translation_loop_send_guard.js` for positive composer-send readiness
 - VoiceBridge 0.2.6 concepts:
   - route + generation MutationObserver diagnostics
 
 No Google Analytics, membership, Autojourney services, prompt export, imgbb, external upload, direct internal API calls, Bearer capture, downloads, DNR header stripping or visibility shim are included.
+
+## v0.3.3 live-fix
+
+The v0.3.2 live run proved that all three synthetic pastes succeeded. ChatGPT rendered each
+logical newline as a separate `<p>`, and `innerText` inserted an extra blank line between
+paragraphs (`expectedChars:48`, `observedChars:50`). v0.3.3 therefore verifies the logical
+prompt by reading each `#prompt-textarea p` and joining paragraphs with one `\n`.
+
+One of the three tabs also reported upload-ready while the canonical was visibly absent.
+The simplified AutoGPT predicate accepted a temporarily missing React submit button. v0.3.3
+keeps AutoGPT's `DataTransfer -> input.files -> change` upload path but uses Translation Loop's
+proven composer-local enabled-button lookup as the final positive READY gate. READY now requires:
+
+1. no composer upload spinner; and
+2. a real composer/send button exists; and
+3. it is not `disabled`, `aria-disabled=true`, or `data-disabled=true`.
+
+There is still no send/click/Enter path in this build.
 
 ## v0.3.2 live-fix
 
@@ -44,7 +63,7 @@ v0.3.1 moves the ChatGPT adapter itself to MAIN world and invokes READY preparat
 remains in the extension background. Identity/generation evidence is re-read from the isolated
 content script after MAIN-world preparation.
 
-## v0.3.2 live scope
+## v0.3.3 live scope
 
 One click prepares exactly three fresh tabs: F2/F3/F4. Each must remain unsent.
 
@@ -53,7 +72,7 @@ One click prepares exactly three fresh tabs: F2/F3/F4. Each must remain unsent.
 3. create F2/F3/F4 tabs to the same worker root;
 4. verify each identity;
 5. attach the same canonical with AutoGPT's file-input pattern;
-6. wait for AutoGPT-style composer upload-ready state;
+6. wait for AutoGPT upload completion plus Translation Loop composer-send readiness;
 7. paste a distinct packet with a synthetic paste event;
 8. verify normalized readback;
 9. require `submitted:false` and no active generation;
@@ -79,9 +98,9 @@ All three worker tabs are opened and verified before any draft insertion. READY 
 
 Expected slot diagnostics:
 
-- attachment: `autogpt-upload-ready`
+- attachment: `autogpt-upload-ready` (now gated by Translation Loop enabled-send readiness)
 - insertion: `autogpt-synthetic-paste`
 
 ## Passive observer
 
-`page_observer.js` is already installed in MAIN world for the next controlled-submit step. It can observe the page's own conversation POST stream and `ws.chatgpt.com` updates, but v0.3.2 does not trigger submission and does not read/store Authorization headers.
+`page_observer.js` is already installed in MAIN world for the next controlled-submit step. It can observe the page's own conversation POST stream and `ws.chatgpt.com` updates, but v0.3.3 does not trigger submission and does not read/store Authorization headers.
