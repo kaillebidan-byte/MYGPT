@@ -80,7 +80,7 @@ jobs:
               assert phrase in frame_spec, f"Frame spec missing: {phrase}"
 
           workflow = Path("project/sources/production/04-imagegen-workflow.md").read_text(encoding="utf-8")
-          for phrase in ["1 visual job = 1 frame", "4つの単独画像生成job", "failed-frame", "deterministic compose"]:
+          for phrase in ["1 visual job = 1 frame", "4つの単独画像生成job", "必要なframeだけ各1回再生成", "deterministic compose"]:
               assert phrase in workflow, f"Workflow missing: {phrase}"
 
           audit = Path("project/sources/production/05-post-generation-audit.md").read_text(encoding="utf-8")
