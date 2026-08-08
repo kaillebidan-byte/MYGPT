@@ -1,138 +1,86 @@
 # Image Generation Workflow
 
-この資料は、ChatGPT Projectでモーション画像を生成するときの画像生成ジョブの組み方を定義する。
+この資料はChatGPT Projectでモーション画像を生成するときのvisual job境界を定義する。
 
-キャラクター同一性そのものは`01-character-identity.md`、動作設計は`02-motion-design.md`、2×2ボードの幾何条件は`03-keypose-board-spec.md`を優先する。
+## 1 visual job = 1 frame
 
-## 1 visual job = 1 motion board
+主要モーション依頼では、`02-motion-design.md`でF1〜F4の時間状態を設計した後、**4つの単独画像生成job**を順番に実行する。
 
-1つの主要モーション依頼では、4つの主要キーポーズを1枚の2×2ボードとして生成する。
+1回の画像生成jobで複数ポーズ、2×2、sprite sheet、comparison sheetを作らない。
 
-K1、K2、K3、K4を4つの別画像生成ジョブへ分解しない。K1〜K4は1つのvisual jobの内部状態であり、最初の生成物は2×2主要ボード1枚だけとする。
-
-同じユーザー依頼の中で、別案、比較案、横4枚版、追加の2×2版、K1〜K4個別画像、summary sheetを自動生成しない。
-
-生成結果が不合格でも、同一応答内で自動再生成しない。修正は失敗原因を確認した後の別visual jobとして行う。
-
-## natural-language motion request
-
-ユーザーは既定モーション名を選ぶ必要はない。
-
-「丁寧にお辞儀する」「片手で小さく合図する」「一歩下がって身構える」などの自然言語要求を、そのまま`02-motion-design.md`のmotion contractへ変換する。
-
-既存のモーション名一覧へ依頼を無理に当てはめない。速度、強さ、方向、使用する手足、丁寧さ、反復など、依頼文の修飾を落とさない。
-
-## canonical identity reference
-
-キャラクターの正本は、現在の画像生成チャットへユーザーが直接添付した基準画像とする。
-
-Project Sources内の画像、別チャットの画像、今回より前に生成したモーション画像をcanonical identity referenceへ昇格させない。
-
-新しいモーションでは毎回、直接添付された元の基準画像へ戻る。
-
-同一motionの中割りやrepairで生成済みboardを参照する場合も、そのboardはmotion referenceまたはrepair targetであり、identityの正本ではない。
+各jobは同じ直接添付canonical imageへ再アンカーする。直前に生成したframeはidentity正本にしない。
 
 ## job isolation
 
-新しいモーションは、新しいチャットへ元の基準画像を直接添付して1モーションだけ依頼する運用を隔離されたvisual jobの開始点として扱う。
+新しいモーションは、新しいチャットへcanonicalを直接添付して1モーションだけ依頼する運用を開始点とする。
 
-別モーションの生成物を次のモーションへ連鎖させない。
+同じユーザーturn内でF1〜F4を順次生成してよいが、各画像生成callは1姿勢だけを要求する。画像生成promptへ「4枚」「4フレームのsheet」「2×2」など複数画像を1枚へまとめる表現を入れない。
 
-同じモーションの主要ボードが合格した後に中割りを作る場合は、同じチャット内の後続ターンを別visual jobとして使ってよい。この場合も、最初に直接添付された元の基準画像がidentity referenceであり、合格済み主要ボードは時間上のendpointを示すmotion referenceに限定する。
+## concise frame prompt
 
-## layout guide
+各frameの内部指示には次だけを含める。
 
-`project/sources/layout-guides/four-pose-portrait.png`がProject Sourceとして利用可能な場合は、4スロットの位置、中央の空き、外周safe marginだけを判断するlayout referenceとして使う。
+1. 直接添付canonicalと同一人物であること
+2. canonicalを再設計しないこと
+3. 今回のF状態とcontinuity invariant
+4. 表情指定がなければcanonical表情
+5. 人物1体、全身、portrait、正面基準
+6. 均一な高彩度クロマ背景
+7. 床、影、文字、番号、ラベル、枠、grid、UI、モーションライン、未指定effect禁止
 
-layout guideはProject Source専用とし、基準キャラクター画像と一緒に生成チャットへ直接添付しない。直接添付されたlayout画像は、枠、K1〜K4ラベル、背景表現などを完成画像の見本として模倣される可能性がある。
+`01`〜`04`全文や詳細audit contractを画像生成promptへ貼り付けない。
 
-layout guideはキャラクター、画風、色、衣装、表情の正本ではない。
+## canonical identity reference
 
-ガイド内の枠、K1〜K4ラベル、線、灰色領域を最終画像へ描き写さない。
+同じキャラクター候補が複数直接添付されている場合は、ユーザー指定を優先する。指定がなければ加工前に近く、全身が見え、固有ディテールを読み取れる最高品質の画像をcanonicalとして選ぶ。
 
-layout guideを画像生成側が利用できない場合でも、ユーザーへ追加添付を要求しない。`03-keypose-board-spec.md`の2×2幾何条件だけで生成を続行する。
+Project Source内画像、layout guide、過去生成frameをcanonicalへ昇格させない。
 
-## chroma-key background
+## chroma
 
-画像生成段階では真の透明背景を必須にしない。1枚のボード全体を、均一な単色クロマキー背景で生成する。
+各frameは均一な単色クロマ背景で生成する。既定は高彩度magenta。キャラクター色と衝突する場合だけ別の高彩度色へ変更する。
 
-既定候補は高彩度のmagentaとする。キャラクター本体にmagentaが明確に使われている場合は、cyan、blue、greenなど、キャラクター本体と十分に離れた高彩度色へ変更する。
+frame間でkey色が少し違っても最終boardではPythonが1色へ正規化する。ただし床、接地影、大きなgradient、背景模様は生成段階でも禁止する。
 
-元の基準画像に背景色が存在していても、その背景色をキャラクター固有色とはみなさない。クロマ色はキャラクター本体の配色との衝突を避けて選ぶ。
+## deterministic compose
 
-ボード全域で同じ背景色を使い、グラデーション、床、接地影、ドロップシャドウ、背景模様、光だまりを加えない。
+F1〜F4生成後、`compose_keypose_board_from_frames.py`へ4枚を渡して2×2を作る。
 
-生成後に`audit/scripts/remove_chroma_key.py`で背景をalphaへ変換する。クロマ色は画像外周から自動検出できるため、生成時の色を後処理コードへ手入力することを必須にしない。
+画像生成モデルの責務:
+- canonical identity
+- 1frameの姿勢
+- 全身
+- flat chroma
 
-## concise generation prompt
+Pythonの責務:
+- chroma抽出
+- foreground bbox
+- 共通倍率
+- baseline
+- 2×2配置
+- safe gap / outer margin
+- board key色統一
 
-画像生成モデルへ渡す内部指示は、長い規則全文の貼り直しではなく、今回の状態に必要な情報だけへ圧縮する。
-
-主要ボードでは次を含める。
-
-1. 直接添付された基準画像がcanonical identity referenceであること
-2. layout guideがある場合は配置だけに使うこと
-3. motion contractから得た今回のK1〜K4、transitions、continuity invariants
-4. 顔、髪、体格、胸部・胴体シルエット、衣装、模様、装飾、表情を維持すること
-5. 2×2 portrait、全身、共通縮尺、中央と外周のsafe space
-6. 均一な単色クロマ背景
-7. 影、文字、ラベル、UI、モーションライン、未指定エフェクトを描かないこと
-
-`continuity invariants`は一般的な禁止文へ展開せず、今回の動作で時間をまたいで維持すべき手足、接地側、保持側、向き、接触対象などだけを短く具体化して渡す。
-
-`01`〜`04`の文書を画像生成用プロンプトへ逐語的に貼り付けない。
-
-## inbetween visual job
-
-主要K1〜K4が合格し、ユーザーが中割りまたは8フレーム化を求めた場合だけ、後続の別visual jobでI1〜I4を1枚のportrait 2×2ボードとして生成する。
-
-主要ボードと中割りボードを同一応答内で自動連続生成しない。
-
-中割りvisual jobでは参照画像の役割を分離する。
-
-- 元の直接添付基準画像: identity reference
-- 合格済み主要ボード: K1〜K4の姿勢と時間上のendpointを示すmotion reference
-- Project Sourceのlayout guide: 配置だけを示すlayout reference
-
-主要ボードの衣装や体格にdriftがあっても、それをidentityの新しい正本として固定しない。中割りでは元の基準画像の同一性を優先する。
-
-I1〜I4の配置先は固定の4区間ではない。`02-motion-design.md`のtiming planに従い、時間順の4つの補助姿勢として生成する。
-
-loopなら通常はK1→K2、K2→K3、K3→K4、K4→K1へ1枚ずつ置ける。
-
-one-shotではK4→K1を作らず、4枚目を必要な区間へ追加する。例えばK2→K3に2枚必要なら、I2とI3をその区間の早い時点・遅い時点として設計する。
-
-中割り用の内部指示にも、主要boardで使った`continuity invariants`のうち該当区間へ継続するものを含める。motion contractで役割変更が明示されていない手足、接地側、保持側、接触対象を中割りだけで入れ替えない。
-
-最終frame orderは後処理へ明示的に渡す。
+最終boardを`machine_audit_board.py`と視覚監査へ渡す。
 
 ## repair
 
-不合格画像を修正する場合は、正本画像と失敗したmotion boardを使い、確認できた失敗だけを短いrepair noteとして指定する。
+FAIL時は1 repair roundだけ行う。
 
-修正対象以外のキャラクターデザイン、動作位相、レイアウトを再設計しない。
+失敗原因をframeへ割り当て、必要なframeだけ各1回再生成する。repair frameもcanonicalから生成し、失敗frameをidentity正本にしない。
 
-repairも1 visual job = 1 motion boardとし、同一応答内で複数の再試行や別案を生成しない。
+repair候補と初回frameをcanonical・motion contractへ照合して比較し、良い方をframe単位で選ぶ。選択列全体のcontinuity / endpointを確認してから再合成する。
 
-## post-processing boundary
+追加repair roundは禁止する。
 
-画像生成モデルの責務:
+## inbetween
 
-- 1枚の2×2主要モーションボード、または後続の1枚の2×2中割りボード
-- キャラクター同一性
-- motion contractに沿った時間差とcontinuity invariants
-- portrait構図
-- 全身とsafe space
-- 均一なクロマ背景
+主要4frameが合格し、中割りが必要な場合だけ補助状態を個別生成する。各補助frameもcanonicalへ再アンカーする。
 
-`audit/`の責務:
+最終stripは`build_motion_strip.py --keypose-images ... --inbetween-images ... --frame-plan ...`で決定論的に組み立てる。
 
-- クロマ背景のalpha化
-- 2×2の機械分割
-- alpha bbox
-- セル端接触検査
-- 共通倍率への正規化
-- 明示されたframe planによる最終motion stripの組み立て
-- メタデータとデバッグ素材の出力
+## layout guide
 
-画像生成モデルへ最終8フレーム横一列や巨大アトラスの厳密な組み立てを任せない。
+`four-pose-portrait.png`をProject Sourceとして画像生成側へ与えない。board geometryはPythonへ移したため不要である。
+
+GitHubのlayout guide素材は後処理・デバッグ資料としてのみ保持する。
