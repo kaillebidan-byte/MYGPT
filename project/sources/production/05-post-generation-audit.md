@@ -140,9 +140,32 @@ crop、セル越境、正方形boardはFAIL。
 - `divider_like_vertical_white_band`
 - `divider_like_horizontal_white_band`
 
-## 11. repair方式
+## 11. repair前のpreserve contract
+
+初回boardがFAILでも、初回でPASSした項目はrepair時に自由に変更してよい状態ではない。
+
+repair前に、7項目のうち初回PASSだった項目を`repair_preserve`として列挙する。
+
+各項目は単に`endpoint: PASS`のようなラベルだけにせず、初回実画像で成立していた状態を短く具体化する。
+
+例:
+
+```text
+repair_preserve:
+- endpoint: K4で前後差が残り、開始姿勢へ完全には戻っていない
+- chroma: 均一magenta、接地影なし、background_not_uniform=false、shadow_like_background=false
+- unintended_output: 文字、枠、グリッドなし
+```
+
+機械監査で得たPASS状態がある場合は、必要な数値やfalse flagもpreserve条件へ使ってよい。
+
+repairではFAIL項目の修正と同時に、このpreserve contractを維持するよう明示する。
+
+## 12. repair方式
 
 初回レビューと機械監査で確認したFAILだけを修正対象にする。
+
+初回PASS項目は`repair_preserve`として維持対象にする。
 
 ### motion-critical
 
@@ -152,21 +175,70 @@ repair時もcanonical identity referenceをidentityの正本とし、active/supp
 
 左右を曖昧な「同じ足」だけで書かず、論理ID、必要なら解剖学的左右とviewer-space対応を併用する。
 
+board全体を再生成する場合でも、`repair_preserve`をrepair指示へ含め、初回PASS項目の回帰を許容しない。
+
 ### non-motion only
 
 motion系3項目がすべてPASSで、それ以外だけFAILなら、初回boardを編集対象として使い、PASSだったmotion状態を再設計しない。
 
-## 12. repair note
+この場合も初回PASS項目を`repair_preserve`として明示する。
+
+## 13. repair note
 
 repair noteは実画像または機械監査で確認したFAILだけを短く列挙する。
 
 一般論、未確認の問題、別案、新しい演出を追加しない。
 
+repair noteとは別に`repair_preserve`を渡し、修正対象と維持対象を混同しない。
+
 修正後は同じ7項目を実画像で再監査する。機械監査を実行できる場合は修正版にも再実行する。
 
 修正後がFAILでも追加repairは行わない。
 
-## 13. display-only review copy
+## 14. repair deltaと採用board
+
+修正後レビュー確定後、初回と修正版の7項目を項目ごとに比較する。
+
+分類は次のとおり。
+
+- `fixed`: 初回FAIL → 修正版PASS
+- `remaining`: 初回FAIL → 修正版FAIL
+- `regressed`: 初回PASS → 修正版FAIL
+
+初回PASS → 修正版PASSは維持成功であり、上記3リストへ入れなくてよい。
+
+`initial_fail_count`と`repair_fail_count`も数える。
+
+比較結果は次の規則で決める。
+
+1. 修正版がoverall PASSなら`result: IMPROVED`、`selected_board: REPAIR`
+2. 修正版に`regressed`が1つでもあれば、他項目が直っていても`result: WORSE`、`selected_board: INITIAL`
+3. regressionがなく`fixed`が1つ以上あれば`result: IMPROVED`、`selected_board: REPAIR`
+4. regressionもfixedもなければ`result: NO_CHANGE`、`selected_board: INITIAL`
+
+出力例:
+
+```text
+REPAIR_DELTA
+fixed:
+- layout
+remaining:
+- identity
+- continuity
+regressed:
+- endpoint
+- chroma
+initial_fail_count: 4
+repair_fail_count: 5
+result: WORSE
+selected_board: INITIAL
+```
+
+修正版だからという理由だけで自動採用しない。
+
+選択されたboardがFAILであっても、1回repair上限は維持し、追加生成しない。
+
+## 15. display-only review copy
 
 人間が初回boardと修正版を取り違えないよう、監査結果確定後に`audit/scripts/stamp_review_board.py`で表示専用コピーを作る。
 
