@@ -10,6 +10,7 @@ assert.equal(adapter.normalizeText(" a\u00a0 b\r\n c "), "a b\nc");
 assert.equal(adapter.COMPOSER_SELECTOR, 'form[data-type="unified-composer"]');
 assert.equal(adapter.FILE_INPUT_SELECTOR, 'input[type="file"]');
 assert.equal(adapter.PROMPT_PARAGRAPH_SELECTOR, '#prompt-textarea p');
+assert.equal(adapter.PROMPT_ROOT_SELECTOR, '#prompt-textarea');
 assert.equal(adapter.SUBMIT_SELECTOR, '#composer-submit-button');
 
 const source = fs.readFileSync(path.resolve(__dirname, "../chatgpt_adapter.js"), "utf8");
@@ -22,4 +23,6 @@ assert.match(source, /querySelector\("circle"\)/);
 assert.match(source, /90000/);
 assert.match(source, /2000/);
 assert.match(source, /must execute in the page MAIN world/);
+assert.match(source, /function getPromptRoot/);
+assert.match(source, /const readback = getPromptRoot\(doc\) \|\| current/);
 console.log("AutoGPT MAIN-world ChatGPT adapter contract: PASS");
