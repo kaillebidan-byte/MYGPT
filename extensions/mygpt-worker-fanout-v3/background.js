@@ -11,12 +11,12 @@ const MSG = Object.freeze({
   RESET: "MYGPT_V3_RESET",
   GET_STATE: "MYGPT_V3_GET_STATE",
   GET_IDENTITY: "MYGPT_V3_GET_IDENTITY",
-  PREPARE_SLOT: "MYGPT_V3_PREPARE_SLOT",
   OBSERVED: "MYGPT_V3_OBSERVED",
   FOCUS_SLOT: "MYGPT_V3_FOCUS_SLOT"
 });
 
-const ISOLATED_FILES = ["route_adapter.js", "chatgpt_adapter.js", "content.js"];
+const ISOLATED_FILES = ["route_adapter.js", "content.js"];
+const MAIN_FILES = ["page_observer.js", "chatgpt_adapter.js"];
 
 function emptySlot(slotId) {
   return {
@@ -83,28 +83,164 @@ function updateSlot(slots, slotId, patch) {
     : slot);
 }
 
+async function ensureMainRuntime(tabId) {
+  let available = false;
+  try {
+    const probe = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: () => Boolean(globalThis.MYGPTChatGPTAdapter)
+    });
+    available = probe?.[0]?.result === true;
+  } catch (_) {}
+
+  if (!available) {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: MAIN_FILES,
+      world: "MAIN"
+    });
+  }
+}
+
 async function ensureContent(tabId) {
   try {
     const report = await chrome.tabs.sendMessage(tabId, { type: MSG.GET_IDENTITY });
-    if (report) return report;
+    if (report) {
+      await ensureMainRuntime(tabId);
+      return report;
+    }
   } catch (_) {}
 
-  try {
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      files: ["page_observer.js"],
-      world: "MAIN"
-    });
-  } catch (_) {
-    // The MAIN-world observer is optional for READY-only v0.3.0.
-  }
-
+  await ensureMainRuntime(tabId);
   await chrome.scripting.executeScript({
     target: { tabId },
     files: ISOLATED_FILES
   });
 
   return chrome.tabs.sendMessage(tabId, { type: MSG.GET_IDENTITY });
+}
+
+async function prepareInMainWorld(tabId, slotId, token, file, packet) {
+  await ensureMainRuntime(tabId);
+  const execution = await chrome.scripting.executeScript({
+    target: { tabId },
+    world: "MAIN",
+    func: async (args) => {
+      const adapter = globalThis.MYGPTChatGPTAdapter;
+      if (!adapter) {
+        return { ok: false, reason: "MAIN_CHATGPT_ADAPTER_UNAVAILABLE", submitted: false };
+      }
+
+      const stopSelectors = [
+        'button[data-testid="stop-button"]',
+        'button[data-testid="composer-stop-button"]',
+        'button[aria-label*="Stop generating"]',
+        'button[aria-label*="生成を停止"]'
+      ];
+      const generationActive = () => stopSelectors.some((selector) => document.querySelector(selector));
+
+      if (generationActive()) {
+        return {
+          ok: false,
+          reason: "GENERATION_ALREADY_ACTIVE",
+          runToken: args.runToken,
+          slotId: args.slotId,
+          submitted: false
+        };
+      }
+
+      const composerReady = await adapter.waitForComposer(document, 15000);
+      if (!composerReady) {
+        return {
+          ok: false,
+          reason: "COMPOSER_NOT_FOUND",
+          runToken: args.runToken,
+          slotId: args.slotId,
+          submitted: false
+        };
+      }
+
+      const existingDraft = adapter.composerDraftText(document);
+      if (existingDraft) {
+        return {
+          ok: false,
+          reason: "COMPOSER_NOT_EMPTY",
+          observedChars: existingDraft.length,
+          runToken: args.runToken,
+          slotId: args.slotId,
+          submitted: false
+        };
+      }
+
+      const attachment = await adapter.attachFile(args.file, {
+        document,
+        composerTimeout: 15000,
+        uploadTimeout: 90000,
+        uploadInterval: 2000
+      });
+      if (!attachment.ok) {
+        return {
+          ...attachment,
+          runToken: args.runToken,
+          slotId: args.slotId,
+          submitted: false
+        };
+      }
+
+      const afterUploadComposer = await adapter.waitForComposer(document, 15000);
+      if (!afterUploadComposer) {
+        return {
+          ok: false,
+          reason: "COMPOSER_MISSING_AFTER_UPLOAD",
+          attachment,
+          runToken: args.runToken,
+          slotId: args.slotId,
+          submitted: false
+        };
+      }
+
+      const pasted = await adapter.pastePrompt(args.packet, {
+        document,
+        window,
+        editorTimeout: 15000,
+        reflectTimeout: 5000
+      });
+      if (!pasted.ok) {
+        return {
+          ...pasted,
+          attachment,
+          runToken: args.runToken,
+          slotId: args.slotId,
+          submitted: false
+        };
+      }
+
+      return {
+        ok: true,
+        slotId: args.slotId,
+        runToken: args.runToken,
+        attachment,
+        composerKind: pasted.composerKind,
+        insertionMethod: pasted.method,
+        pasteEvidence: pasted.evidence,
+        packetChars: pasted.observedChars,
+        submitted: false,
+        generationActive: generationActive(),
+        executionWorld: "MAIN",
+        observedAt: Date.now()
+      };
+    },
+    args: [{ slotId, runToken: token, file, packet }]
+  });
+
+  return execution?.[0]?.result || {
+    ok: false,
+    reason: "MAIN_PREPARE_NO_RESULT",
+    runToken: token,
+    slotId,
+    submitted: false
+  };
 }
 
 async function waitForIdentity(tabId, timeoutMs = 20000) {
@@ -187,30 +323,36 @@ async function prepareOneSlot(token, sourceIdentity, payload, slotId) {
 
   let result;
   try {
-    result = await chrome.tabs.sendMessage(tabId, {
-      type: MSG.PREPARE_SLOT,
+    result = await prepareInMainWorld(
+      tabId,
       slotId,
-      runToken: token,
-      expectedWorkerKey: sourceIdentity.workerKey,
-      packet: payload.packets[slotId],
-      file: payload.file
-    });
+      token,
+      payload.file,
+      payload.packets[slotId]
+    );
   } catch (error) {
     await mutateSlot(token, slotId, {
       phase: "ERROR",
-      error: { code: "PREPARE_MESSAGE_FAILED", detail: error instanceof Error ? error.message : String(error) }
+      error: { code: "MAIN_PREPARE_EXECUTION_FAILED", detail: error instanceof Error ? error.message : String(error) }
     });
-    return { ok: false, slotId, tabId, error: "PREPARE_MESSAGE_FAILED" };
+    return { ok: false, slotId, tabId, error: "MAIN_PREPARE_EXECUTION_FAILED" };
   }
+
+  let postReport = null;
+  try {
+    postReport = await waitForIdentity(tabId, 5000);
+  } catch (_) {}
 
   const evidenceValid = Boolean(
     result?.ok === true &&
     result.runToken === token &&
     result.submitted === false &&
+    result.executionWorld === "MAIN" &&
     result.attachment?.evidence === "autogpt-upload-ready" &&
     result.insertionMethod === "autogpt-synthetic-paste" &&
-    MYGPTWorkerRoute.sameWorkerIdentity(sourceIdentity, result.identity) &&
-    result.generationActive !== true
+    MYGPTWorkerRoute.sameWorkerIdentity(sourceIdentity, postReport?.identity) &&
+    result.generationActive !== true &&
+    postReport?.generationActive !== true
   );
 
   if (!evidenceValid) {
