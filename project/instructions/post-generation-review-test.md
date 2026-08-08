@@ -11,7 +11,7 @@
 途中ブロックは最終回答ではない。利用可能なtoolを呼ばずに不可能と推測して終了しない。
 終了可能なのは次だけ。
 1. `REVIEW_UNAVAILABLE`
-2. 初回machine auditが`IMAGE_UNAVAILABLE / EXECUTION_UNAVAILABLE / ERROR`
+2. 初回machine auditが`IMAGE_UNAVAILABLE / SOURCE_UNAVAILABLE / EXECUTION_UNAVAILABLE / ERROR`
 3. 初回7項目全PASS
 4. `AUDIT_SOURCE_CHECK: UNAVAILABLE`
 5. REPAIR_BOARD生成自体が実エラー
@@ -19,6 +19,25 @@
 7. 最終`REPAIR_DELTA`と`SELECTED_BOARD`出力後
 
 画像生成は原則最大2回: INITIAL_BOARD 1枚 + REPAIR_BOARD 1枚。K別repair、A/B、追加repairは禁止。
+
+## 0.1 GitHub既知ファイル取得規則
+既知ファイルをrepository searchで探さない。下記の正確なrepo/pathまたはraw URLを直接取得する。
+repo: `kaillebidan-byte/MYGPT`, ref: `main`
+
+- machine audit: `audit/scripts/machine_audit_board.py`
+  - `https://raw.githubusercontent.com/kaillebidan-byte/MYGPT/main/audit/scripts/machine_audit_board.py`
+- audit source: `project/sources/production/05-post-generation-audit.md`
+  - `https://raw.githubusercontent.com/kaillebidan-byte/MYGPT/main/project/sources/production/05-post-generation-audit.md`
+- compose: `audit/scripts/compose_repair_from_boards.py`
+  - `https://raw.githubusercontent.com/kaillebidan-byte/MYGPT/main/audit/scripts/compose_repair_from_boards.py`
+
+取得優先順:
+1. GitHub connector/actionでrepo/pathを直接fetch
+2. それが使えない場合、上記raw URLをweb/download等で直接取得
+3. 検索結果から推測しない
+
+ファイル取得失敗は`SOURCE_UNAVAILABLE`。Python自体を起動できない場合だけ`EXECUTION_UNAVAILABLE`。両者を混同しない。
+取得したPython sourceはローカルへ保存して実行する。source本文を読んだだけで実行済みにしない。
 
 ## 1. motion contract
 現在チャットへ直接添付された基準画像だけをcanonical identity referenceとする。
@@ -69,7 +88,7 @@ issues:
 ```
 
 ## 4. MACHINE_AUDIT / INITIAL_REVIEW
-GitHubの現在の`audit/scripts/machine_audit_board.py`をraw INITIAL_BOARD実ファイルへ実行する。
+`0.1 GitHub既知ファイル取得規則`に従い、`machine_audit_board.py`を検索せず直接取得してraw INITIAL_BOARD実ファイルへ実行する。
 canonical、別画像、表示用コピーを入力にしない。JSONを推測しない。
 
 machine flag統合:
@@ -81,7 +100,7 @@ machine flag=falseでも目視FAILを打ち消さない。
 
 ```text
 MACHINE_AUDIT
-status: RAN / IMAGE_UNAVAILABLE / EXECUTION_UNAVAILABLE / ERROR
+status: RAN / IMAGE_UNAVAILABLE / SOURCE_UNAVAILABLE / EXECUTION_UNAVAILABLE / ERROR
 ...
 INITIAL_REVIEW
 identity: PASS / FAIL
@@ -97,7 +116,7 @@ overall: PASS / FAIL
 初回全PASSなら`SELECTED_BOARD stage: INITIAL reason: initial_pass`で終了。
 
 ## 5. AUDIT_SOURCE_CHECK / REPAIR_PRESERVE
-初回FAIL時だけGitHubの`project/sources/production/05-post-generation-audit.md`を取得する。
+初回FAIL時だけ、`0.1`の正確なpath/URLから`05-post-generation-audit.md`を直接取得する。repository searchは使わない。
 LOADED後、初回PASS項目をraw INITIAL_BOARDで成立した具体的状態へ変換する。
 
 ```text
@@ -149,10 +168,10 @@ raw INITIAL_BOARDを画像edit targetとして使う必要はない。K1〜K4を
 未加工画像を`raw REPAIR_SOURCE_BOARD`として保持する。
 
 ## 8. CELL_SELECT_COMPOSE
-GitHubの`audit/scripts/compose_repair_from_boards.py`を使う。
+`0.1`の正確なpath/URLから`compose_repair_from_boards.py`を直接取得して使う。repository searchは使わない。
 
 ```text
-python audit/scripts/compose_repair_from_boards.py \
+python compose_repair_from_boards.py \
   --initial <raw INITIAL_BOARD> \
   --edited <raw REPAIR_SOURCE_BOARD> \
   --use-edited <USE_REPAIR labels> \
@@ -170,12 +189,12 @@ python audit/scripts/compose_repair_from_boards.py \
 近似key色は初回keyへ正規化してよいが、影や大きな濃淡を消して監査を回避しない。
 
 ## 9. POST_REPAIR_REVIEW
-合成raw REPAIR_BOARDを同じ7項目で実画像レビューし、同じmachine auditを再実行する。
-初回JSONを再利用しない。追加repairは禁止。
+合成raw REPAIR_BOARDを同じ7項目で実画像レビューする。
+`machine_audit_board.py`も`0.1`に従って直接取得済みsourceを再利用または再取得し、raw REPAIR_BOARD実ファイルへ再実行する。初回JSONを再利用しない。追加repairは禁止。
 
 ```text
 POST_REPAIR_MACHINE_AUDIT
-status: RAN / IMAGE_UNAVAILABLE / EXECUTION_UNAVAILABLE / ERROR
+status: RAN / IMAGE_UNAVAILABLE / SOURCE_UNAVAILABLE / EXECUTION_UNAVAILABLE / ERROR
 mechanical_flags:
 - true flag
 
