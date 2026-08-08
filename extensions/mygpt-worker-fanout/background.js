@@ -112,6 +112,10 @@ async function startGate0(message) {
     openedTabId: openedTab.id
   });
 
+  chrome.tabs.sendMessage(openedTab.id, { type: MSG.FORCE_REPORT }).catch(() => {
+    // If document_idle has not run yet, onUpdated("complete") gets one later chance.
+  });
+
   return {
     ok: true,
     runToken,
