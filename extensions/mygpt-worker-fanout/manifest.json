@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MYGPT Worker Fanout",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Gate 0: verify that one newly opened ChatGPT tab preserves the current Custom GPT worker identity. No prompt, file attachment, or submit automation.",
   "permissions": [
     "storage"
