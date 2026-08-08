@@ -1,0 +1,14 @@
+"use strict";
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const source = fs.readFileSync(path.resolve(__dirname, "../page_observer.js"), "utf8");
+assert.match(source, /response\.clone\(\)/);
+assert.match(source, /getReader\?\.\(\)/);
+assert.match(source, /conversation-commit/);
+assert.match(source, /conversation-async/);
+assert.match(source, /ws\.chatgpt\.com/);
+assert.doesNotMatch(source, /Authorization/i);
+assert.doesNotMatch(source, /Bearer/i);
+assert.doesNotMatch(source, /fetch\(["'`]\/backend-api/i);
+console.log("Passive page observer contract: PASS");
