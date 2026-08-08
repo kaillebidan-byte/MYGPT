@@ -19,6 +19,7 @@ const TERMINAL_STATUSES = new Set(["PASS", "FAIL"]);
 const GATE1_ACTIVE_STATUSES = new Set(["INSERTING"]);
 const GATE1_TERMINAL_STATUSES = new Set(["PASS", "FAIL"]);
 const MAX_PACKET_CHARS = 12000;
+const earlyRouteReports = new Map();
 
 function emptyGate1State() {
   return {
@@ -119,6 +120,22 @@ async function handleRouteReport(message, sender) {
 
   const state = await getState();
   if (!Number.isInteger(state.openedTabId) || tabId !== state.openedTabId) {
+    const report = message && message.report;
+    const destinationIdentity = report && report.identity;
+    if (
+      state.status === "OPENING" &&
+      Number.isInteger(tabId) &&
+      tabId !== state.sourceTabId &&
+      destinationIdentity &&
+      destinationIdentity.ok === true &&
+      MYGPTWorkerRoute.sameWorkerIdentity(state.expectedIdentity, destinationIdentity)
+    ) {
+      earlyRouteReports.set(tabId, {
+        report,
+        observedAt: Date.now()
+      });
+      return { ok: true, buffered: "EARLY_SAME_WORKER_REPORT" };
+    }
     return { ok: true, ignored: "UNOWNED_TAB" };
   }
   if (TERMINAL_STATUSES.has(state.status)) {
@@ -205,6 +222,7 @@ async function armDestinationProbe(tabId) {
 }
 
 async function startGate0(message) {
+  earlyRouteReports.clear();
   const current = await getState();
   if (current.status !== "IDLE") {
     return {
@@ -262,6 +280,15 @@ async function startGate0(message) {
     status: "AWAITING_DESTINATION",
     openedTabId: openedTab.id
   });
+
+  const early = earlyRouteReports.get(openedTab.id);
+  earlyRouteReports.clear();
+  if (early && early.report) {
+    await handleRouteReport(
+      { report: early.report },
+      { tab: { id: openedTab.id } }
+    );
+  }
 
   armDestinationProbe(openedTab.id);
 
@@ -416,6 +443,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === MSG.START) {
     task = startGate0(message);
   } else if (message.type === MSG.RESET) {
+    earlyRouteReports.clear();
     task = setState(emptyState()).then((state) => ({ ok: true, state }));
   } else if (message.type === MSG.GET_STATE) {
     task = getState().then((state) => ({ ok: true, state }));
