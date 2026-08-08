@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MYGPT Worker Fanout v2",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Prepare one MYGPT Custom GPT worker tab with canonical image + packet as an unsent READY draft. Rebuilt from Translation Loop control-plane patterns.",
   "permissions": [
     "storage",
