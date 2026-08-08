@@ -4,20 +4,16 @@ on:
   push:
     paths:
       - "project/**"
-      - "research/PROJECT-HANDOFF.md"
+      - "audit/scripts/compose_keypose_board_from_frames.py"
       - "research/hatch-pet-porting.md"
-      - "legacy/custom-gpt/**"
       - "README.md"
-      - "legacy/README.md"
       - ".github/workflows/test-project-config.yml"
   pull_request:
     paths:
       - "project/**"
-      - "research/PROJECT-HANDOFF.md"
+      - "audit/scripts/compose_keypose_board_from_frames.py"
       - "research/hatch-pet-porting.md"
-      - "legacy/custom-gpt/**"
       - "README.md"
-      - "legacy/README.md"
       - ".github/workflows/test-project-config.yml"
 
 permissions:
@@ -27,7 +23,6 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-
     steps:
       - uses: actions/checkout@v4
 
@@ -36,166 +31,75 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          required_text = [
+          required = [
               "project/README.md",
               "project/instructions/project-instructions.md",
+              "project/instructions/post-generation-review-test.md",
               "project/sources/production/README.md",
               "project/sources/production/01-character-identity.md",
               "project/sources/production/02-motion-design.md",
               "project/sources/production/03-keypose-board-spec.md",
               "project/sources/production/04-imagegen-workflow.md",
+              "project/sources/production/05-post-generation-audit.md",
               "project/sources/layout-guides/README.md",
               "project/sources/reference-images/README.md",
-              "research/PROJECT-HANDOFF.md",
-              "research/hatch-pet-porting.md",
-              "legacy/custom-gpt/README.md",
-              "legacy/custom-gpt/production/instructions.md",
-              "legacy/custom-gpt/knowledge/character-identity-reference.md",
-              "legacy/custom-gpt/experimental-audit/README.md",
+              "audit/scripts/compose_keypose_board_from_frames.py",
           ]
-
-          for item in required_text:
+          for item in required:
               path = Path(item)
               assert path.is_file(), f"Missing required file: {item}"
-              assert path.read_text(encoding="utf-8").strip(), f"Empty required file: {item}"
-
-          for obsolete in [
-              "project/sources/production/character-identity.md",
-              "project/sources/production/motion-vocabulary.md",
-              "project/sources/production/sprite-output-spec.md",
-          ]:
-              assert not Path(obsolete).exists(), f"Obsolete Project source remains: {obsolete}"
-
-          assert not Path("gpt").exists(), "Active gpt/ directory must be removed"
+              assert path.stat().st_size > 0, f"Empty required file: {item}"
 
           instructions = Path("project/instructions/project-instructions.md").read_text(encoding="utf-8")
-          for required_phrase in [
-              "現在のチャットに直接添付された基準キャラクター画像",
-              "前回生成した画像を新しい正本にせず",
-              "左上K1 → 右上K2 → 左下K3 → 右下K4",
-              "motion contract",
-              "loop / one-shot",
-              "1 visual job = 1 motion board",
-              "1つのvisual jobにつき画像生成は1回だけ",
-              "同一応答内で自動再生成しない",
-              "portraitキャンバス",
-              "幅:高さ = 2:3",
-              "1024 × 1536 px",
-              "negative space",
-              "layout guideはProject Source専用",
-              "均一な単色クロマキー背景",
-              "中割り",
-              "I1〜I4",
-              "frame plan",
-              "画像生成用の内部指示は短く状態固有",
-              "04-imagegen-workflow.md",
+          for phrase in [
+              "1 visual job = 1 frame",
+              "人物1体の単独全身ポーズ1枚",
+              "compose_keypose_board_from_frames.py",
+              "four-pose-portrait.png`をProject Sourceとして使わない",
+              "repairは1 roundのみ",
           ]:
-              assert required_phrase in instructions, f"Project instructions missing: {required_phrase}"
-
-          for forbidden_phrase in [
+              assert phrase in instructions, f"Project instructions missing: {phrase}"
+          for forbidden in [
+              "1 visual job = 1 motion board",
+              "K1、K2、K3、K4を4枚の独立画像として生成しない",
               "/mnt/data",
               "sandbox:/",
-              "Builder設定",
-              "Recommended model",
-              "repository_dispatch",
-              "openaiFileIdRefs",
           ]:
-              assert forbidden_phrase not in instructions, f"Custom GPT/runtime detail leaked into Project instructions: {forbidden_phrase}"
+              assert forbidden not in instructions, f"Obsolete/runtime phrase remains: {forbidden}"
 
           identity = Path("project/sources/production/01-character-identity.md").read_text(encoding="utf-8")
-          for required_phrase in [
-              "基準画像そのものより、この文書を優先してはいけない",
-              "正面画像しか存在しない場合",
-              "見えない背面や側面は未設定",
-              "左右非対称",
-              "胸部を含む胴体のシルエット",
-          ]:
-              assert required_phrase in identity, f"Identity source missing: {required_phrase}"
+          for phrase in ["最高解像度", "topology", "occlusion", "基準画像そのものより、この文書を優先してはいけない"]:
+              assert phrase in identity, f"Identity source missing: {phrase}"
 
           motion = Path("project/sources/production/02-motion-design.md").read_text(encoding="utf-8")
-          for required_phrase in [
-              "モーション名の一覧へ依頼を当てはめる資料ではない",
-              "motion contract",
-              "rest / anticipation / peak / return をすべての動作へ固定適用しない",
-              "loop / one-shot の判断",
-              "one-shotではK4を無理にK1へ戻す姿勢にしない",
-              "4ポーズすべてで基準画像の表情を維持",
-              "中割り用timing plan",
-              "K4→K1",
-          ]:
-              assert required_phrase in motion, f"Motion source missing: {required_phrase}"
+          for phrase in ["F1", "F4", "continuity_invariants", "左上・右上などの最終配置情報をmotion contractへ混ぜない"]:
+              assert phrase in motion, f"Motion source missing: {phrase}"
 
-          for forbidden_motion_catalog in [
-              "## waving / 手を振る",
-              "## idle / 待機",
-              "## running-right / running-left / 走る",
-              "## jumping / 跳ぶ",
-          ]:
-              assert forbidden_motion_catalog not in motion, f"Fixed motion catalog remains: {forbidden_motion_catalog}"
-
-          board = Path("project/sources/production/03-keypose-board-spec.md").read_text(encoding="utf-8")
-          for required_phrase in [
-              "左上: K1",
-              "右上: K2",
-              "左下: K3",
-              "右下: K4",
-              "1つのmotion board内の4状態",
-              "画像生成結果が1枚だけ",
-              "幅:高さ = 2:3",
-              "512 × 768 px",
-              "layout guideはProject Sourceとして使い",
-              "中央safe gap",
-              "均一な単色クロマキー",
-              "remove_chroma_key.py",
-              "build_motion_strip.py",
-              "one-shotの基本区間",
-              "frame plan",
-              "--frame-plan",
-          ]:
-              assert required_phrase in board, f"Keypose board source missing: {required_phrase}"
+          frame_spec = Path("project/sources/production/03-keypose-board-spec.md").read_text(encoding="utf-8")
+          for phrase in ["画像生成モデルへ2×2ボードを直接描かせない", "1体だけ", "deterministic 2x2 compose", "four-pose-portrait.png`をChatGPT Project Sourceとして使わない"]:
+              assert phrase in frame_spec, f"Frame spec missing: {phrase}"
 
           workflow = Path("project/sources/production/04-imagegen-workflow.md").read_text(encoding="utf-8")
-          for required_phrase in [
-              "1 visual job = 1 motion board",
-              "natural-language motion request",
-              "canonical identity reference",
-              "job isolation",
-              "layout guideはProject Source専用",
-              "chroma-key background",
-              "concise generation prompt",
-              "inbetween visual job",
-              "identity reference",
-              "motion reference",
-              "同一応答内で自動再生成しない",
-              "frame plan",
-              "remove_chroma_key.py",
-          ]:
-              assert required_phrase in workflow, f"Imagegen workflow missing: {required_phrase}"
+          for phrase in ["1 visual job = 1 frame", "4つの単独画像生成job", "failed-frame", "deterministic compose"]:
+              assert phrase in workflow, f"Workflow missing: {phrase}"
 
-          handoff = Path("research/PROJECT-HANDOFF.md").read_text(encoding="utf-8")
-          for required_phrase in [
-              "このキャラクターが手を振るモーションを作ってください。",
-              "既知の成功事項を未検証扱いへ戻さない",
-          ]:
-              assert required_phrase in handoff, f"Handoff missing: {required_phrase}"
+          audit = Path("project/sources/production/05-post-generation-audit.md").read_text(encoding="utf-8")
+          for phrase in ["FRAME_REPAIR_PLAN", "FRAME_SOURCE_DECISION", "compose_keypose_board_from_frames.py", "2回目repairは禁止"]:
+              assert phrase in audit, f"Audit source missing: {phrase}"
 
-          porting = Path("research/hatch-pet-porting.md").read_text(encoding="utf-8")
-          for required_phrase in [
-              "1モーションボード全体を1 visual job",
-              "canonical identity reference",
-              "layout guide",
-              "chroma",
-          ]:
-              assert required_phrase in porting, f"hatch-pet porting note missing: {required_phrase}"
+          layout = Path("project/sources/layout-guides/README.md").read_text(encoding="utf-8")
+          assert "Project Sourceへ追加しない" in layout
+          assert "すでにProject Sourceへ`four-pose-portrait.png`を追加している場合は削除" in layout
 
-          root = Path("README.md").read_text(encoding="utf-8")
-          assert "01-character-identity.md" in root
-          assert "02-motion-design.md" in root
-          assert "03-keypose-board-spec.md" in root
-          assert "04-imagegen-workflow.md" in root
-          assert "remove_chroma_key.py" in root
-          assert "legacy/custom-gpt/" in root
-          assert "gpt/production/" not in root
+          reference = Path("project/sources/reference-images/README.md").read_text(encoding="utf-8")
+          assert "高解像度" in reference
 
-          print("Project production configuration validation passed")
+          composer = Path("audit/scripts/compose_keypose_board_from_frames.py").read_text(encoding="utf-8")
+          for phrase in ["--frames", "common_scale", "center-gap-x", "center-gap-y"]:
+              assert phrase in composer, f"Composer missing: {phrase}"
+
+          print("Project frame-first configuration validation passed")
           PY
+
+      - name: Syntax check composer
+        run: python -m py_compile audit/scripts/compose_keypose_board_from_frames.py
