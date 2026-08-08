@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "MYGPT Worker Fanout v2",
+  "version": "0.2.0",
+  "description": "Prepare one MYGPT Custom GPT worker tab with canonical image + packet as an unsent READY draft. Rebuilt from Translation Loop control-plane patterns.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting",
+    "unlimitedStorage"
+  ],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "MYGPT Worker Fanout v2",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": [
+        "route_adapter.js",
+        "prompt_stacker_insert_runner.js",
+        "file_adapter.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
