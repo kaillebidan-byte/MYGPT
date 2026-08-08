@@ -17,10 +17,10 @@ Correct distinction:
 
 2. **Community browser-extension / local browser-automation path**
    - not ruled out
-   - Chinese-language GPTs tooling already provides precedent for driving multiple GPTs conversations from a logged-in ChatGPT Plus web session without requiring a separate OpenAI API key
+   - Chinese-language GPTs tooling provides precedent for driving multiple conversations / fresh chats from a logged-in ChatGPT web session without requiring a separate OpenAI API key
    - this path must be evaluated before declaring an orchestration ceiling under the user's actual constraints
 
-The user's constraints prohibit separate OpenAI API billing / Work-Codex production dependency. They do **not** by themselves prohibit a local browser extension, userscript, or Playwright-style UI automation using the user's existing ChatGPT Plus session.
+The user's constraints prohibit separate OpenAI API billing / Work-Codex production dependency. They do **not** by themselves prohibit a local browser extension or other browser-side UI automation using the user's existing ChatGPT Plus session.
 
 ## Official product findings
 
@@ -52,31 +52,58 @@ manual Branch x3
 manual packet send x3
 ```
 
-## Chinese-language / community precedent — OpenGPTs
+## Chinese-language / community precedent A — OpenGPTs
 
-A Chinese open-source project, `hzeyuan/OpenGPTS`, is directly relevant and was not considered in the earlier N3 closure.
+`hzeyuan/OpenGPTS` is a Chinese open-source browser-plugin project and was not considered in the earlier N3 closure.
 
-Project description / README states that its browser plugin supports:
-- web-based ChatGPT calling from an already logged-in ChatGPT session
-- Multi-GPTs Calls: one input, multiple model/GPT calls simultaneously
-- Multi-GPTs Chat
-- multiple windows in one interface
-- batch conversation / GPT management
+Its Chinese README describes:
+- browser-side ChatGPT / GPTs calls from the web
+- `一键调用GPTs对话`: one input, multiple model/GPT calls
+- `多GPTs对话`
+- multiple chat windows
+- batch GPT/chat management
+- a stated direction of treating each GPT as an Agent and automating workflows
 
-The project explicitly frames each GPT as an Agent and browser plugins as a way to automate web operations.
-
-Important limitations for MYGPT:
-- current public project is old; latest visible repository activity is from 2024
-- README marks multimodal input as not implemented
+Limitations for MYGPT:
+- latest visible repository activity is from 2024
+- its README marks multimodal input as not implemented
 - RPA / Agent Workflow is also marked not available
-- therefore OpenGPTs itself is **not** accepted as the production solution
 
-However, it is strong prior-art evidence that:
-- an existing ChatGPT Plus login can be used by a browser extension to drive arbitrary GPT conversations
-- multiple GPT conversations can be initiated/managed outside the stock ChatGPT interaction flow
-- a separate OpenAI API key is not inherently required for this category of solution
+Therefore OpenGPTs itself is **not** accepted as the production solution.
+It is prior-art evidence that browser-side orchestration of logged-in ChatGPT/GPTs sessions is a real category of solution and that separate OpenAI API billing is not inherently required.
 
-This invalidates the earlier broad claim that the user's no-API constraint closes browser-side orchestration.
+## Chinese-language / community precedent B — Autojourney AutoGPT
+
+A much more current and operationally relevant case exists: Autojourney's `AutoGPT` Chrome extension for ChatGPT / Sora.
+
+Current evidence checked 2026-08-08:
+- Autojourney official site describes AutoGPT as a productivity extension built for ChatGPT and Sora
+- supports batch auto-send prompts, task queues, text-to-image, image-to-image, image-to-text and automated generation workflows
+- Chrome Web Store current listing is version `0.0.69`, updated `2026-07-15`
+
+Autojourney's Chinese AutoGPT changelog is especially relevant:
+- `2025-08-19 v0.0.21`: added ChatGPT `自动新对话` — automatically switch to a fresh conversation after a configurable task count
+- same release: added ChatGPT `新对话发送` — explicitly send a selected task in a new conversation
+- same release: ChatGPT image-to-image batch support
+- `2025-12-09`: fixed ChatGPT image upload failure
+- `2025-12-17`: support for ChatGPT's new image mode
+- `2025-12-28`: fixed retrieval of generated-image links
+- `2026-01-09`: automatic retry on failures
+
+This is materially closer to MYGPT's missing orchestration than the earlier official-only review suggested.
+It shows that current Chinese browser tooling already automates several exact primitives MYGPT needs:
+- prompt queueing
+- automatic fresh-chat creation
+- per-task send-in-new-chat behavior
+- image upload / image-to-image workflows
+- ChatGPT image-generation operation
+
+### Critical unresolved point
+
+The public Autojourney documentation found so far says `ChatGPT`, but does **not** explicitly document support for a user-created **Custom GPT** conversation (`/g/...`) or preservation/selection of the Custom GPT's model mode such as Instant.
+
+Therefore do not assume AutoGPT already solves MYGPT end-to-end.
+The next gate is specifically Custom-GPT compatibility, not general ChatGPT automation feasibility.
 
 ## Terms / safety boundary
 
@@ -84,15 +111,15 @@ OpenAI's current consumer Terms of Use prohibit automatically or programmaticall
 
 Therefore:
 - do not treat hidden ChatGPT backend endpoints or automated output scraping/downloading as an accepted production route
-- UI automation research should focus first on ordinary visible actions such as opening isolated chats, selecting the GPT, attaching the canonical, and submitting the local packet
+- first evaluate ordinary visible UI-level operations: opening isolated chats, selecting the Custom GPT, attaching canonical, submitting one local packet
 - automatic collection/extraction of generated outputs requires separate terms review before production use
 
-This boundary is one reason to prefer visible UI-level automation over reverse-engineered web calls.
+This is one reason to prefer visible UI-level automation over reverse-engineered web calls.
 
-## Reopened candidate — N3-B1 local browser automation
+## Reopened candidate — N3-B1 Custom-GPT browser automation
 
 Goal:
-Automate only the repetitive UI operations while preserving the already validated isolation architecture.
+Automate repetitive UI operations while preserving the already validated isolation architecture.
 
 Target workflow:
 
@@ -100,9 +127,9 @@ Target workflow:
 planner produces F2/F3/F4 copy-ready packets
         ↓
 local browser automation
-        ├─ open isolated Custom GPT chat/tab 1
-        ├─ open isolated Custom GPT chat/tab 2
-        └─ open isolated Custom GPT chat/tab 3
+        ├─ open isolated Custom GPT chat 1
+        ├─ open isolated Custom GPT chat 2
+        └─ open isolated Custom GPT chat 3
         ↓
 attach canonical to each isolated chat
 (or duplicate a proven clean seed if reliable)
@@ -112,32 +139,35 @@ send one distinct local packet to each
 three independent image generations
 ```
 
-Preferred implementation order:
+### B1-a — first compatibility gate
 
-### B1-a — UI-level automation first
+Before building our own automation, test whether a current ChatGPT automation extension can operate on the existing `MYGPT Single Frame Worker Test` Custom GPT page while preserving its identity and isolation.
 
-Use browser-extension / userscript / Playwright-style interaction with the visible ChatGPT UI.
+Do **not** test generation quality again.
+Do **not** alter worker prompts.
 
-Why first:
-- does not require separate OpenAI API billing
-- can use the user's existing Plus login
-- keeps the same Custom GPT product surface already validated for image generation
-- can preserve isolation by creating separate tabs/chats
-- can automate canonical file upload through the normal UI
+First non-generation checks:
+1. extension recognizes / activates on the Custom GPT page
+2. it can open or target a fresh Custom GPT conversation rather than silently falling back to ordinary ChatGPT
+3. a queued text task can be placed into that fresh Custom GPT conversation
+4. the Custom GPT remains `MYGPT Single Frame Worker Test`
+5. Instant remains usable / selectable
+6. no planner/full-motion context is inherited
 
-Do not assume hidden/internal ChatGPT backend endpoints are stable production APIs.
+Then file/image check:
+7. canonical attachment can be sent to a fresh Custom GPT conversation through the normal UI path
+8. a clean seed can be submitted without triggering image generation
 
-### B1-b — internal-web-call techniques only as research evidence
+Only after 1-8 pass should one already-validated static-pose generation be used to prove that the resulting chat still invokes the Custom GPT image worker correctly.
 
-Community projects may call ChatGPT web endpoints directly using logged-in browser state.
-Treat that only as evidence of feasibility until current behavior, account safety, file/image support, stability, and terms compatibility are verified.
-Do not make it production architecture merely because old tooling once worked.
+### B1-b — own browser automation if extension compatibility fails
 
-## Acceptance test for N3-B1
+If AutoGPT or similar extensions do not support `/g/...` Custom GPT pages, the precedent still demonstrates the required browser primitives.
+At that point evaluate a minimal local extension / userscript / visible-UI automation that targets the Custom GPT page directly.
 
-Do not alter generation prompts while testing automation.
+Do not begin with hidden/internal ChatGPT endpoints.
 
-Use the already validated R0 or a neutral single-frame packet as the payload.
+## Acceptance test for full N3-B1
 
 Required PASS conditions:
 1. same Custom GPT is opened in 3 genuinely separate conversations/tabs
@@ -147,7 +177,7 @@ Required PASS conditions:
 5. no full-motion / other-packet cross-contamination
 6. 3 standalone image-generation jobs start independently
 7. automation does not silently reuse one conversation for multiple workers
-8. user can stop/recover from one failed tab without corrupting the others
+8. one failed tab can be stopped/recovered without corrupting the others
 9. no separate OpenAI API billing is required
 
 Only after these pass should click-count reduction be measured.
@@ -156,8 +186,11 @@ Only after these pass should click-count reduction be measured.
 
 **Official built-in fan-out: not found.**
 
+**Browser-side automation feasibility: supported by existing Chinese-language implementations, including a current 2026 ChatGPT automation extension.**
+
+**Custom-GPT-specific compatibility: unverified.**
+
 **Overall orchestration ceiling under the user's Plus/no-separate-API constraint: NOT CLOSED.**
 
-N3 is reopened specifically for local browser-side automation / extension techniques.
-
-Do not trade away the proven worker isolation boundary. The automation target is UI friction, not generation architecture.
+N3 stays open until the Custom-GPT compatibility gate is tested.
+Do not trade away the proven worker isolation boundary; the automation target is UI friction, not generation architecture.
