@@ -30,6 +30,10 @@ audit/
     build_motion_layout_guide.py
   references/layout-guides/
     four-pose-portrait.svg
+
+research/
+  PROJECT-HANDOFF.md
+  MOTION-GENERATION-EXPERIMENT-LOG.md
 ```
 
 ## 現行パイプライン
@@ -72,7 +76,7 @@ recompose / re-audit / select
 
 ## Project layout guide
 
-`four-pose-portrait.png`はProject Sourceとして使用しない。過去テストで枠、Kラベル、divider等の模倣を誘発したため退役した。
+`four-pose-portrait.png`はProject Sourceとして使用しない。過去テストで枠、Kラベル、divider等の模倣を誘発し、2×2条件付けにも関与したため退役した。
 
 GitHubのSVGとguide generatorは過去仕様・デバッグ用として保持する。
 
@@ -102,6 +106,15 @@ python audit/scripts/build_motion_strip.py \
 ```
 
 中割りも個別生成し、`--inbetween-images`と`--frame-plan`で順序を明示する。
+
+## 調整・引継ぎ
+
+新しい調整チャットや生成方式の変更前に、次の2文書を読む。
+
+- `research/PROJECT-HANDOFF.md` — 現在の構成・次テスト
+- `research/MOTION-GENERATION-EXPERIMENT-LOG.md` — 過去の失敗遷移、棄却理由、解釈変更、確定事項
+
+同じ失敗方式へ戻る場合は、実験ログにある棄却理由を解消する新証拠を明示する。
 
 ## Legacy / research
 
