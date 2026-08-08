@@ -59,9 +59,18 @@
     return testId === "stop-button" || testId === "composer-stop-button" || /stop generating|生成を停止/i.test(aria);
   }
 
+  function getTranslationLoopSendButton(doc = document) {
+    const guard = globalScope.MYGPTTranslationLoopSendGuard;
+    if (!guard?.getEnabledSendButton) return null;
+    return guard.getEnabledSendButton(getPromptRoot(doc) || getPromptEditor(doc), doc);
+  }
+
+  // AutoGPT supplies the upload mechanics/spinner predicate. Translation Loop
+  // supplies the stronger positive ready evidence: a real composer-local send
+  // control must exist and be enabled. A temporarily absent React button is
+  // therefore never accepted as upload completion.
   function uploadReady(doc = document) {
-    const submit = getSubmitButton(doc);
-    return !isUploading(doc) && (!submit || (!submit.disabled && !isStopButton(submit)));
+    return !isUploading(doc) && Boolean(getTranslationLoopSendButton(doc));
   }
 
   function editorText(editor) {
@@ -72,8 +81,20 @@
     return normalizeText(editor.innerText || editor.textContent || "");
   }
 
+  function composerStructuredText(doc = document) {
+    const root = getPromptRoot(doc);
+    if (!root) return editorText(getPromptEditor(doc));
+    if (root.tagName === "TEXTAREA" || root.tagName === "INPUT") return editorText(root);
+
+    const paragraphs = Array.from(root.querySelectorAll?.("p") || []);
+    if (paragraphs.length) {
+      return normalizeText(paragraphs.map((node) => normalizeText(node.innerText || node.textContent || "")).join("\n"));
+    }
+    return editorText(root);
+  }
+
   function composerDraftText(doc = document) {
-    return editorText(getPromptRoot(doc) || getPromptEditor(doc));
+    return composerStructuredText(doc);
   }
 
   async function waitFor(test, options = {}) {
@@ -152,12 +173,12 @@
 
     input.dispatchEvent(new Event("change", { bubbles: true }));
 
-    // AutoGPT's ChatGPT adapter waits on the composer's upload state rather than filename text.
-    // Do not accept the synchronous post-dispatch state; allow ChatGPT one event turn first.
+    // AutoGPT performs the upload; Translation Loop's send-control monitor is
+    // the final positive READY gate. Do not accept a transient missing button.
     await sleep(250);
     const ready = await waitFor(() => uploadReady(doc), {
       timeout: options.uploadTimeout || 90000,
-      interval: options.uploadInterval || 2000
+      interval: options.uploadInterval || 250
     });
     if (!ready) {
       return { ok: false, reason: "UPLOAD_READY_TIMEOUT", name: made.file.name };
@@ -224,8 +245,7 @@
     let observed = "";
     const reflected = await waitFor(() => {
       const current = getPromptEditor(doc);
-      const readback = getPromptRoot(doc) || current;
-      observed = editorText(readback);
+      observed = composerStructuredText(doc);
       return observed === expected ? current : null;
     }, {
       timeout: options.reflectTimeout || 5000,
@@ -265,10 +285,12 @@
     getPromptRoot,
     getPromptEditor,
     getSubmitButton,
+    getTranslationLoopSendButton,
     isUploading,
     isStopButton,
     uploadReady,
     editorText,
+    composerStructuredText,
     composerDraftText,
     waitFor,
     waitForComposer,
