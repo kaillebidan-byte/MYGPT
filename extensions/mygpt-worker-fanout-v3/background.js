@@ -282,6 +282,7 @@ async function startThree(message) {
   const token = start.value;
 
   const results = [];
+  // Deliberately sequential for the first live build: same mechanics, less Vivaldi background-tab contention.
   for (const slotId of SLOT_IDS) {
     if (!(await guard.isCurrent(token))) break;
     results.push(await prepareOneSlot(token, sourceIdentity, payload, slotId));
