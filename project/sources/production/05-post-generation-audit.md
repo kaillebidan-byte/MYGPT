@@ -1,52 +1,22 @@
 # Post-generation Audit
 
-この資料は、主要モーションボードを実画像として確認した後、repairの内容を決めるためだけに使う。
+この資料は、主要モーションボードを実画像として確認した後、repair内容を決めるためだけに使う。
+生成前の通常プロンプトへ全文を混ぜない。
 
-生成前のmotion contract設計や通常の画像生成プロンプトへ全文を混ぜない。
+## 1. 監査対象
 
-## 1. 監査の前提
-
-監査対象は実際に生成されたraw boardである。
-
-次を同時に参照する。
+同時に参照する。
 
 - 現在のチャットへ直接添付されたcanonical identity reference
-- 生成前に決めたmotion contract、identity anchors、slot state plan、active/support limb、end
-- 実際に生成されたraw board
-- 実行できた場合は`audit/scripts/machine_audit_board.py`のJSON結果
+- motion contract、identity anchors、slot state plan、active/support limb、end
+- 実際のraw INITIAL_BOARD
+- 実行できた場合は`audit/scripts/machine_audit_board.py`のJSON
 
-生成前の計画が正しいことを、生成画像が正しいことの根拠にしない。
+表示用stamped copyは監査・repair入力へ使わない。
 
-表示用にスタンプを付けた派生コピーは監査・repair入力へ使わない。
+## 2. 7項目
 
-## 2. 視覚監査と機械監査の責務
-
-視覚監査は次を主に判定する。
-
-- `identity`
-- `motion_semantics`
-- `continuity`
-- `endpoint`
-- 非常に薄い接地影など、機械判定だけでは取りこぼす可能性がある`chroma`問題
-
-機械監査は次の機械的事実を補助判定する。
-
-- 画像サイズとaspect ratio
-- 外周への非クロマ画素接触
-- 中央縦横safe gapへの非クロマ画素侵入
-- 中央の白いdivider/gridに相当する帯
-- borderのクロマ色均一性
-- 高信頼foreground周辺を除外した背景領域の色ずれ
-- key色とほぼ同色相のまま暗くなったshadow-like背景画素
-- 各象限のforeground bbox
-
-機械監査をidentity、motion semantics、limb continuity、endpointの判定へ使わない。
-
-機械監査が実行できない場合に、推測値を作ってはいけない。
-
-## 3. 7項目
-
-必ず次を独立して判定する。
+必ず独立判定する。
 
 - `identity`
 - `motion_semantics`
@@ -56,207 +26,175 @@
 - `chroma`
 - `unintended_output`
 
-重要なFAILが1つでもあればoverallはFAIL。
+1項目でも重要なFAILがあればoverall FAIL。
 
-## 4. identity
+### identity
 
-canonical identity referenceを正本とする。
+canonical referenceを正本とする。
+顔、目、髪、頭部固有部品、体格、胴体シルエット、袖、襟、裾、靴、模様、縁取り、腰飾り、房、紐、留め具、左右非対称要素を比較する。
+4ポーズ間でも部品構成・接続・形状が維持されていなければFAIL。
 
-顔、目、髪、頭部固有パーツ、体格、胴体シルエット、袖、襟、裾、靴、模様、縁取り、腰飾り、房、紐、留め具、左右非対称要素を比較する。
+### motion_semantics
 
-特にidentity anchorsは優先して確認する。
+左上→右上→左下→右下を時間順としてslot state planと照合する。
+continuityまたはendpointの失敗で要求動作全体が成立しない場合もFAIL。
 
-ポーズ変更による自然な変形と、部品の増減・接続変更・別形状化を区別する。
+### continuity
 
-4ポーズ間で同じ部品構成が維持されていなければFAIL。
+時間をまたぐ同一役割の身体部位を身体への接続関係まで追う。
+active limbを途中で別の手足へ移してはいけない。
+前後位置だけで同一手足と推測しない。
 
-## 5. motion semantics
+### endpoint
 
-左上 → 右上 → 左下 → 右下を時間順として読む。
+one-shotのK4は`end`を満たす必要がある。
+endに復帰が含まれない限りK1へ戻さない。
 
-各slotがslot state planに対応し、ユーザー要求の開始から終了までを最小の飛躍で表しているか確認する。
+### layout
 
-continuityまたはendpointの失敗によって要求動作全体が成立しない場合はmotion_semanticsもFAIL。
-
-## 6. continuity
-
-時間をまたいで同じ役割を持つ身体部位を追跡する。
-
-正面主体で身体反転を伴わない場合は、解剖学的な左右だけでなくviewer-space上の対応も補助に使う。
-
-`leg_A`などのactive limbをK2で選んだ後、K3/K4で別の脚へ役割を移してはいけない。
-
-前に出ている足だけを見て同一脚と推測せず、股関節から足先までの接続関係を追う。
-
-確実に同一脚と追跡できない場合はPASSにしない。
-
-## 7. endpoint
-
-one-shotの最後は`end`を満たす必要がある。
-
-開始姿勢へ戻ることがendに含まれていない限り、K4をK1へ戻さない。
-
-「一歩前へ踏み出して停止」なら、active limbの足先がsupport limbより前方へ残り、重心がsettleしている必要がある。
-
-## 8. layout
-
-主要boardはportrait 2:3相当の2x2。
-
-全身、共通縮尺、中央safe gap、外周safe marginを維持する。
-
-crop、セル越境、正方形boardはFAIL。
-
-機械監査で次がtrueならlayoutのFAIL根拠へ追加する。
+portrait 2:3相当の2×2、全身、共通縮尺、中央safe gap、外周safe marginを維持する。
+次のmachine flagはlayout FAIL根拠へ追加する。
 
 - `wrong_aspect`
 - `outer_edge_contact`
 - `center_vertical_contamination`
 - `center_horizontal_contamination`
 
-## 9. chroma
+### chroma
 
-キャラクター以外は均一な単色クロマ背景であること。
-
-接地影、ドロップシャドウ、床、グラデーション、光だまり、背景模様、局所的な明度差があればFAIL。
-
-機械監査で次がtrueならchromaのFAIL根拠へ追加する。
+キャラクター以外は均一単色クロマ背景。
+接地影、床、gradient、光だまり、局所濃淡は禁止。
+次のmachine flagはchroma FAIL根拠へ追加する。
 
 - `border_not_uniform`
 - `background_not_uniform`
 - `shadow_like_background`
 
-`background_not_uniform`は、高信頼foreground周辺のアンチエイリアス帯を除外した背景領域で、key色から外れた画素が一定割合以上あることを示す。
+machine PASSでも目視影を打ち消さない。
 
-`shadow_like_background`は、key色とほぼ同じ色相方向を保ちながら暗くなった背景画素が一定割合以上あることを示し、接地影や背景濃淡の補助検出として使う。
+### unintended_output
 
-機械監査がPASSでも、目視で確認できる接地影や濃淡を打ち消してはいけない。非常に薄い影は目視判定を優先する。
-
-## 10. unintended output
-
-文字、K1-K4ラベル、説明文、UI、枠線、矢印、モーションライン、記号、未指定エフェクトがあればFAIL。
-
-機械監査で次がtrueならunintended_outputのFAIL根拠へ追加する。
+文字、Kラベル、説明、UI、枠線、矢印、モーションライン、記号、未指定エフェクトは禁止。
+次のmachine flagはFAIL根拠へ追加する。
 
 - `divider_like_vertical_white_band`
 - `divider_like_horizontal_white_band`
 
-## 11. repair前のpreserve contract
+## 3. repair preserve
 
-初回boardがFAILでも、初回でPASSした項目はrepair時に自由に変更してよい状態ではない。
-
-repair前に、7項目のうち初回PASSだった項目を`repair_preserve`として列挙する。
-
-各項目は単に`endpoint: PASS`のようなラベルだけにせず、初回実画像で成立していた状態を短く具体化する。
-
-例:
+初回PASS項目は自由変更可能ではない。
+repair前に、PASS項目をraw INITIAL_BOARDで成立していた具体的状態へ変換する。
 
 ```text
 repair_preserve:
-- endpoint: K4で前後差が残り、開始姿勢へ完全には戻っていない
-- chroma: 均一magenta、接地影なし、background_not_uniform=false、shadow_like_background=false
-- unintended_output: 文字、枠、グリッドなし
+- <item>: <維持する具体的状態>
 ```
 
-機械監査で得たPASS状態がある場合は、必要な数値やfalse flagもpreserve条件へ使ってよい。
+FAIL項目はpreserveへ混ぜない。
+machine auditのfalse flagや必要な数値は維持条件へ使ってよい。
 
-repairではFAIL項目の修正と同時に、このpreserve contractを維持するよう明示する。
+## 4. repairの基本方式: split-cell repair
 
-## 12. repair方式
+FAIL後に2×2 board全体を画像生成モデルへ再生成させない。
 
-初回レビューと機械監査で確認したFAILだけを修正対象にする。
+1. `audit/scripts/split_repair_board.py`でraw INITIAL_BOARDをK1/K2/K3/K4へ機械分割する。
+2. FAILをセル単位の`CHANGE`と`LOCK`へ割り当てる。
+3. 修正が必要なセルだけを単独画像として1回repairする。
+4. 修正不要セルはsplitしたrawセルをそのまま使う。
+5. `audit/scripts/compose_repair_board.py`で4セルを元の2×2幾何へ再合成する。
+6. 合成raw REPAIR_BOARDを7項目とmachine auditで再監査する。
 
-初回PASS項目は`repair_preserve`として維持対象にする。
+画像生成モデルへ最終2×2配置を再生成させない。
 
-### motion-critical
+## 5. CELL_REPAIR_PLAN
 
-`motion_semantics`、`continuity`、`endpoint`のどれかがFAILなら、局所編集で姿勢を継ぎ足さずboard全体を1回だけ再生成する。
-
-repair時もcanonical identity referenceをidentityの正本とし、active/support limb、slot state plan、endを保持する。
-
-左右を曖昧な「同じ足」だけで書かず、論理ID、必要なら解剖学的左右とviewer-space対応を併用する。
-
-board全体を再生成する場合でも、`repair_preserve`をrepair指示へ含め、初回PASS項目の回帰を許容しない。
-
-### non-motion only
-
-motion系3項目がすべてPASSで、それ以外だけFAILなら、初回boardを編集対象として使い、PASSだったmotion状態を再設計しない。
-
-この場合も初回PASS項目を`repair_preserve`として明示する。
-
-## 13. repair note
-
-repair noteは実画像または機械監査で確認したFAILだけを短く列挙する。
-
-一般論、未確認の問題、別案、新しい演出を追加しない。
-
-repair noteとは別に`repair_preserve`を渡し、修正対象と維持対象を混同しない。
-
-修正後は同じ7項目を実画像で再監査する。機械監査を実行できる場合は修正版にも再実行する。
-
-修正後がFAILでも追加repairは行わない。
-
-## 14. repair deltaと採用board
-
-修正後レビュー確定後、初回と修正版の7項目を項目ごとに比較する。
-
-分類は次のとおり。
-
-- `fixed`: 初回FAIL → 修正版PASS
-- `remaining`: 初回FAIL → 修正版FAIL
-- `regressed`: 初回PASS → 修正版FAIL
-
-初回PASS → 修正版PASSは維持成功であり、上記3リストへ入れなくてよい。
-
-`initial_fail_count`と`repair_fail_count`も数える。
-
-比較結果は次の規則で決める。
-
-1. 修正版がoverall PASSなら`result: IMPROVED`、`selected_board: REPAIR`
-2. 修正版に`regressed`が1つでもあれば、他項目が直っていても`result: WORSE`、`selected_board: INITIAL`
-3. regressionがなく`fixed`が1つ以上あれば`result: IMPROVED`、`selected_board: REPAIR`
-4. regressionもfixedもなければ`result: NO_CHANGE`、`selected_board: INITIAL`
-
-出力例:
+各セルを`KEEP_RAW`または`REPAIR`にする。
 
 ```text
-REPAIR_DELTA
-fixed:
-- layout
-remaining:
-- identity
-- continuity
-regressed:
-- endpoint
-- chroma
-initial_fail_count: 4
-repair_fail_count: 5
-result: WORSE
-selected_board: INITIAL
+K1:
+  action: KEEP_RAW / REPAIR
+  change:
+  - <直す状態>
+  lock:
+  - <維持する状態>
 ```
 
-修正版だからという理由だけで自動採用しない。
+一般則:
 
-選択されたboardがFAILであっても、1回repair上限は維持し、追加生成しない。
+- `identity` FAILは、実際にdriftがあるセルをrepair対象にする。4セル全部に問題があるなら4セル全部。
+- `motion_semantics` FAILは、誤ったslot stateを持つセルをrepair対象にする。
+- `continuity` FAILは、役割が切り替わった境界を特定し、必要最小限のセルをrepair対象にする。
+- `endpoint` FAILは原則K4をrepair対象にする。
+- layout/chroma/unintended_outputの局所FAILは該当セルをrepair対象にする。
+- 問題のないセルを「念のため」で再生成しない。
+- PASS項目に関係するセル状態は`lock`へ具体化する。
 
-## 15. display-only review copy
+## 6. 参照画像の役割分離
 
-人間が初回boardと修正版を取り違えないよう、監査結果確定後に`audit/scripts/stamp_review_board.py`で表示専用コピーを作る。
+各セルrepairでは参照の役割を混同しない。
 
-例:
+- canonical identity reference: キャラクター同一性の正本
+- 当該raw split cell: repair target、元のpose/state
+- raw INITIAL_BOARD: 4時点全体のmotion context
+- motion contract / 隣接セル: 時間関係とcontinuityの参照
 
-```text
-raw_initial.png -> review_initial_FAIL.png
-raw_repair.png  -> review_repair_PASS.png
-```
+隣接セルやrepair済みセルをidentityの新しい正本にしない。
 
-表示専用コピーは元画像の外側へ`INITIAL | PASS/FAIL`または`REPAIR | PASS/FAIL`の帯を追加する。
+continuity修正で隣接状態を参照するときも、「似せる」のではなく、同じ論理手足・接地側・保持側・接触対象が継続する関係を指定する。
 
-重要:
+## 7. 個別セルrepair
 
-- raw boardそのものへ文字を焼き込まない
-- stamped copyをmachine auditへ入力しない
-- stamped copyをrepair対象にしない
-- stamped copyをcanonical identity referenceにしない
-- stamped copy上の帯を`unintended_output`判定へ含めない
+REPAIRセルは1セルずつ別jobで処理する。
+出力はportrait 2:3の単独全身ポーズ1枚。
 
-監査・repairでは常に未加工のraw boardを使う。
+repair指示には今回必要なものだけを含める。
+
+- canonical identity anchors
+- 当該セルの元pose/state
+- `change`
+- `lock`
+- 必要なactive/support limb、end、隣接状態
+- 初回machine auditの`key_hex`を背景目標色として使用
+- 影、床、文字、ラベル、枠、未指定エフェクト禁止
+
+別案、A/B、同一セルの2回目repairは禁止。
+
+## 8. split / compose責務
+
+`split_repair_board.py`はraw boardを正確な4象限へ分割し、元board size、cell size、slot box、key色をmetadataへ保存する。
+
+`compose_repair_board.py`は、
+
+- REPAIRセル: 個別repair出力
+- KEEP_RAWセル: split rawセル
+
+をK1→K4順に受け取り、metadataの元位置へ決定論的に配置する。
+
+合成時に画像生成モデルへlayout判断をさせない。
+各入力セルはtarget cellと同じportrait比率を要求する。
+背景色の微小差だけは元boardのkey色へ正規化してよいが、接地影や大きな濃淡まで自動消去して監査を回避してはいけない。
+
+## 9. repair delta
+
+修正後レビューと初回レビューを比較する。
+
+- `fixed`: FAIL→PASS
+- `remaining`: FAIL→FAIL
+- `regressed`: PASS→FAIL
+
+PASS→PASSは維持成功。
+
+採用規則:
+
+1. REPAIR overall PASS → `IMPROVED / REPAIR`
+2. regressedが1項目でもある → `WORSE / INITIAL`
+3. regressionなし、fixedあり → `IMPROVED / REPAIR`
+4. regressionなし、fixedなし → `NO_CHANGE / INITIAL`
+
+repair後がFAILでも追加repairしない。
+
+## 10. display-only review copy
+
+`audit/scripts/stamp_review_board.py`は人間確認用コピーだけに使う。
+raw boardへ文字を焼き込まない。
+stamped copyをmachine audit、repair target、canonical referenceへ使わない。
