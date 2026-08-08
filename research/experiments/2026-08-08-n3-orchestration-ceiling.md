@@ -84,14 +84,18 @@ minimal Custom GPT worker instructions only
 + current one local pose packet
 ```
 
-It also freezes the worker-side configuration that was validated in R0-R2:
+The exact live worker configuration is now captured in:
+- `research/runtime/2026-08-08-single-frame-worker-live-snapshot.md`
+
+Live editor facts include:
+- Recommended model: `GPT-5.6 Sol (gpt-5-6-instant)`
 - image generation ON
 - Web OFF
 - Code/Data Analysis OFF
 - Actions NONE
-- Apps NONE
 - Knowledge NONE
-- targeted active-large-sleeve invariant only
+- no active/exposed App integration in the captured Plus editor
+- targeted active-large-sleeve invariant retained
 
 ### Consequence
 
@@ -133,10 +137,13 @@ It is prior-art evidence that browser-side orchestration of logged-in ChatGPT/GP
 
 A much more current and operationally relevant case exists: Autojourney's `AutoGPT` Chrome extension for ChatGPT / Sora.
 
-Current evidence checked 2026-08-08:
+Current evidence refreshed 2026-08-08:
 - Autojourney official site describes AutoGPT as a productivity extension built for ChatGPT and Sora
 - supports batch auto-send prompts, task queues, text-to-image, image-to-image, image-to-text and automated generation workflows
-- Chrome Web Store current listing is version `0.0.69`, updated `2026-07-15`
+- Chrome Web Store current listing is version `0.0.70`, updated `2026-07-30`, size `1.74 MiB`
+- Chrome Web Store shows roughly `1,000 users`, rating `3.4/5` from `5 ratings`
+- the store page marks the publisher as the owner of the listed website and says the publisher has a good record with no history of violations
+- the developer declares on the store page that the extension does not collect or use user data; this is a developer disclosure, not an independent security audit
 
 Autojourney's Chinese AutoGPT changelog is especially relevant:
 - `2025-08-19 v0.0.21`: added ChatGPT `自动新对话` — automatically switch to a fresh conversation after a configurable task count
@@ -161,6 +168,17 @@ The public Autojourney documentation found so far says `ChatGPT`, but does **not
 
 Therefore do not assume AutoGPT already solves MYGPT end-to-end.
 The next gate is specifically Custom-GPT compatibility, not general ChatGPT automation feasibility.
+
+## Third-party extension test boundary
+
+AutoGPT is third-party browser software and operates on ChatGPT pages.
+For the compatibility test:
+- use only the isolated worker chat / canonical test asset, not unrelated sensitive chats
+- do not enable automatic output download / extraction for the first gate
+- do not test hidden/internal ChatGPT endpoints
+- inspect the browser's install-time permission prompt before accepting; record it if it grants broader access than expected
+
+The Chrome Web Store privacy disclosure is useful evidence but does not replace the install-time permission check or an independent code/security audit.
 
 ## Terms / safety boundary
 
