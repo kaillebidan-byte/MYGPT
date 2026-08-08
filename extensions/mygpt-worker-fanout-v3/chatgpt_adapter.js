@@ -9,6 +9,8 @@
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
 
+  // This adapter must execute in the page MAIN world. Synthetic ClipboardEvent
+  // clipboardData is part of ChatGPT's page-side input contract.
   function normalizeText(value) {
     return String(value || "")
       .replace(/\r\n?/g, "\n")
@@ -202,12 +204,14 @@
       } catch (_) {}
     }
 
-    const clipboard = new DataTransfer();
-    clipboard.setData("text/plain", raw);
+    // Match AutoGPT 0.0.71 ordering: create the paste event, then DataTransfer,
+    // then define clipboardData on the event before dispatch.
     const pasteEvent = new ClipboardEvent("paste", {
       bubbles: true,
       cancelable: true
     });
+    const clipboard = new DataTransfer();
+    clipboard.setData("text/plain", raw);
     Object.defineProperty(pasteEvent, "clipboardData", { value: clipboard });
     editor.dispatchEvent(pasteEvent);
 
