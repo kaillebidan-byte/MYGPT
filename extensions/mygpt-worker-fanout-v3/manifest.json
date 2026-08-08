@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "MYGPT Worker Fanout v4",
-  "version": "0.4.0",
-  "description": "Three isolated Custom GPT workers using Translation Loop control/submit evidence, AutoGPT upload/paste/passive observation, and VoiceBridge-style monitoring.",
+  "version": "0.4.1",
+  "description": "Three isolated Custom GPT workers using Translation Loop control/submit evidence, AutoGPT upload/paste/passive observation, VoiceBridge-style monitoring, and worker-route scoped content reporting.",
   "permissions": [
     "storage",
     "tabs",
