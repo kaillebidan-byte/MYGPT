@@ -6,6 +6,14 @@
   const PROMPT_PARAGRAPH_SELECTOR = '#prompt-textarea p';
   const PROMPT_ROOT_SELECTOR = '#prompt-textarea';
   const SUBMIT_SELECTOR = '#composer-submit-button';
+  const ATTACHMENT_UI_SELECTORS = Object.freeze([
+    '[data-testid*="attachment"]',
+    '[data-testid*="file-preview"]',
+    '[data-testid*="upload-preview"]',
+    'button[aria-label*="Remove file" i]',
+    'button[aria-label*="Remove attachment" i]',
+    'button[aria-label*="削除"]'
+  ]);
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
 
@@ -65,12 +73,54 @@
     return guard.getEnabledSendButton(getPromptRoot(doc) || getPromptEditor(doc), doc);
   }
 
-  // AutoGPT supplies the upload mechanics/spinner predicate. Translation Loop
-  // supplies the stronger positive ready evidence: a real composer-local send
-  // control must exist and be enabled. A temporarily absent React button is
-  // therefore never accepted as upload completion.
-  function uploadReady(doc = document) {
-    return !isUploading(doc) && Boolean(getTranslationLoopSendButton(doc));
+  function attachmentSnapshot(doc = document) {
+    const composer = getComposer(doc);
+    if (!composer?.querySelectorAll) return { markers: 0, images: 0 };
+    const markerNodes = new Set();
+    for (const selector of ATTACHMENT_UI_SELECTORS) {
+      let nodes = [];
+      try { nodes = composer.querySelectorAll(selector); } catch (_) { continue; }
+      for (const node of nodes) markerNodes.add(node);
+    }
+    return {
+      markers: markerNodes.size,
+      images: composer.querySelectorAll("img").length
+    };
+  }
+
+  function attachmentVisible(fileName, before, doc = document) {
+    const composer = getComposer(doc);
+    if (!composer) return null;
+    const text = composer.innerText || composer.textContent || "";
+    if (fileName && text.includes(fileName)) return { kind: "visible-filename" };
+    const current = attachmentSnapshot(doc);
+    if (current.markers > (before?.markers || 0)) {
+      return { kind: "attachment-marker", ...current };
+    }
+    if (current.images > (before?.images || 0)) {
+      return { kind: "attachment-image", ...current };
+    }
+    return null;
+  }
+
+  // Upload completion is attachment-specific. Send readiness is checked only
+  // after the prompt is pasted, because prompt content can control button state.
+  function uploadReady(fileName, before, doc = document) {
+    return !isUploading(doc) && attachmentVisible(fileName, before, doc);
+  }
+
+  async function waitForSendReady(doc = document, timeout = 10000) {
+    const button = await waitFor(() => getTranslationLoopSendButton(doc), {
+      timeout,
+      interval: 100
+    });
+    if (!button) return null;
+    return {
+      evidence: "translation-loop-send-ready",
+      testId: button.getAttribute?.("data-testid") || null,
+      ariaLabel: button.getAttribute?.("aria-label") || null,
+      type: button.getAttribute?.("type") || null
+    };
   }
 
   function editorText(editor) {
@@ -156,6 +206,7 @@
     const initial = await waitForComposer(doc, options.composerTimeout || 15000);
     if (!initial) return { ok: false, reason: "COMPOSER_OR_FILE_INPUT_NOT_FOUND" };
 
+    const beforeAttachment = attachmentSnapshot(doc);
     const transfer = new DataTransfer();
     transfer.items.add(made.file);
     const input = getFileInput(doc);
@@ -173,20 +224,19 @@
 
     input.dispatchEvent(new Event("change", { bubbles: true }));
 
-    // AutoGPT performs the upload; Translation Loop's send-control monitor is
-    // the final positive READY gate. Do not accept a transient missing button.
     await sleep(250);
-    const ready = await waitFor(() => uploadReady(doc), {
+    const ready = await waitFor(() => uploadReady(made.file.name, beforeAttachment, doc), {
       timeout: options.uploadTimeout || 90000,
       interval: options.uploadInterval || 250
     });
     if (!ready) {
-      return { ok: false, reason: "UPLOAD_READY_TIMEOUT", name: made.file.name };
+      return { ok: false, reason: "ATTACHMENT_UI_NOT_CONFIRMED", name: made.file.name };
     }
 
     return {
       ok: true,
-      evidence: "autogpt-upload-ready",
+      evidence: "autogpt-upload+visible-attachment",
+      attachmentUiEvidence: ready.kind,
       name: made.file.name,
       size: made.file.size,
       type: made.file.type
@@ -279,6 +329,7 @@
     PROMPT_PARAGRAPH_SELECTOR,
     PROMPT_ROOT_SELECTOR,
     SUBMIT_SELECTOR,
+    ATTACHMENT_UI_SELECTORS,
     normalizeText,
     getComposer,
     getFileInput,
@@ -286,9 +337,12 @@
     getPromptEditor,
     getSubmitButton,
     getTranslationLoopSendButton,
+    attachmentSnapshot,
+    attachmentVisible,
     isUploading,
     isStopButton,
     uploadReady,
+    waitForSendReady,
     editorText,
     composerStructuredText,
     composerDraftText,
