@@ -13,6 +13,10 @@ const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "u
 
 assert.deepStrictEqual(manifest.permissions, ["storage", "tabs", "scripting", "unlimitedStorage"]);
 assert.equal(manifest.content_scripts[0].world, "MAIN");
+assert.ok(manifest.content_scripts[0].js.includes("chatgpt_adapter.js"));
+assert.ok(!manifest.content_scripts[1].js.includes("chatgpt_adapter.js"));
+assert.ok(source.includes('world: "MAIN"'));
+assert.ok(source.includes('executionWorld: "MAIN"'));
 assert.ok(source.includes("autogpt-upload-ready"));
 assert.ok(source.includes("autogpt-synthetic-paste"));
 assert.ok(source.includes("TranslationLoopRuntimeGuard"));
@@ -47,4 +51,4 @@ const noSubmit = [
 for (const pattern of noSubmit) assert.equal(pattern.test(source), false, `submission path present: ${pattern}`);
 
 assert.equal((source.match(/chrome\.tabs\.create\s*\(/g) || []).length, 1);
-console.log("MYGPT Worker Fanout v3 safety contract: PASS");
+console.log("MYGPT Worker Fanout v3.1 safety contract: PASS");
