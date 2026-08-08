@@ -17,6 +17,7 @@ ChatGPT Projectsを実際に使っている人の運用例、失敗例、回避�
 - `patterns-and-pitfalls.md` — 複数資料から見える運用パターンと失敗
 - `image-reference-notes.md` — キャラクター画像参照に直接関係する実例とMYGPT実機結果
 - `imagegen-orchestration-context.md` — motion orchestration contextが単独frameをmulti-panel / sequence sheetへ崩す問題の外部調査と次回隔離テスト設計
+- `china-imagegen-practices.md` — 中国語圏の角色一致性、姿势控制、多图参考、分镜、multi-round editingに関する別角度の調査
 
 ## 調査の優先順位
 
@@ -38,5 +39,6 @@ ChatGPT Projectsを実際に使っている人の運用例、失敗例、回避�
 7. キャラクター継続性では、文章だけよりキャラクターシートや基準画像を繰り返し参照させる実践例が見つかる。
 8. OpenAIの会話型画像生成APIでは、mainline modelが画像生成用promptを自動改稿する仕組みが公開されている。このため、conversation-level intentとgeneration-facing promptを同一視しない。
 9. GPT Imageはmulti-panel composition自体を対応用途として持つ。motion / sequence / storyboard等のglobal contextと単独frame要求が同居するときは、multi-panelへの再解釈を実機で切り分ける必要がある。
+10. 中国語圏のproduction-oriented AIGCでは、identity / pose / scene / style / structureを別referenceやvisual control channelへ分離する運用が目立つ。これはsingle-pose visual guideの将来試験候補になる。
 
 これらは外部資料の観察とMYGPT実機結果を区別して扱う。production仕様の正本は`research/PROJECT-HANDOFF.md`、`research/MOTION-GENERATION-EXPERIMENT-LOG.md`、各incident記録を優先する。
