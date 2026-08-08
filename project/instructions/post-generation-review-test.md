@@ -1,189 +1,154 @@
-# 一時検証モード: post-generation review / one repair board / post-compare cell select
+# 一時検証モード: frame-first generation / deterministic compose / one repair round
 
-このファイルは実験用Project Instructions。通常の`04-imagegen-workflow.md`より優先する。
-初回4ポーズを1枚生成し、FAIL時はREPAIR_SOURCEを1枚だけ追加生成する。その後でINITIAL/REPAIR_SOURCEを実画像比較し、各slotの採用元を決めてPython合成・再監査する。
-K別生成、画像edit、A/B、2回目repairは禁止。画像生成は原則最大2回。
+このファイルは実験用Project Instructions。2×2を画像生成モデルへ直接描かせない。
 
 処理:
-`INITIAL → 視覚監査 → machine audit → repair plan → REPAIR_SOURCE 1枚 → repair source review → source比較 → cell選択合成 → 再監査 → delta → 採用`
+`canonical → motion contract → F1生成 → F2生成 → F3生成 → F4生成 → Python compose → visual+machine audit → failed-frame repair 1 round → source比較 → recompose → 再監査 → 採用`
 
-## 0. 終了条件 / GitHub取得
-途中ブロックは最終回答ではない。利用可能なtoolを呼ばずに不可能と推測して終了しない。
-終了可能:
-1. `REVIEW_UNAVAILABLE`
-2. machine auditが`IMAGE_UNAVAILABLE / SOURCE_UNAVAILABLE / EXECUTION_UNAVAILABLE / ERROR`
-3. 初回7項目全PASS
-4. `AUDIT_SOURCE_CHECK: UNAVAILABLE`
-5. REPAIR_SOURCE生成またはcomposeの実エラー
-6. 最終`REPAIR_DELTA`と`SELECTED_BOARD`出力後
-
+## 0. GitHub取得
 既知ファイルをrepository searchで探さない。repo=`kaillebidan-byte/MYGPT`, ref=`main`を正確なpathで直接fetchする。
+- `audit/scripts/compose_keypose_board_from_frames.py`
 - `audit/scripts/machine_audit_board.py`
 - `project/sources/production/05-post-generation-audit.md`
-- `audit/scripts/compose_repair_from_boards.py`
-connectorで取れなければ同repo/mainのraw URLを直接取得する。
-取得失敗=`SOURCE_UNAVAILABLE`、Python自体を起動不可=`EXECUTION_UNAVAILABLE`。混同しない。Python sourceはローカル保存して実ファイルへ実行する。
+
+取得失敗=`SOURCE_UNAVAILABLE`、Python起動不可=`EXECUTION_UNAVAILABLE`。混同しない。
 
 ## 1. canonical / contracts
-現在チャットへ直接添付された基準画像だけをcanonical identity referenceとする。
+現在チャットへ直接添付された基準画像をcanonical identity referenceとする。
 
-生成前に`IDENTITY_CONTRACT`を内部作成する。雰囲気ではなく構造を固定する:
-- proportions: 頭身、頭/胴体/腕/脚の比率
-- silhouette: 頭部、胴体、袖、下衣、靴の外形
-- topology: 固有部品の個数、接続位置、左右関係、重なり順
-- occlusion_map: 部品同士の覆い方・境界。帽子と髪、髪と顔、袖と手、腰飾りと衣装など、どの部品がどこから見えるか
-- anchors: 顔、目、髪、頭部品、胸部意匠、腰部意匠、房/紐/留め具、裾、靴等
+同じキャラクター候補が複数ある場合はユーザー指定を優先する。指定がなければ、加工前に近く、全身が見え、固有部品を読み取れる最高品質・高解像度の画像をcanonicalとして選ぶ。
 
-canonicalにない部品の追加、欠落、左右反転、別形状化、接続変更、覆い関係の変更を許さない。たとえば髪がcanonicalでは帽子下縁から見えるなら、帽子側面から新しい髪束が生えたような構造へ変えない。ポーズに必要な自然変形だけ許す。
+canonicalから内部`IDENTITY_CONTRACT`を作る:
+- proportions
+- silhouette
+- topology: 部品個数、接続位置、左右関係、重なり順
+- occlusion: 帽子と髪、袖と手、腰飾りと衣装等の覆い方・境界
+- anchors: 顔、髪、頭部品、胸/腰意匠、房、紐、留め具、裾、靴等
 
-`02-motion-design.md`から`MOTION_CONTRACT`を内部作成する:
-- active_limb_id / support_limb_id（必要時）
-- 必要なら解剖学的左右とviewer-space対応
-- end
-- slot_state_plan: K1=左上→K2=右上→K3=左下→K4=右下
+`02-motion-design.md`から内部`MOTION_CONTRACT`を作る:
+- mode / start / end
+- F1〜F4の時間状態
+- active/support limb等のcontinuity invariant
 
-K1〜K4は内部名であり、画像内へ描く記号ではない。
+F1〜F4は内部時間名。画像内へ描かない。
 
-## 2. INITIAL_BOARD
-生成直前に`INITIAL_BOARD`と出す。
-portrait 2:3相当の1枚の連続クロマキャンバス上へ、4体を左上・右上・左下・右下の4象限に配置して生成する。
+## 2. INITIAL FRAMES
+画像生成は4回。**1回の生成jobにつき人物1体の単独全身画像1枚だけ**を作る。
 
-画像生成へ渡す指示では、可能な限り`K1/K2/K3/K4`、`1/2/3/4`、`frame`、`panel`、番号付き一覧を画像要素として連想させる表現を避け、位置と時間順を文章で伝える。
-「4分割された紙面」ではなく「同じ連続したmagenta背景上に4ポーズを四象限配置」と指定する。
+各jobの直前に本文へ`INITIAL_FRAME F1`等と出すが、画像生成promptでは番号、frame一覧、board、panel、2×2、sprite sheet、comparison sheet、layout guideを出力形式として要求しない。
 
-生成指示へIDENTITY_CONTRACT、MOTION_CONTRACT、全身、共通縮尺、中央safe gap、外周safe margin、均一単色クロマを含める。
-文字、番号、丸数字、ラベル、枠、divider、grid、床、影、モーションライン、未指定effectは禁止。
-未加工画像を`raw INITIAL_BOARD`として保持する。
+4jobすべてで同じ直接添付canonicalをidentity anchorとする。前に生成したframeをidentity正本にしない。
 
-## 3. INITIAL review / machine audit
-raw INITIAL_BOARDを実際に見て7項目を独立判定する:
+画像生成promptへ含めるもの:
+- canonicalと同一人物。再設計しない
+- 今回の1状態だけ
+- continuity invariantのうち必要なもの
+- 人物1体、全身、portrait、正面基準
+- 表情指定がなければcanonical表情
+- 均一な高彩度magenta系クロマ
+- 床、接地影、文字、番号、ラベル、枠、grid、UI、モーションライン、未指定effectなし
+
+4状態を1枚へまとめない。生成結果が複数ポーズsheetだった場合はそのjobをFAILとして記録し、同じjobをその場で再試行しない。
+
+## 3. FRAME VISUAL REVIEW
+4枚生成後、canonicalと各raw frameを実際に比較する。
+
+```text
+FRAME_VISUAL_REVIEW
+F1: identity PASS/FAIL | state PASS/FAIL | unintended PASS/FAIL
+F2: ...
+F3: ...
+F4: ...
+sequence:
+  motion_semantics: PASS/FAIL
+  continuity: PASS/FAIL
+  endpoint: PASS/FAIL
+issues:
+- ...
+```
+
+identityはproportions / silhouette / topology / occlusionを省略しない。帽子と髪の境界、固有部品の接続・左右関係も見る。
+
+## 4. INITIAL COMPOSE / AUDIT
+`compose_keypose_board_from_frames.py`を4 raw frameへ実行する。
+
+```text
+python compose_keypose_board_from_frames.py \
+  --frames <F1> <F2> <F3> <F4> \
+  --output raw_initial_board.png
+```
+
+このPython合成物だけを2×2 boardとする。画像生成モデルへboardを描かせない。
+
+`machine_audit_board.py raw_initial_board.png`を実行する。
+
+合成boardを7項目で統合判定:
 `identity / motion_semantics / continuity / endpoint / layout / chroma / unintended_output`
 
-identityはcanonicalとの比較と4セル相互比較を両方行い、IDENTITY_CONTRACTを1項目ずつ確認する。特にsilhouette、topology、occlusion_mapを省略しない。
-continuityは身体への接続まで追う。endpointはK4をendとK1の両方に照合する。
-
-```text
-INITIAL_VISUAL_REVIEW
-identity: PASS/FAIL
-motion_semantics: PASS/FAIL
-continuity: PASS/FAIL
-endpoint: PASS/FAIL
-layout: PASS/FAIL
-chroma: PASS/FAIL
-unintended_output: PASS/FAIL
-issues:
-- 実画像で確認した問題
-```
-
-`machine_audit_board.py`をraw INITIAL_BOARDへ実行する。
-統合:
-- wrong_aspect / outer_edge_contact / center_*_contamination → layout
+machine flags:
+- wrong_aspect / outer_edge_contact / center_* → layout
 - border_not_uniform / background_not_uniform / shadow_like_background → chroma
-- divider_like_*_white_band → unintended_output
-machine PASSは目視FAILを打ち消さない。
+- divider_like_* → unintended_output
 
-初回全PASSなら`SELECTED_BOARD stage: INITIAL reason: initial_pass`で終了。
+全PASSならINITIALを採用して終了。
 
-## 4. audit source / preserve / repair target plan
-初回FAIL時だけ`05-post-generation-audit.md`を直接取得する。
-初回PASS項目を具体状態へ変換する。
+## 5. FRAME_REPAIR_PLAN
+FAIL時だけ`05-post-generation-audit.md`を取得する。
 
 ```text
-REPAIR_PRESERVE
-items:
-- <PASS項目>: <壊してはいけない具体状態>
-```
-
-次に各slotの修正要求を作る。ここでは採用元をまだ決めない。
-
-```text
-REPAIR_TARGET_PLAN
-K1:
-  needs_change: yes/no
-  change:
-  - <修正内容>
-  lock:
-  - <維持内容>
-```
-
-identity FAILは該当セルのIDENTITY_CONTRACT違反をchangeへ入れる。motion/continuity/endpointは誤ったslotまたは境界だけを具体化する。PASS状態はlockへ入れる。
-
-## 5. REPAIR_SOURCE_BOARD
-追加visual jobはこれ1回だけ。
-`REPAIR_SOURCE_BOARD`と出し、canonicalを正本としてportrait 2:3の連続クロマキャンバス上へ4ポーズを四象限配置して新規生成する。
-
-生成指示へ:
-- IDENTITY_CONTRACT
-- MOTION_CONTRACT
-- INITIAL_REVIEWのFAIL
-- REPAIR_PRESERVE
-- REPAIR_TARGET_PLANのchange/lock
-- INITIAL key_hexに近い均一クロマ
-- 影/床/文字/番号/丸数字/ラベル/枠/divider/grid/UI/未指定effect禁止
-
-内部のK番号や計画記号を画像へ描かない。画像生成向け文章ではslot名より「左上の開始」「右上の次状態」等の位置記述を優先する。
-4ポーズを同じ1枚で生成し、identity・縮尺・時間関係を共有させる。
-未加工画像を`raw REPAIR_SOURCE_BOARD`として保持する。
-
-## 6. REPAIR_SOURCE_REVIEW / POST_SOURCE_COMPARE
-REPAIR_SOURCEを合成前に実画像レビューする。INITIALと同じ7項目を使い、少なくとも次を明示確認する:
-- identity: IDENTITY_CONTRACT、とくにocclusion_map
-- motion: 各slot state
-- continuity / endpoint
-- layout / chroma
-- unintended_output: 番号、丸数字、ラベル、divider、gridを見落とさない
-
-`REPAIR_TARGET_PLANでneeds_change=yes`を理由にREPAIRを自動採用しない。
-INITIALとREPAIR_SOURCEの対応slotをcanonical・contractsへ照合して比較する。
-
-各slotの優先順位:
-1. identity fidelity
-2. required slot state / motion phase
-3. unintended output
-4. local chroma / layout
-
-機械的layout改善だけで、identityやmotionが同等以下のREPAIRセルを自動優先しない。REPAIRに新しい番号・ラベル・部品追加がありINITIAL側にない場合、それを明示的な不利として扱う。
-
-暫定4セル列をK1→K4で読み、continuityとendpointを再確認する。混在で手足/保持側/接地側が切り替わる場合、関連slotの採用元を見直す。局所的に良くてもsequenceを壊すセルは採用しない。
-
-```text
-CELL_SOURCE_DECISION
-K1: INITIAL / REPAIR
-K2: INITIAL / REPAIR
-K3: INITIAL / REPAIR
-K4: INITIAL / REPAIR
+FRAME_REPAIR_PLAN
+F1: KEEP / REPAIR
+F2: KEEP / REPAIR
+F3: KEEP / REPAIR
+F4: KEEP / REPAIR
 reason:
-- 各slotとsequence上の主要理由
+- ...
 ```
 
-## 7. CELL_SELECT_COMPOSE
-`compose_repair_from_boards.py`を直接取得して実行する。`CELL_SOURCE_DECISION`でREPAIRを選んだlabelだけ`--use-edited`へ渡す。
+identityはdriftしたframeだけ。stateは誤状態frame。continuityは切れた境界の必要最小frame。endpointは原則F4。影・文字等は該当frame。
+
+Python compose由来の純粋layout問題は画像再生成で直さない。
+
+## 6. REPAIR FRAME
+REPAIR対象だけ各1回追加生成する。各repairも同じcanonicalへ再アンカーし、初回frameをidentity正本にしない。
+
+repair promptは「canonicalと同一人物」「直すstate/identity違反」「continuity invariant」「維持状態」「人物1体・全身・flat chroma・sheet要素なし」だけへ圧縮する。
+
+1frameにつき追加生成は1回だけ。2回目repairは禁止。
+
+## 7. SOURCE DECISION / RECOMPOSE
+repair候補があるframeはINITIAL/REPAIRをcanonicalとMOTION_CONTRACTへ照合して比較する。
+
+優先順位:
+1. identity fidelity
+2. required state
+3. unintended output
+4. chroma extraction suitability
 
 ```text
-python compose_repair_from_boards.py \
-  --initial <raw INITIAL_BOARD> \
-  --edited <raw REPAIR_SOURCE_BOARD> \
-  --use-edited <REPAIR labels> \
-  --target-key <INITIAL key_hex> \
-  --output raw_repair_board.png
+FRAME_SOURCE_DECISION
+F1: INITIAL / REPAIR
+F2: INITIAL / REPAIR
+F3: INITIAL / REPAIR
+F4: INITIAL / REPAIR
 ```
 
-`--edited`は互換引数名。入力はREPAIR_SOURCE_BOARD。
-出力は1024×1536、各セル512×768へ決定論的に再構成する。近似key色は初回keyへ正規化してよいが、影や大きな濃淡、文字等を消して監査を回避しない。
+選択列全体のcontinuity / endpointを再確認してから、選択4枚を同じcompose scriptで`raw_final_board.png`へ合成する。
 
 ## 8. POST_REPAIR / delta
-合成raw REPAIR_BOARDを7項目で実画像レビューし、machine auditを再実行する。初回JSONを再利用しない。追加repairは禁止。
+raw_final_boardを7項目で実画像監査しmachine auditを再実行する。
 
-INITIAL_REVIEWとPOST_REPAIR_REVIEWを比較:
 - fixed = FAIL→PASS
 - remaining = FAIL→FAIL
 - regressed = PASS→FAIL
 
-採用規則:
-1. REPAIR overall PASS → REPAIR
-2. regressedあり → INITIAL
-3. regressionなし、fixedあり → REPAIR
-4. regressionなし、fixedなし → INITIAL
+採用:
+1. FINAL overall PASS → FINAL
+2. regressionあり → INITIAL
+3. regressionなし、fixedあり → FINAL
+4. fixedなし → INITIAL
+
+追加repairは禁止。
 
 ```text
 REPAIR_DELTA
@@ -193,12 +158,9 @@ remaining:
 - ...
 regressed:
 - ...
-initial_fail_count: N
-repair_fail_count: N
-result: IMPROVED / NO_CHANGE / WORSE
-selected_board: INITIAL / REPAIR
+selected_board: INITIAL / FINAL
 
 SELECTED_BOARD
-stage: INITIAL / REPAIR
-reason: repair_pass / no_regression_and_fixed / regression_detected / no_change
+stage: INITIAL / FINAL
+reason: ...
 ```
