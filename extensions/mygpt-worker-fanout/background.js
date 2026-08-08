@@ -8,10 +8,11 @@ const MSG = Object.freeze({
   RESET: "MYGPT_GATE0_RESET",
   GET_STATE: "MYGPT_GATE0_GET_STATE",
   ROUTE_REPORT: "MYGPT_GATE0_ROUTE_REPORT",
-  FORCE_REPORT: "MYGPT_GATE0_FORCE_REPORT"
+  GET_IDENTITY: "MYGPT_GATE0_GET_IDENTITY"
 });
 
 const ACTIVE_STATUSES = new Set(["OPENING", "AWAITING_DESTINATION"]);
+const TERMINAL_STATUSES = new Set(["PASS", "FAIL"]);
 
 function emptyState() {
   return {
@@ -51,6 +52,91 @@ async function transitionFailure(state, code, detail) {
       detail: detail || null
     }
   });
+}
+
+async function handleRouteReport(message, sender) {
+  const tabId = sender && sender.tab && sender.tab.id;
+  if (!Number.isInteger(tabId)) {
+    return { ok: false, ignored: "NO_TAB_ID" };
+  }
+
+  const state = await getState();
+  if (!Number.isInteger(state.openedTabId) || tabId !== state.openedTabId) {
+    return { ok: true, ignored: "UNOWNED_TAB" };
+  }
+  if (TERMINAL_STATUSES.has(state.status)) {
+    return { ok: true, ignored: "TERMINAL_STATE", state };
+  }
+
+  const report = message && message.report;
+  const destinationIdentity = report && report.identity;
+  if (!destinationIdentity || destinationIdentity.ok !== true) {
+    const failed = await transitionFailure(
+      state,
+      destinationIdentity && destinationIdentity.reason
+        ? destinationIdentity.reason
+        : "DESTINATION_IDENTITY_INVALID",
+      report || null
+    );
+    return { ok: false, state: failed };
+  }
+
+  const nextBase = {
+    ...state,
+    destinationReport: {
+      identity: destinationIdentity,
+      pageTitle: typeof report.pageTitle === "string" ? report.pageTitle : "",
+      observedAt: report.observedAt || Date.now()
+    }
+  };
+
+  if (!MYGPTWorkerRoute.sameWorkerIdentity(state.expectedIdentity, destinationIdentity)) {
+    const failed = await transitionFailure(
+      nextBase,
+      "WORKER_IDENTITY_MISMATCH",
+      {
+        expected: state.expectedIdentity && state.expectedIdentity.workerKey,
+        actual: destinationIdentity.workerKey
+      }
+    );
+    return { ok: false, state: failed };
+  }
+
+  const passed = await setState({
+    ...nextBase,
+    status: "PASS",
+    error: null
+  });
+  return { ok: true, state: passed };
+}
+
+async function probeDestinationTab(tabId) {
+  const state = await getState();
+  if (state.openedTabId !== tabId || !ACTIVE_STATUSES.has(state.status)) {
+    return { ok: true, ignored: "NOT_ACTIVE_DESTINATION", state };
+  }
+
+  let report;
+  try {
+    report = await chrome.tabs.sendMessage(tabId, { type: MSG.GET_IDENTITY });
+  } catch (_error) {
+    // A content script may not be ready yet. If the tab is still loading,
+    // onUpdated("complete") performs the single lifecycle-bound probe.
+    return { ok: false, ignored: "CONTENT_NOT_READY" };
+  }
+
+  return handleRouteReport({ report }, { tab: { id: tabId } });
+}
+
+async function armDestinationProbe(tabId) {
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    if (tab && tab.status === "complete") {
+      await probeDestinationTab(tabId);
+    }
+  } catch (_error) {
+    // Tab removal is handled by onRemoved. No retry loop is used here.
+  }
 }
 
 async function startGate0(message) {
@@ -112,9 +198,11 @@ async function startGate0(message) {
     openedTabId: openedTab.id
   });
 
-  chrome.tabs.sendMessage(openedTab.id, { type: MSG.FORCE_REPORT }).catch(() => {
-    // If document_idle has not run yet, onUpdated("complete") gets one later chance.
-  });
+  // Close the race where document_idle / tabs.onUpdated("complete") can occur
+  // before openedTabId has finished persisting. If the tab is already complete,
+  // query the content script directly now; otherwise the complete event below
+  // performs that one lifecycle-bound query.
+  armDestinationProbe(openedTab.id);
 
   return {
     ok: true,
@@ -122,59 +210,6 @@ async function startGate0(message) {
     openedTabId: openedTab.id,
     state
   };
-}
-
-async function handleRouteReport(message, sender) {
-  const tabId = sender && sender.tab && sender.tab.id;
-  if (!Number.isInteger(tabId)) {
-    return { ok: false, ignored: "NO_TAB_ID" };
-  }
-
-  const state = await getState();
-  if (!Number.isInteger(state.openedTabId) || tabId !== state.openedTabId) {
-    return { ok: true, ignored: "UNOWNED_TAB" };
-  }
-
-  const report = message && message.report;
-  const destinationIdentity = report && report.identity;
-  if (!destinationIdentity || destinationIdentity.ok !== true) {
-    const failed = await transitionFailure(
-      state,
-      destinationIdentity && destinationIdentity.reason
-        ? destinationIdentity.reason
-        : "DESTINATION_IDENTITY_INVALID",
-      report || null
-    );
-    return { ok: false, state: failed };
-  }
-
-  const nextBase = {
-    ...state,
-    destinationReport: {
-      identity: destinationIdentity,
-      pageTitle: typeof report.pageTitle === "string" ? report.pageTitle : "",
-      observedAt: report.observedAt || Date.now()
-    }
-  };
-
-  if (!MYGPTWorkerRoute.sameWorkerIdentity(state.expectedIdentity, destinationIdentity)) {
-    const failed = await transitionFailure(
-      nextBase,
-      "WORKER_IDENTITY_MISMATCH",
-      {
-        expected: state.expectedIdentity && state.expectedIdentity.workerKey,
-        actual: destinationIdentity.workerKey
-      }
-    );
-    return { ok: false, state: failed };
-  }
-
-  const passed = await setState({
-    ...nextBase,
-    status: "PASS",
-    error: null
-  });
-  return { ok: true, state: passed };
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -213,9 +248,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
     if (state.openedTabId !== tabId || !ACTIVE_STATUSES.has(state.status)) {
       return;
     }
-    chrome.tabs.sendMessage(tabId, { type: MSG.FORCE_REPORT }).catch(() => {
-      // The content script also reports at document_idle; no retry loop here.
-    });
+    return probeDestinationTab(tabId);
   });
 });
 
@@ -224,7 +257,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
     if (state.openedTabId !== tabId || state.status === "IDLE") {
       return;
     }
-    if (state.status === "PASS" || state.status === "FAIL") {
+    if (TERMINAL_STATUSES.has(state.status)) {
       return;
     }
     return transitionFailure(state, "OWNED_TAB_CLOSED", { tabId });
