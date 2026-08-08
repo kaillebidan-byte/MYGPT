@@ -1,6 +1,6 @@
 # MYGPT調整プロジェクト 引継ぎ
 
-更新日: 2026-08-08 19:40 JST
+更新日: 2026-08-08 19:45 JST
 
 GitHub `main` を正本とし、チャット記憶だけで過去方式へ戻さない。
 
@@ -16,12 +16,6 @@ GitHub `main` を正本とし、チャット記憶だけで過去方式へ戻さ
 8. `research/experiments/2026-08-08-native-chat-worker-isolation-plan.md`
 9. `research/incidents/2026-08-08-frame-first-same-turn-sheet-collapse.md`
 
-Web調査前:
-- `research/chatgpt-project-practices/search-ledger.md`
-- `research/chatgpt-project-practices/native-chat-context-isolation.md`
-- `research/chatgpt-project-practices/custom-gpt-thinking-imagegen-known-issue.md`
-- `research/chatgpt-project-practices/china-imagegen-practices.md`
-
 ---
 
 ## 0. 最重要制約
@@ -32,40 +26,21 @@ Web調査前:
 - 「画像生成するな」「画像生成依頼ではありません」と明示されたturnでは画像生成を絶対に起動しない。
 - 設計判断前にGitHub mainをfetchする。
 - 実画像 / ログ / repoで確認可能なことを確認してから答える。
-- ユーザー側の次作業を回答先頭に出す。確定済みなら説明だけで止めず、そのturnで実行可能な作業を進める。
+- ユーザー側の次作業を回答先頭に出す。確定済みでそのturnに実行可能なら説明だけで止めず実行する。
 
 ---
 
-## 1. canonical
+## 1. carrier / context isolation — 解決済み
 
-- `kokyo_base_20260805.png`
-- 1024x1536
-- 緑背景
-
-各generation worker conversationへ直接添付する。
-generated frameをcanonicalへ昇格させない。
-
----
-
-## 2. carrier / context isolation — 解決済み
-
-失敗:
-- direct 2x2 generation
-- visible four-state planをgeneration-facing contextへ入れる
-- `four-pose-portrait.png`をgeneration referenceにする
-- global motion planとsingle-frame generationを同じconversationへ置く
-- full-board repair
-- generated-frame identity chaining
-
-実機で通った境界:
+通った構成:
 - minimal Custom GPT
 - Instant
-- fresh conversation per frame
-- canonical直接添付
+- fresh conversation per generated frame
+- canonical `kokyo_base_20260805.png` を毎回直接添付
 - current single static poseだけを見る
 - Knowledgeなし / Webなし / Codeなし / Actionsなし / Appsなし
 
-N1結果:
+N1:
 - 4/4 standalone portrait
 - 2x2 / labels / dividersなし
 - right-hand progression成立
@@ -74,35 +49,35 @@ Custom GPT / Thinkingは画像生成tool availability FAIL。現行workerでは�
 
 ---
 
-## 3. identity / continuity — W1-W4で必要箇所だけ改善
+## 2. identity / continuity — W1-W4で必要箇所だけ改善済み
 
 N1 raw audit:
-- regenerated neutral startは全身再解釈が大きい -> 不採用
+- regenerated neutral startは不採用
 - moving framesのglobal identityは概ね良好
--主問題はactive anatomical-right large sleeveとvisible hand articulation
+- 主問題はactive anatomical-right large sleeveとvisible hand articulation
 
 W1:
-- workerへactive large sleeveの短い不変条件だけ追加
-- opening / gold trim / grey lining / motifを同じ袖構造として維持
+- active large sleeveの短い不変条件だけ追加
+- opening / gold trim / grey lining / motifを維持
 - PASS
 
 W2:
-- local packetへneutral hand articulationを追加
+- local packetでneutral hand articulationを明示
 - hand shape改善
 
 W3:
-- `entire hand below flower + gap`はF3ではなくF2相当を記述していた
+- over-strong spatial exclusionはF3ではなくF2相当を記述していた
 - BをF2候補へ転用
 
 W4:
-- hand over chest flower endpoint
+- chest-flower endpoint
 - endpoint / sleeve / carrier PASS
 
-W-series prompt tuningは終了。
+W-series generation tuningは終了。
 
 ---
 
-## 4. CURRENT final candidate
+## 3. CURRENT final candidate
 
 - F1 = canonical `kokyo_base_20260805.png`
 - F2 = W3-B `19_12_14 (2)`
@@ -113,13 +88,13 @@ W-series prompt tuningは終了。
 1. neutral start
 2. upper-waist / lower-torso early raise
 3. near-flower late raise
-4. hand over chest flower endpoint
+4. hand over chest-flower endpoint
 
 side swapなし、endpoint reversionなし。
 
 ---
 
-## 5. C0 deterministic composed audit — PASS
+## 4. C0 deterministic composed audit — PASS
 
 `research/audits/2026-08-08-c0-final-candidate-composed-audit.md`
 
@@ -127,26 +102,47 @@ side swapなし、endpoint reversionなし。
 - chroma removal
 - common scale / baseline normalization
 - deterministic 2x2 board
-- chronological strip
+- chronological transparent strip
 - mechanical geometry/chroma audit
 - visual identity/motion audit
 
 2x2 boardのmachine audit全flag false:
-- wrong_aspect false
-- outer_edge_contact false
-- center contamination false
-- divider-like white band false
-- border/background uniformity failure false
-- shadow-like background false
+- wrong aspectなし
+- outer edge contactなし
+- center contaminationなし
+- divider-like white bandなし
+- border/background uniformity failureなし
+- shadow-like backgroundなし
 
 Visual:
-- right hand monotonic progression PASS
+- right-hand monotonic progression PASS
 - endpoint PASS
 - active sleeve topology PASS
 - hand articulation PASS / minor redraw only
 - hat/hair / non-active sleeve / chest flower / waist medallion / major tassel-cord layout / lower garment / shoesにproduction-blocking failureなし
 
-F4はF2/F3よりindependent-redraw差がやや大きいが、visible identity/topologyは維持されている。これを理由にgeneration tuningへ戻らない。
+F4はF2/F3よりraw redraw差がやや大きいが、visible identity/topologyは維持。generation tuningへ戻らない。
+
+---
+
+## 5. chroma removal — C0内で修正済み
+
+初回透明化でanti-aliased輪郭に薄い緑フリンジを確認。
+生成問題ではなくalpha-only chroma removalのRGB spillと診断。
+
+`audit/scripts/remove_chroma_key.py`へdominant-channel despillを追加。
+
+内容:
+- detected keyに単一dominant channelがある場合だけ自動despill
+- near-key pixelだけ対象
+- dominant key channelをnon-key channels基準でcap
+-従来のthreshold / feather alpha処理は維持
+- `--no-despill`で無効化可能
+
+candidate 4枚をwhite / black compositeで再検証し、緑フリンジが明確に減少。
+
+patch commit:
+- `f33abec67811e85bfc3eddf2d283383315eea47f`
 
 ---
 
@@ -166,7 +162,7 @@ F2/F3/F4 = separate fresh Custom GPT / Instant conversations
         ↓
 identity / continuity audit
         ↓
-remove_chroma_key.py
+remove_chroma_key.py (despill enabled)
         ↓
 common scale / baseline normalization
         ↓
@@ -194,23 +190,12 @@ visible handは各local packetへabsolute articulation / palm orientationを書�
 
 ---
 
-## 7. 現在残っている技術課題 — chroma edgeだけ
+## 7. 次フェーズ
 
-透明PNG化すると、一部のanti-aliased輪郭に薄い緑フリンジが残る。
+生成品質とcomposed candidateはC0を通過。
+次に進めるならBranch / orchestration friction reduction。
 
-これはgeneration / identity / motion問題ではない。
-`audit/scripts/remove_chroma_key.py`側のedge despill / threshold問題として扱う。
-
-raw green-background framesとdeterministic green boardはmechanical chroma/background auditを通っている。
-
-次にコードを触るなら、Custom GPTではなく`remove_chroma_key.py`だけ。
-
----
-
-## 8. その後
-
-chroma edge処理が許容になった後、必要ならBranchを操作省力化として試す。
-
+Branchを試す場合:
 - clean pre-motion seedのみ
 - global motion contextを継承させない
 - canonical添付の継承可否
@@ -221,7 +206,7 @@ Work/APIは元制約外。
 
 ---
 
-## 9. やらないこと
+## 8. やらないこと
 
 - W-series生成調整を再開しない
 - broad identity Knowledgeを追加しない
@@ -231,13 +216,12 @@ Work/APIは元制約外。
 - generated-frame identity chainingをしない
 - full-board repairへ戻さない
 - Custom GPT Thinkingをprompt repairしない
-- transparent green fringeをgeneration問題と混同しない
 
 ---
 
-## 10. 運用反省
+## 9. 運用反省
 
-「答えてから調べて訂正」ではなく:
+正しい順序:
 1. GitHub CURRENT確認
 2. 実画像 / ログ確認
 3. 問題局所化
