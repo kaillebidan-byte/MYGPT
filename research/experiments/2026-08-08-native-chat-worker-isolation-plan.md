@@ -1,42 +1,49 @@
 # Next experiment plan — native Chat worker isolation on Plus
 
 Date: 2026-08-08
-Status: PLANNED
+Status: PLANNED — revised after confirming Custom-GPT Thinking image-generation issue
 Constraint: no ChatGPT Work / no Codex agentic allowance / no OpenAI API billing
 
 Basis:
 - M2b human-separated local static calls PASS
 - M2d standalone carrier with weak temporal roles
 - M2e temporal roles restored but 2x2 sheet regression
-- research: `research/chatgpt-project-practices/native-chat-context-isolation.md`
+- `research/chatgpt-project-practices/native-chat-context-isolation.md`
+- `research/chatgpt-project-practices/custom-gpt-thinking-imagegen-known-issue.md`
 
 ## Decision
 
 Do not continue prompt-only M2 variants inside one Project conversation.
 Do not use Work or API for the next proof.
 
-Test whether a fresh Custom-GPT conversation can serve as the missing native context boundary.
+A fresh Custom-GPT conversation remains a candidate native context boundary, but it now has TWO independent gates:
 
-The old Custom-GPT production architecture remains rejected. This test revives only a much narrower configuration: an image-only stateless worker with no Actions/Knowledge/GitHub/file-transfer orchestration.
+1. Can Custom GPT Thinking actually return generated images on this account/session?
+2. If only Instant is reliable, is Instant image quality high enough for MYGPT?
+
+Do not collapse these questions into one PASS/FAIL.
+
+The old Custom-GPT production architecture remains rejected. This test revives only an image-only stateless worker with no Actions/Knowledge/GitHub/file-transfer orchestration.
 
 ---
 
-## N0 — minimal worker capability check
+## N0 — model/runtime matrix before worker architecture
 
 ### Goal
 
-Before building planner/worker flow, verify that a minimal Custom GPT on the current Plus account can actually perform one direct-reference single-frame image generation reliably.
+Separate:
+- model-mode image quality
+- Custom-GPT runtime/tool-routing defects
+- single-frame worker viability
 
-### Worker GPT configuration
+### Minimal worker GPT configuration
 
-Temporary name:
-`MYGPT Single Frame Worker Test`
+Temporary name: `MYGPT Single Frame Worker Test`
 
 Capabilities:
 - Image generation: ON
 - Web/search: OFF if configurable
 - Code/Data Analysis: OFF if configurable
-- Canvas/other creative tools: OFF if configurable
 - Actions: NONE
 - Apps: NONE
 - Knowledge files: NONE
@@ -55,124 +62,140 @@ Worker Instructions:
 1回の依頼につき画像を1枚だけ作り、生成後は停止する。
 ```
 
-Do not put into worker Instructions:
-- motion
-- one-shot / loop
-- four states
-- progress percentages
-- F1/F2/F3/F4
-- pose A/B/C/D
-- board / sheet / panel / 2x2
-- compose / audit / repair
+Do not include motion / four-state / progress / board / sheet / compose / audit / repair vocabulary.
 
-### N0 input
+### Fixed test input
 
-Open the worker GPT directly as a NEW GPT conversation.
-Do NOT invoke it with `@` from another chat.
-
-Directly attach:
+Every condition uses a FRESH conversation and directly attaches the same:
 - `kokyo_base_20260805.png`
 
-Send one known-good static request only:
+Exact static request:
 
 ```text
 この人物を、正面を向いて直立し、キャラクター自身の右肘を軽く曲げ、右手を上腹部・みぞおち付近まで上げた全身姿勢で1枚作ってください。
 左腕、両脚、体幹、頭、表情は基準画像を維持してください。
 ```
 
-### N0 pass
+### Four conditions
 
-- image generation actually runs
-- one image output
+Run separately and save every output immediately:
+
+A. Normal Chat / Thinking
+B. Normal Chat / Instant
+C. Custom GPT / Thinking
+D. Custom GPT / Instant
+
+No `@GPT` invocation. Open the Custom GPT directly as a new conversation for C/D.
+
+### Gate 1 — tool availability
+
+For each condition record:
+- native image generation invoked or not
+- visible image returned or not
+- internal `/mnt/data/...` path only
+- false claim that image generation is unavailable
+- timeout/failure
+
+Important interpretation:
+A failure in C matching the known Thinking/reasoning Custom-GPT issue is a PLATFORM/RUNTIME FAIL, not evidence that the stateless-worker context idea is wrong.
+
+### Gate 2 — carrier
+
+For successful generations:
+- exactly one visible image
 - one person / one pose
 - portrait
-- no multi-panel
+- no multi-panel / labels / dividers
 - anatomical right arm active
 
-### N0 fail
+### Gate 3 — pose accuracy
 
-If the minimal worker again claims image generation is unavailable or routes into unrelated tools, stop.
-Do not rebuild Actions/GitHub integrations.
-Move to fallback N0-T (Temporary Chat control) instead.
+Required:
+- right hand is actually around upper abdomen / solar plexus, not chest endpoint or waist-low
+- left arm, head, torso, legs remain close to canonical
+- no active-limb side swap
 
----
+### Gate 4 — identity / topology quality
 
-## N0-T — Temporary Chat fallback control
+Compare all successful A/B/C/D outputs against the canonical using the same checklist:
+- proportions
+- silhouette
+- hat/hair boundary and hair emergence
+- chest flower emblem
+- large sleeve silhouette/topology
+- waist circular ornament
+- tassel/cord/fastener count and attachment
+- lower garment
+- shoes
+- overlap/occlusion order
 
-Only if minimal Custom-GPT worker is unusable.
+Do not decide quality from overall resemblance alone.
 
-Use a normal Temporary Chat outside any Project.
-Directly attach canonical and send the same one-static-pose request.
+### N0 interpretation matrix
 
-Purpose:
-check whether a blank-slate normal Chat can reproduce M2b without Project context.
+- C fails, D passes carrier + quality:
+  Thinking path is blocked by known Custom-GPT platform issue, but an Instant-only worker remains viable.
 
-This is diagnostic only because Temporary Chat is not retained in history.
-Save the generated image immediately.
+- C fails, D generates but quality is materially worse than B:
+  Custom-GPT runtime/configuration adds a quality problem; do not proceed to N1.
+
+- B and D are both materially worse than A:
+  Instant-mode preparation/reasoning is the likely limiting factor; Custom GPT worker is not practical for MYGPT even if it generates successfully.
+
+- B and D meet the MYGPT quality threshold:
+  Thinking is not required for the isolated single-frame worker. Proceed to N1 using Instant.
+
+- C works and quality is good:
+  record the platform issue as non-universal/intermittent for this account, but still test D because production reliability matters more than a single Thinking success.
+
+### Repetition
+
+Do not do large batches initially.
+First run one output per A/B/C/D.
+If B vs D or A vs B is ambiguous, repeat only the ambiguous pair with one fresh run each.
 
 ---
 
 ## N1 — planner / fresh-worker manual boundary proof
 
-Run only if N0 passes.
+Run only if at least one Custom-GPT mode passes N0 quality; prefer the reliable mode. If Thinking is affected by the known issue and Instant passes quality, use Instant.
 
 ### Goal
 
-Prove the exact desired architecture inside ChatGPT UI before trying to automate it:
-
-planner knows the full motion;
-worker conversation knows one frame only.
+Prove the desired architecture inside ChatGPT UI:
+planner knows the full motion; each worker conversation knows one frame only.
 
 ### Planner
 
 Use a separate planner chat/Project.
-Planner gets the natural motion request:
-
-`このキャラクターが、右手を胸の高さまで上げて、その位置で止まるone-shotモーションを作ってください。`
-
-Planner produces four local static-pose packets corresponding to:
-- start
-- early
-- late
-- endpoint
-
-The planner may know all four.
-It does not generate images.
+Planner gets the natural motion request and produces four local static-pose packets: start / early / late / endpoint.
+Planner does not generate images.
 
 ### Worker execution
 
 For EACH packet:
-1. open the minimal worker GPT as a new conversation;
-2. directly attach `kokyo_base_20260805.png`;
-3. paste ONLY that one local packet;
-4. generate one image;
-5. save it immediately;
-6. close/leave that worker conversation and start another fresh conversation for the next packet.
+1. open the minimal worker GPT as a NEW conversation;
+2. explicitly select the N0-approved model mode;
+3. directly attach `kokyo_base_20260805.png`;
+4. paste ONLY that one local packet;
+5. generate one image;
+6. save it immediately;
+7. start another fresh worker conversation for the next packet.
 
 Do not use `@` mention.
-Do not place worker conversations inside the motion-planner Project.
+Do not put worker conversations inside the motion-planner Project.
 Do not show a worker the other packets.
 
 ### N1 pass
 
-Required:
 - 4 fresh worker conversations
 - 4 standalone portraits
 - no 2x2 / multi-panel / labels / dividers
 - start frame arms down
 - right hand position progresses monotonically through early/late to endpoint
+- identity/topology does not fall below the quality threshold established at N0
 
-Secondary:
-- identity fidelity
-- sleeve topology
-- tassel/cord topology
-- background consistency
-
-Interpretation if PASS:
-The missing boundary can be achieved within Plus/ChatGPT UI without Work/API. Remaining problem is only orchestration/UI automation.
-
-Interpretation if FAIL:
-If fresh worker conversations still sheetify, context leakage alone is not sufficient to explain M2e and the worker prompt/image backend must be re-examined.
+PASS means the missing context boundary can be achieved inside Plus/ChatGPT UI without Work/API; remaining problem is orchestration/UI automation.
 
 ---
 
@@ -180,44 +203,16 @@ If fresh worker conversations still sheetify, context leakage alone is not suffi
 
 Run only if N1 passes.
 
-### Goal
+Create a clean worker conversation containing only canonical/single-frame setup and no motion plan.
+Test `Branch in new chat` from that pre-motion point.
 
-Reduce repeated setup without reintroducing planner context.
-
-### Clean seed
-
-Open minimal worker GPT in a new conversation.
-Attach canonical once.
-Send a non-generating setup message if needed that contains only identity/single-frame rules.
-Do not mention the motion or four states.
-
-### Branch test
-
-On web, use `Branch in new chat` from the clean pre-motion point.
-
-First test ONE branch only.
 Verify:
-- the branch stays with the intended worker configuration;
-- canonical remains usable as reference;
-- no unrelated history appears;
-- one local static-pose packet yields one standalone portrait.
+- intended Custom GPT / model mode remains in effect
+- canonical remains usable
+- one local packet still gives one standalone portrait
 
-If this works, create four branches from the same clean seed and give one packet to each.
-
-### N2 pass
-
-- all branches inherit only clean base context
-- canonical remains effective
-- single-frame carrier remains stable
-
-This reduces repetitive canonical setup while preserving context isolation.
-
-### N2 fail
-
-If canonical attachment does not carry reliably or branch behavior differs for Custom GPTs, do not repair the branch architecture.
-Return to N1 new-conversation workers.
-
-Later, test `Add from Library` as a separate convenience variable.
+If one branch works, try four branches from the same clean seed.
+If branch attachment/model behavior is unreliable, abandon N2 and keep N1 fresh conversations.
 
 ---
 
@@ -225,55 +220,31 @@ Later, test `Add from Library` as a separate convenience variable.
 
 Only after N1 proves context isolation.
 
-Current official feature survey found no normal-Chat primitive that lets a parent chat programmatically spawn four new independent chats/branches and send messages into them.
+Current official feature survey found no normal-Chat primitive that lets a parent chat programmatically spawn four independent Custom-GPT conversations and send one packet into each.
 
-Therefore do NOT call the architecture fully automated yet.
+Classify resulting UX:
+A. manual fresh-worker boundary
+B. semi-manual clean-seed branches
+C. zero-click orchestration — not currently documented in normal Chat
 
-At this stage classify UX levels:
-
-A. Native manual boundary:
-- planner produces 4 packets
-- user starts/pastes into 4 fresh worker chats
-
-B. Native semi-manual branch boundary:
-- clean seed + 4 branches
-- user pastes one packet per branch
-
-C. Zero-click orchestration:
-- not documented in normal Chat
-- would require a new product capability or an external/UI automation layer
-
-Do not move to C until the user explicitly decides that external UI automation is acceptable. Work/API remain outside the original constraint.
+Work/API remain outside the original constraint unless the user later changes it.
 
 ---
 
-## Explicit rejected shortcuts
+## Rejected shortcuts
 
-### `@workerGPT` from planner chat
-Rejected.
-Official GPT documentation says the existing conversation context is retained when a GPT is brought into a normal chat with `@`.
-
-### Branch after planner output
-Rejected.
-Branch preserves conversation context up to the branch point, so it would carry the global plan.
-
-### Same Project for planner and worker branches
-Rejected for the isolation proof.
-Project memory can draw from other conversations in that Project.
-
-### Scheduled Tasks
-Rejected.
-Poor fit for immediate frame generation; GPT/file-access limitations conflict with the canonical-reference requirement.
-
-### Temporary Chat as production worker
-Rejected as primary path.
-Useful only as fallback diagnostic because history is not retained and each run still requires user setup.
+- `@workerGPT` from planner chat: rejected because current conversation context is retained.
+- Branch after planner output: rejected because global plan would be inherited.
+- Same Project for planner and worker: rejected for isolation proof.
+- Scheduled Tasks: poor fit for immediate canonical-image generation.
+- Temporary Chat: diagnostic fallback only, not primary worker architecture.
+- Interpreting Instant success as production success without identity/pose scoring: rejected.
+- Interpreting Custom-GPT Thinking failure as architecture failure when it matches the known platform bug: rejected.
 
 ---
 
 ## Operational rule
 
-Save each generated image immediately.
-If a fail condition is already clear, stopping is allowed after the needed evidence has been saved.
-
+Save every generated image immediately.
+If FAIL is already clear, stop after the evidence required for diagnosis has been saved.
 Do not modify production MYGPT Instructions/Sources until N0/N1 outcome is known.
