@@ -1,68 +1,68 @@
 # MYGPT調整プロジェクト 引継ぎ
 
-更新日: 2026-08-08 21:08 JST
+更新日: 2026-08-08 22:39 JST
 
 GitHub `main` を正本とする。チャット記憶だけで過去方式へ戻さない。
 
-## 最初に読む
+## 次チャットで最初に読む
 
-1. `research/decisions/2026-08-08-production-v0-generalized-verdict.md`
-2. `research/experiments/2026-08-08-n3-orchestration-ceiling.md`
-3. `research/decisions/2026-08-08-production-v0-acceptance.md`
-4. `research/audits/2026-08-08-p1-r2-final-composed-audit.md`
-5. `research/audits/2026-08-08-p1-r1-final-composed-audit.md`
-6. `research/audits/2026-08-08-c0-final-candidate-composed-audit.md`
-7. `research/decisions/2026-08-08-asset-status-classification.md`
-8. `research/decisions/2026-08-08-identity-continuity-direction.md`
-9. `research/experiments/2026-08-08-n2-branch-thinking-followup-result.md`
-10. W1-W4 experiment records
-11. `research/experiments/2026-08-08-native-chat-worker-isolation-plan.md`
-12. `research/incidents/2026-08-08-frame-first-same-turn-sheet-collapse.md`
+1. `research/PROJECT-HANDOFF.md` — この文書
+2. `research/decisions/2026-08-08-three-extension-synthesis.md` — CURRENT N3実装方針
+3. `research/runtime/2026-08-08-single-frame-worker-live-snapshot.md` — 現行Custom GPT実機設定の完全スナップショット
+4. `research/decisions/2026-08-08-production-v0-generalized-verdict.md` — generation品質の正本
+5. `research/decisions/2026-08-08-temp-extension-source-lifecycle.md` — 一時ソースの必須削除規則
+6. `research/audits/2026-08-08-autogpt-0.0.71-static-analysis.md`
+7. `research/audits/2026-08-08-voicebridge-0.2.6-reuse-assessment.md`
+8. `research/audits/2026-08-08-translation-loop-0.5.1-static-analysis.md`
+9. `research/plans/2026-08-08-post-v0-roadmap.md`
+10. `research/decisions/2026-08-08-production-v0-acceptance.md`
+
+`research/experiments/2026-08-08-n3-orchestration-ceiling.md` はN3の経緯と公式built-in ceilingの記録として残すが、browser automationのCURRENT実装判断は `three-extension-synthesis.md` を優先する。
 
 ---
 
 ## 0. 最重要制約
 
 - repo: `kaillebidan-byte/MYGPT`
-- ユーザー環境: ChatGPT Plus
-- Work / Codex系週間agentic allowanceやOpenAI API別課金をproduction前提にしない。
+- ユーザー環境: ChatGPT Plus + Vivaldi / Chromium extension環境
+- productionをWork / Codex系週間agentic allowanceやOpenAI API別課金へ依存させない。
 - 「画像生成するな」「画像生成依頼ではありません」と明示されたturnでは画像生成を絶対に起動しない。
-- 設計判断前にGitHub mainと実画像 / ログを確認する。
-- 既存検索・過去の棄却結果・外部事例が結論に関係する場合は、それらも照合してから設計判断する。
-- 公式機能だけを確認して、ユーザー制約内のcommunity / browser-side手段まで存在しないと一般化しない。
-- そのturnで実行できる確定作業を先送りしない。
-- ユーザー側の次作業がある場合は回答先頭に出す。
+- 設計判断前にGitHub `main`、実画像、実ログ、既存検索、過去棄却理由を確認する。
+- 直近の参照だけで設計を決めない。
+- 公式機能に手段がないことを、community / browser-side手段までないと一般化しない。
+- そのturnで実行可能な確定作業を先送りしない。
+- ユーザー側の次操作がある場合は回答冒頭に置く。
+- generation tuningとUI automationを混ぜない。automation都合でworker isolationを弱めない。
 
 ---
 
-## 1. CURRENT status — PRODUCTION V0 GENERALIZED PASS
+## 1. CURRENT generation status — PRODUCTION V0 GENERALIZED PASS
 
-2026-08-08、acceptance contractのR0/R1/R2がすべて最終PASS。
+R0 / R1 / R2 はすべて最終PASS済み。
 
-正本:
-`research/decisions/2026-08-08-production-v0-generalized-verdict.md`
-
-Validated v0 scope:
-- 1人のcanonical character
-- canonical静止姿勢 = F1
+Validated scope:
+- 1 canonical character
+- F1 = canonical静止姿勢
 - one-shot motion
-- 4 keyposes
-- F2/F3/F4だけ生成
+- 4 keyposes total
+- F2/F3/F4のみ独立生成
 - front-facing baseline camera
 - chroma background
 - deterministic board / strip composition
 
-まだv0範囲外:
+範囲外:
 - loop motion
-- canonicalと異なる開始姿勢
-- 複数人物
-- 大きなcamera / viewpoint change
-- 複雑なprop / environment interaction
+- non-canonical start pose
+- multi-person
+- large camera/viewpoint changes
+- complex prop/environment interaction
 - Thinking default
 - zero-click fan-out
 
-First-pass reliabilityが100%という意味ではない。
-R1/R2ではlocal state failureがあり、canonicalから局所retryして最終PASSしている。
+First-pass reliabilityは100%ではない。
+R1/R2ではlocal state failureがあり、canonicalから失敗frameだけ局所retryしてPASSした。
+
+Generation品質を上げるためのW-series global tuningはCLOSED。N3 automationのために再開しない。
 
 ---
 
@@ -82,7 +82,7 @@ F2/F3/F4 = isolated Custom GPT / Instant workers
         ↓
 raw visual identity / motion audit
         ↓
-failed local frame only: isolated retry from canonical if needed
+failed local frame only: isolated retry from canonical
         ↓
 remove_chroma_key.py (despill enabled)
         ↓
@@ -93,343 +93,456 @@ compose_keypose_board_from_frames.py / build_motion_strip.py
 visual audit + machine geometry/chroma audit
 ```
 
-4 keyposesを3 image generationsで作る。
+4 keyposesを3 independent image generationsで作る。
 Generated frameを次frameのidentity sourceにしない。
-
-Worker設定:
-- minimal Custom GPT
-- Instant validated default
-- Image generation ON
-- Web OFF
-- Code/Data Analysis OFF
-- Actions NONE
-- Apps NONE
-- Knowledge NONE
-- canonical direct attachment / inherited clean Branch seed
-- current one static pose only
-- targeted active-large-sleeve invariant only
 
 Workerへ見せない:
 - full motion
 - other pose packets
-- progress%
 - F1/F2/F3/F4 sequence structure
+- progress%
 - board / sheet / storyboard / 2x2 concepts
 - other generated frames
 
-Visible handが重要なframeではlocal packetへabsolute articulation / palm orientationを書く。
+---
+
+## 3. 現行Custom GPT worker — 実機snapshot COMPLETE
+
+Name:
+`MYGPT Single Frame Worker Test`
+
+Description:
+`添付された基準画像から、指定された1つの静止姿勢だけを生成する隔離テスト用GPT。`
+
+Live editor:
+- Recommended model: `GPT-5.6 Sol (gpt-5-6-instant)`
+- Image generation: ON
+- Web search: OFF
+- Code Interpreter & Data Analysis: OFF
+- Knowledge: NONE
+- Actions: NONE
+- Conversation starters: NONE
+- Plus editor画面には独立Apps toggleは表示されていない。active/exposedなApp integrationなしとだけ扱う。
+
+Exact Instructions全文は:
+`research/runtime/2026-08-08-single-frame-worker-live-snapshot.md`
+
+重要:
+- Instantがproduction validated default。
+- Thinkingは後のBranchで画像生成成功例があるがdefaultではない。
+- Instructionsは「1 request = 1 image」を要求するが、Instant/Thinkingの両方でA/B候補が返る場合がある。platform-level multiplicity保証ではない。
+
+Custom GPTを残す理由:
+- worker configuration container
+- saved memory /通常custom instructions / previous conversationから切り離すisolation container
+
+fresh chat自動化ができても、Custom GPTを捨てる理由にはならない。
 
 ---
 
-## 3. Carrier / Branch — SOLVED
+## 4. Carrier / identity / post-process — 既に解決済み
 
-N1:
-- standalone portrait 4/4
+Carrier:
+- N1 standalone portrait 4/4
 - no 2x2 / labels / dividers
-- correct motion-side progression
+- fresh Custom GPT chat = proven
+- clean pre-motion Branch = proven
 
-N2 Branch:
-- same Custom GPT継承 PASS
-- canonical reference effective PASS
-- Instant利用可能 PASS
-- clean seedからglobal motion context混入なし
+Identity:
+- broad Knowledge不要
+- confirmed weak pointsはactive large sleeveとvisible hand
+- live Instructionsには大袖の局所不変条件を残す
+- visible hand articulation / palm orientationは必要なlocal packetだけへabsolute指定
 
-Isolation起点:
-- fresh conversation + canonical再添付: proven
-- clean pre-motion seedからBranch: proven
+R0:
+- anatomical-right hand raise PASS
 
-Branchはcanonical再添付を省けるoptional UX reduction。
-worker自動spawn / packet自動配布ではない。
+R1:
+- mirrored anatomical-left hand raise FINAL PASS after local B retries
+- small landmark近傍のspatial first-pass failureを確認
 
----
+R2:
+- torso-dominant shallow bow FINAL PASS after local C retry
+- endpoint depthをexpression changeで代替する失敗を確認
 
-## 4. Thinking / runtime observation
-
-N0ではCustom GPT / Thinkingでtool availability FAILを実機再現。
-後のN2 BranchではThinkingへ切り替えた画像生成が成功。
-
-したがって:
-- Thinkingは一律利用不能ではない
-- N0は当時のruntime/tool-availability incident
-- BranchがThinking成功の原因とは未証明
-- Thinkingの安定性 / Instantより高品質は未証明
-
-R1 InstantでもA/B 2候補が返った。
-候補数はInstant / Thinkingいずれの保証仕様でもない。
-
-Production defaultはInstantを維持する。
-
----
-
-## 5. Identity / continuity tuning — CLOSED
-
-N1で主問題をactive large sleeveとvisible handへ局所化。
-W1-W4で必要箇所だけ改善済み。
-
-現行workerに残す重要文:
-
-`動かす腕の大袖は、腕の屈曲に伴ってたわみ・向きが変わってよいが、基準画像の大袖としての基本構造を維持する。袖口の開口、金色の縁取り、灰色の内側、袖の模様を、別構造へ描き替えたり消したりしない。`
-
-Visible hand:
-- articulation / palm orientationはlocal packetへabsoluteに書く
-
-Strong spatial exclusion:
-- stateを押し下げる場合がある
-- broad/global ruleへ昇格しない
-
-W-series generation tuningは再開しない。
-
----
-
-## 6. R0 — anatomical-right hand raise PASS
-
-Final:
-- F1 = canonical `kokyo_base_20260805.png`
-- F2 = W3-B `19_12_14 (2)`
-- F3 = W2 `19_07_53`
-- F4 = W4 `19_17_55`
-
-C0:
-- visual identity / motion PASS
-- active sleeve topology PASS
-- endpoint PASS
-- chroma removal + despill PASS
-- deterministic compose PASS
-- machine flags all false
-
----
-
-## 7. R1 — mirrored anatomical-left hand raise FINAL PASS
-
-Final:
-- F1 = canonical
-- F2 = A2 `20_29_13 (2)`
-- F3 = B retry-2 `20_39_04`
-- F4 = C `20_31_39`
-
-History:
-- B first-pass FAIL: chest flowerへ早く重なった
-- B retry-1 FAIL: fingertips still overlap
-- B retry-2 PASS after local positive landmark changed to lower-chest line
-
-Final:
-- correct anatomical-left side PASS
-- non-active right arm PASS
-- monotonic hand progression PASS
-- endpoint only at F4 PASS
-- active left sleeve topology PASS
-- major identity PASS
-- post-processing / machine audit PASS
-
-Small visual landmark近傍のfirst-pass spatial reliabilityは完全ではない。
-Failureはlocal stateへ局所化でき、global worker変更は不要だった。
-
----
-
-## 8. R2 — torso-dominant shallow bow FINAL PASS
-
-First-pass:
-- A PASS
-- B PASS
-- C FAIL: Bとbow depthがほぼ同じ + closed-eye/smileへ表情変更
-
-Final C retry:
-- `ChatGPT Image 2026年8月8日 20_51_52.png`
-- absolute torso-angle target + canonical open-eye / neutral expression指定
-- PASS
-
-Final:
-- F1 = canonical
-- F2 = A `20_47_00`
-- F3 = B `20_48_07`
-- F4 = C retry `20_51_52`
-
-Final visual:
-- torso/head monotonic bow progression PASS
-- C deeper than B PASS
-- open-eye neutral expression restored PASS
-- no side-turn substitution
-- both feet planted
-- no independent arm gesture
-- both sleeve structures passive and coherent
-- major identity/topology PASS
-
-Post-processing:
-- despill counts F1/F2/F3/F4 = 4068 / 2230 / 2204 / 1990
-- common scale ~0.4394993
-- deterministic 1024x1536 board PASS
-- machine flags all false
-- vertical center gap 244 px
-- horizontal center gap 169 px
-- background deviation 0.0
-- shadow-like background 0.0
-- white / black compositeにproduction-blocking fringeなし
-
-R2 = FINAL PASS AFTER LOCAL C RETRY。
-First-pass failureは履歴に保持。
-
----
-
-## 9. N3 orchestration — REOPENED FOR BROWSER-SIDE AUTOMATION
-
-正本:
-`research/experiments/2026-08-08-n3-orchestration-ceiling.md`
-
-### 公式built-in側
-
-2026-08-08のOpenAI公式仕様確認では:
-- Branchはmanual操作
-- bulk / multi-branch fan-outの公式機能は未確認
-- `@GPT`はcurrent conversation contextを維持し、planner/full-motion chatからの呼び出しはworker isolationと衝突
-- Projects / Tasks / ActionsにもCURRENT workerを3 isolated chatsへ自動fan-outする公式機構は未確認
-
-したがって**公式built-in機能だけ**ならmanual Branch x3が最小のproven workflow。
-
-### 前の誤判定
-
-これをそのまま「ChatGPT Plus / no separate API条件でのorchestration ceiling」と一般化したのは誤り。
-中国語圏・community browser automationを照合せずN3をCLOSEDにした結論は撤回済み。
-
-### 中国語圏の既存事例
-
-`hzeyuan/OpenGPTS`:
-- browser-side ChatGPT / GPTs calls
-- one-input multi-GPT calls
-- multi-GPT chat
-- multiple windows
-- batch GPT/chat management
-- separate OpenAI API billingを必須にしないweb-session型のprior art
-
-ただし2024-eraで、multimodal/RPAの不足があるためproduction候補そのものではない。
-
-Autojourney `AutoGPT`:
-- 2026 current Chrome extension for ChatGPT / Sora
-- batch prompt send / task queue
-- text-to-image / image-to-image / image-to-text
-- ChatGPT `自动新对话` — configurable automatic new-chat switching
-- ChatGPT `新对话发送` — send a selected task in a new conversation
-- ChatGPT image-upload / image-generation compatibility fixes recorded
-- current Chrome Web Store version `0.0.69`, updated 2026-07-15
-
-これはcanonical upload + fresh chat + per-task packet sendというN3の不足操作にかなり近い。
-
-### 未確認のcritical gate
-
-AutoGPTの公開資料ではgeneric ChatGPT対応は確認できるが、user-created **Custom GPT (`/g/...`)** conversationへの明示対応は未確認。
-Instantの維持 / 選択も未確認。
-
-したがってCURRENT N3 verdict:
-- official built-in fan-out: not found
-- browser-side automation feasibility: existing Chinese implementations support the category
-- Custom-GPT-specific compatibility: UNVERIFIED
-- overall Plus/no-separate-API orchestration ceiling: **NOT CLOSED**
-
-次はN3-B1 Custom-GPT compatibility test。
-まず画像生成せず:
-1. extensionが`MYGPT Single Frame Worker Test` pageで認識 / 起動するか
-2. fresh Custom GPT conversationへtext taskを送れるか
-3. ordinary ChatGPTへfallbackしないか
-4. same Custom GPT identityを維持するか
-5. Instantを維持 / 選択できるか
-6. canonical attachmentを通常UI経由でfresh Custom GPT chatへ送れるか
-7. clean seedを送ってもfull-motion contextが混入しないか
-
-1-7を通してから、既知の1 static poseだけでimage-worker invocationを確認する。
-
-OpenAIのconsumer Terms上、programmatic extraction of Output / reverse engineering / protective-measure bypassは別問題になるため、hidden endpointやoutput scrapingをproduction前提にしない。まずvisible UI automationだけを評価する。
-
----
-
-## 10. Chroma / active infrastructure
-
-CURRENT ACTIVE:
+Chroma CURRENT ACTIVE:
 - `audit/scripts/remove_chroma_key.py`
 - `audit/scripts/compose_keypose_board_from_frames.py`
 - `audit/scripts/build_motion_strip.py`
 - `audit/scripts/machine_audit_board.py`
 
-`remove_chroma_key.py`:
-- dominant-channel despill ON
-- threshold / feather維持
-- `--no-despill`で無効化可能
-
-Patch:
-`f33abec67811e85bfc3eddf2d283383315eea47f`
+`remove_chroma_key.py` dominant-channel despill ON。
 
 ---
 
-## 11. Asset status
+## 5. N3 correction history
+
+古い誤り:
+- official built-in bulk fan-outが見つからないことを、Plus/no-separate-API条件全体のorchestration ceilingと一般化した。
+
+修正済み:
+- official built-in fan-out: not found
+- browser-side automation: viable research category
+- Chinese/community prior artを再確認
+
+中国圏/community evidence:
+- `hzeyuan/OpenGPTS`: browser-side GPTs / multi-GPT prior art
+- Autojourney AutoGPT: automatic new-chat, queued prompts, image upload/generation workflowのcurrent implementation evidence
+
+この調査の副産物として、Custom GPT browser automationの実装方向が具体化した。
+
+---
+
+## 6. AutoGPT 0.0.71 — 実機A1 + static analysis
+
+User installed Autojourney AutoGPT in Vivaldi and supplied installed extension package `0.0.71_0.zip`。
+
+Live finding:
+- `MYGPT Single Frame Worker Test` Custom GPT page上でAutoGPT UIが起動。
+- よって `/g/...` pageでbrowser extensionが動作できること自体はPASS。
+
+Useful implementation evidence:
+- visible new-chat DOM control
+- visible composer insertion
+- `input[type=file]` + `File` / `DataTransfer`によるChatGPT自身のfile upload
+- visible send operation
+
+Full AutoGPTをproduction採用しない理由:
+- `window.fetch` interception
+- ChatGPT internal `/backend-api/...` observation/direct calls
+- Bearer Authorization capture
+- streaming response parsing
+- generated output extraction / auto-download
+- CSP / X-Frame-Options / COOP / COEP removal
+- visibility/focus spoofing
+- external membership checks
+- Google Analytics telemetry
+- third-party upload helper
+- Plan gating
+
+重要:
+- ChatGPT Bearer tokenをAutojourney/GAへ外送している経路までは確認していない。確認したtoken用途はChatGPT内部endpoint。
+- normal ChatGPT image-upload pathがcanonicalをimgbbへ送る証拠も確認していない。
+
+Verdict:
+**AutoGPT本体は使わず、visible UI primitiveだけclean-roomで再実装する。**
+
+---
+
+## 7. VoiceBridge 0.2.6 — static analysis
+
+User supplied existing local add-on:
+`chatgpt_voicebridge_extension_0.2.6.zip`
+
+Strengths:
+- Manifest V3
+- low-privilege standard DOM content script
+- all `chatgpt.com/*` including `/g/...`
+- MutationObserver
+- SPA route change detection
+- assistant message / composer / send observation
+- visible stop-button based generation-state observation
+- multi-tab content/background communication
+- no internal ChatGPT API interception
+- no Bearer capture
+- no telemetry
+- no third-party image upload
+
+Current network path:
+- configured local VoiceBridge endpoint only, default `127.0.0.1:50333/speak`
+
+Not enough alone:
+- no tab creation
+- no prompt insertion
+- no file attachment
+- no fan-out state machine
+
+Use only its observer / generic route concepts。
+Speech endpointと1秒persistent pingはMYGPT専用拡張へ初期段階では持ち込まない。
+
+---
+
+## 8. Translation Loop Test 0.5.1 — static analysis
+
+User supplied another existing add-on:
+`chatgpt-translation-loop-test-0.5.1.zip`
+
+Usage assumption:
+- 1日数時間程度のbounded operation
+
+Static result:
+- all JS `node --check` PASS
+- bundled `test_*.js` 全PASS
+- no application-level fetch/XHR/WebSocket
+- no internal ChatGPT API / Bearer capture / telemetry
+
+Strengths — three inspected extensionsで最も強いcontrol plane:
+- `chrome.tabs` / scripting / alarms
+- robust composer discovery
+- native textarea setter / contenteditable input events
+- visible send-button click
+- wait until send enabled
+- fail closed if draft exists
+- positive post-submit evidence
+- `runToken` stale-operation rejection
+- serialized runtime mutation
+- tab ownership
+- route/conversation verification
+- bounded operation
+- ambiguous state -> stop
+- tests / module separation
+
+Important limitation:
+- current route model is ChatGPT Project `g-p-...` specific
+- MYGPT production workerはuser-created Custom GPT `/g/...`
+- Project route parser / rotation logicをそのまま使わない
+
+Use:
+- control plane / state-machine concepts
+- prompt runner
+- positive submit verification
+- fail-closed rules
+- tests
+
+Do not use unchanged:
+- Project `g-p` parser
+- arbitrary translation continuation loop
+- worker packet/canonical dataの`storage.sync`
+
+---
+
+## 9. CURRENT N3 implementation decision — THREE-WAY SYNTHESIS
 
 正本:
-`research/decisions/2026-08-08-asset-status-classification.md`
+`research/decisions/2026-08-08-three-extension-synthesis.md`
+
+一つを丸ごと採用しない。
+既存VoiceBridge/Translation Loopを壊して改造しない。
+
+**独立した `MYGPT Worker Fanout` extensionを新設する。**
+
+Architecture:
+
+```text
+MYGPT planner
+  -> F2 / F3 / F4 packets
+        ↓
+MYGPT Worker Fanout
+
+Control plane
+  Translation Loop由来の設計
+  - runToken
+  - bounded exactly 3 slots
+  - tab ownership
+  - serialized state
+  - fail closed
+  - positive submit evidence
+
+Route / identity adapter
+  VoiceBridge由来のgeneric ChatGPT observation
+  - /g/... coverage
+  - SPA route observation
+  - Custom GPT stable identity verify
+
+DOM adapter
+  - Translation Loop型composer handling
+  - AutoGPTで実証されたvisible file-input/DataTransfer primitiveをclean-room実装
+  - visible UI controls only
+
+Observer
+  - MutationObserver
+  - visible stop-button generation state
+
+Coordinator
+  - open 3 same-Custom-GPT tabs
+  - bind F2/F3/F4 to tab IDs
+  - attach same canonical independently
+  - insert one packet per tab
+  - controlled submit
+
+Session
+  - local/ephemeral only
+  - no telemetry
+  - no external upload
+  - no sync of canonical/packets
+```
+
+Explicitly DO NOT implement:
+- ChatGPT internal API
+- Bearer token capture
+- fetch/response interception
+- backend response parsing
+- generated image URL extraction
+- automatic download
+- CSP/security header removal
+- visibility/focus spoofing
+- auto retry/rate-driving
+- telemetry
+- third-party membership
+- third-party image upload
+
+---
+
+## 10. MYGPT Worker Fanout — 実装順序
+
+### Gate 0 — next chatで開始する場所
+
+**画像生成なし。**
+
+1. repoに独立extension directoryを作る。
+2. current Custom GPT pageからnormalized `/g/...` worker identityを取得するroute adapterを作る。
+3. popup/backgroundからそのsame worker identityで1つだけ新規tabを開く。
+4. content scriptがdestination route / worker identityを報告する。
+5. same `MYGPT Single Frame Worker Test` identityならPASS。
+6. このGateではpromptを入れない。canonicalも添付しない。sendしない。
+
+### Gate 1
+- one tabへpacket textをinsert
+- submitしない
+
+### Gate 2
+- canonicalをextension UIで1回選択
+- ChatGPT自身のvisible file inputへattach
+- submitしない
+
+### Gate 3
+- canonical + packet preparation in one tab
+- manual visual confirm
+
+### Gate 4
+- exactly 3 tabsへF2/F3/F4 fan-out
+- still no auto-submit
+- all 3 same Custom GPT identity / isolated packetを確認
+
+### Gate 5
+- controlled submit追加
+- all slots READY後にvisible send controlsのみ使用
+- positive submit evidenceを確認
+- no auto retry
+
+### Gate 6
+- known validated one static packetでsingle image invocation
+
+### Gate 7
+- 3-worker actual fan-out image generation
+
+Output saving / review remains manual for first operational milestone。
+
+---
+
+## 11. Temporary extension source escrow — 必ず最後に削除
+
+Directory:
+`research/temp-extension-sources/`
+
+Purpose:
+- fan-out実装中だけ3 extension evidenceを保持
+- runtime / Knowledge / generation referenceには絶対使わない
+
+Stored:
+- VoiceBridge 0.2.6 exact ZIP bytes — Base64 reconstructable
+- Translation Loop 0.5.1 exact ZIP bytes — Base64 split parts reconstructable
+- AutoGPT 0.0.71 — public repoで再配布licenseが確認できないためfull packageは置かず、version/hash/provenance recordのみ
+
+Permanent lifecycle rule:
+`research/decisions/2026-08-08-temp-extension-source-lifecycle.md`
+
+**Mandatory completion action:**
+`MYGPT Worker Fanout` accepted completion gate到達後、`research/temp-extension-sources/` directory全体を削除する。
+これはoptional cleanupではなくcompletion gateの一部。
+
+削除前に:
+- 必要な機能がfinal implementationへ独立実装/reuse済み
+- 必要なaudit/decision findingsがpermanent docsへ残っている
+- reused codeに必要なlicense/noticeをtemp外へ保持
+- final designがtemp sourceへ依存していない
+
+---
+
+## 12. Quality improvement research — automation後
+
+Post-v0 roadmapの順序を維持する。
+
+AutomationがPASSまたは明確にblockされる前に、新しいidentity conditioningを入れない。
+
+Planner first-pass reliability:
+- R1 near-landmark state: positive body landmark優先、強いexclusion gapでstateを早めない
+- R2 torso endpoint: absolute torso-angle/body-axis、必要時のみcanonical expression維持
+
+その後のQ1候補:
+- A = canonical only
+- B = canonical + canonical原画像からlossless cropした大袖detail 1枚
+
+Generated reference / multi-view / character sheetは後順位。
+直近の中国圏/consistency prior artだけで全面設計変更しない。
+
+---
+
+## 13. FROZEN legacy / asset policy
 
 CURRENT ACTIVE:
 - minimal Custom GPT worker architecture
-- active post-processing / audit scripts
+- active post-processing/audit scripts
+- 今後の専用 `MYGPT Worker Fanout` はN3 acceptance後にactive候補
 
 CURRENT CONTROL / EVIDENCE:
-- research handoff / decisions / experiments / audits / incidents
-- generation workerには見せない
+- research handoff / decisions / experiments / audits
+- generation workerに見せない
 
 TEST / AUDIT FIXTURE:
-- layout guide generator
-- `audit/references/layout-guides/**`
-- historical fixed artifacts
-- generation referenceには戻さない
+- layout guides
+- historical boards/artifacts
+- generation referenceへ戻さない
 
 FROZEN LEGACY:
 - `project/**`
 - `legacy/**`
 
-Frozen資産を再活性化する場合:
-1. CURRENT課題を明記
-2. 過去棄却理由を特定
-3. それを無効化する新証拠
+Reactivation requires:
+1. named current failure
+2. old rejection reason
+3. new evidence invalidating old reason
 4. single-variable test
-5. current acceptanceで比較
-6. PASS後のみstatus変更検討
+5. comparison with current acceptance
+6. PASS後のみstatus変更
 
----
-
-## 12. CURRENT stopping point
-
-Generation品質・production v0 generalization・post-processingはPASS済み。
-N3は閉じていない。
-
-CURRENT unresolved task:
-**Custom GPT上でcurrent browser automation extension / local UI automationがworker isolationを壊さず使えるか。**
-
-ここを確認する前にmanual Branch x3を最終運用形と固定しない。
-
----
-
-## 13. やらないこと
-
-- W-series tuning再開
-- R0/R1/R2をprettier variant目的で再生成
-- broad identity Knowledge追加
-- global worker prose積み増し
-- direct 2x2 generation
+Do not restore:
+- old Project runtime
+- broad Knowledge
+- four-pose layout guides as generation input
 - generated-frame identity chaining
-- full-board repair
-- layout guideをgeneration referenceへ戻す
-- `project/**` / `legacy/**`をruntimeへそのまま戻す
-- Thinking成功だけでdefault切替
-- output A/B数を保証仕様化
-- first-pass failureをretry成功で消す
-- official built-in機能がないことを理由にcommunity/browser-side automationまで不可能と扱う
-- current verificationなしにold browser extensionをproduction採用する
-- hidden ChatGPT endpoint / automated output extractionをproduction前提にする
+- old Actions/GitHub-coupled generation architecture
 
 ---
 
-## 14. 運用順序
+## 14. CURRENT stopping point
 
-1. GitHub CURRENT確認
-2. 実画像 / ログ確認
-3. 既存検索・外部事例が関係する場合は照合
-4. 問題局所化
-5. 既存方針と照合
-6. 必要最小限の変更
-7. そのturnで実行可能なら実行
-8. ユーザー作業がある場合は回答先頭に提示
+Completed this chat:
+- live Custom GPT worker snapshot COMPLETE
+- AutoGPT Vivaldi install permission reviewed
+- AutoGPT UI activation on Custom GPT page observed PASS
+- AutoGPT 0.0.71 package static analysis COMPLETE
+- VoiceBridge 0.2.6 static analysis COMPLETE
+- Translation Loop Test 0.5.1 static analysis COMPLETE
+- three-extension synthesis decision COMPLETE
+- temporary source escrow created
+- mandatory deletion lifecycle rule created
+
+No image generation should be performed merely to continue N3 implementation.
+
+### NEXT ACTION
+
+Next chat should **start coding Gate 0 of the dedicated `MYGPT Worker Fanout` extension**.
+
+Do not start by further researching generic browser automation.
+Do not modify the two working local add-ons first.
+Do not enable AutoGPT Plan.
+Do not touch image-generation quality prompts.
+
+First deliverable:
+- minimal Manifest V3 extension skeleton in repo
+- Custom GPT `/g/...` identity normalization
+- one-tab open + same-worker verification
+- non-generation test instructions for Vivaldi
+
+After Gate 0 implementation, user performs the live Vivaldi test and returns screenshot/log result.
