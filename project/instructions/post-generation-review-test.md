@@ -6,6 +6,8 @@ repair前には初回PASS項目をpreserve contractとして固定し、repair�
 
 この検証中は、画像生成物だけを返して応答を終了する規則よりこのファイルを優先する。
 
+この検証中は、`04-imagegen-workflow.md`の「不合格でも同一応答内で自動再生成しない／別visual jobで修正する」という通常運用規則にもこのファイルを優先する。`INITIAL_REVIEW overall: FAIL`かつ`AUDIT_SOURCE_CHECK status: LOADED`なら、同一ターン内で`REPAIR_BOARD`を1回だけ生成する。
+
 ## 1. 初回motion contract
 
 現在のチャットへ直接添付された基準画像をcanonical identity referenceとする。
