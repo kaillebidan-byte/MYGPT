@@ -8,7 +8,7 @@ const background = fs.readFileSync(path.join(root, "background.js"), "utf8");
 const observer = fs.readFileSync(path.join(root, "page_observer.js"), "utf8");
 const productFiles = ["manifest.json","background.js","chatgpt_adapter.js","content.js","page_observer.js","popup.js","prompt_stacker_runner.js","loop_core.js","terminal_gate.js","runtime_guard.js","route_adapter.js"];
 const source = productFiles.map((name) => fs.readFileSync(path.join(root, name), "utf8")).join("\n");
-assert.equal(manifest.version, "0.4.0");
+assert.equal(manifest.version, "0.4.1");
 assert.ok(manifest.permissions.includes("alarms"));
 assert.equal(manifest.content_scripts[0].world, "MAIN");
 assert.deepEqual(manifest.content_scripts[0].js, ["page_observer.js","prompt_stacker_runner.js","chatgpt_adapter.js"]);
