@@ -109,16 +109,17 @@ Keep:
 
 Do not add broad identity prose from the retry experiments.
 
-## Next phase
+## N3 follow-up
 
-Generation-quality generalization is closed for v0 unless new production evidence breaks the acceptance contract.
+N3 orchestration investigation is complete under the current Plus / ordinary ChatGPT / Project / Custom GPT constraints.
 
-Next investigation target:
-- N3 orchestration friction / automation ceiling within ChatGPT Plus
+Record:
+- `research/experiments/2026-08-08-n3-orchestration-ceiling.md`
 
-Questions for N3:
-- reduce manual creation of three isolated workers / branches
-- reduce manual distribution of three local packets
-- determine what official ChatGPT / Custom GPT mechanisms can reduce those steps without Work/Codex weekly agentic allowance or separate OpenAI API billing
+Current conclusion:
+- no official zero-click / one-click fan-out of three isolated Custom GPT workers with three dynamic packets was found
+- production v0 is manual-assisted
+- clean-seed Branch reduces canonical reattachment but does not remove three branch actions or three packet sends
 
-Do not reopen R0-R2 tuning merely to search for prettier variants.
+Do not reopen generation-quality tuning merely to reduce UI clicks.
+Reopen orchestration only if official product capability changes or the user explicitly relaxes the no-API / no-agentic-production constraint.
