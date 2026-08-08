@@ -1,0 +1,46 @@
+name: TEMP Install Worker Fanout v3
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/temp-install-worker-fanout-v3.yml'
+      - 'research/temp-extension-sources/mygpt-worker-fanout-v3-v0.3.0.zip.b64'
+
+permissions:
+  contents: write
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          src='research/temp-extension-sources/mygpt-worker-fanout-v3-v0.3.0.zip.b64'
+          base64 -d "$src" > /tmp/mygpt-worker-fanout-v3.zip
+          rm -rf /tmp/mygpt-worker-fanout-v3-unpacked extensions/mygpt-worker-fanout-v3
+          mkdir -p /tmp/mygpt-worker-fanout-v3-unpacked
+          unzip -q /tmp/mygpt-worker-fanout-v3.zip -d /tmp/mygpt-worker-fanout-v3-unpacked
+          cp -a /tmp/mygpt-worker-fanout-v3-unpacked/mygpt-worker-fanout-v3 extensions/mygpt-worker-fanout-v3
+      - name: Static checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd extensions/mygpt-worker-fanout-v3
+          python -m json.tool manifest.json >/dev/null
+          for f in route_adapter.js runtime_guard.js page_observer.js chatgpt_adapter.js content.js background.js popup.js; do node --check "$f"; done
+          for t in tests/test_*.js; do node "$t"; done
+      - name: Commit v3 and remove temporary installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add extensions/mygpt-worker-fanout-v3
+          git rm -f research/temp-extension-sources/mygpt-worker-fanout-v3-v0.3.0.zip.b64
+          git rm -f .github/workflows/temp-install-worker-fanout-v3.yml
+          git commit -m 'Add stripped-AutoGPT Worker Fanout v3'
+          git push
