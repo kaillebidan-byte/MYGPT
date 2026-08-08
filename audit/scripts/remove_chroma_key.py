@@ -48,12 +48,28 @@ def detect_key_color(image: Image.Image, border_width: int) -> tuple[int, int, i
     return Counter(samples).most_common(1)[0][0]
 
 
+def dominant_key_channel(
+    key: tuple[int, int, int],
+    *,
+    minimum_dominance: int,
+) -> tuple[int, tuple[int, int]] | None:
+    dominant = max(range(3), key=lambda index: key[index])
+    others = tuple(index for index in range(3) if index != dominant)
+    if key[dominant] - max(key[others[0]], key[others[1]]) < minimum_dominance:
+        return None
+    return dominant, others
+
+
 def remove_chroma(
     image: Image.Image,
     *,
     key: tuple[int, int, int],
     hard_threshold: float,
     feather: float,
+    despill: bool,
+    despill_distance: float,
+    despill_margin: int,
+    despill_min_dominance: int,
 ) -> tuple[Image.Image, dict[str, int]]:
     rgba = image.convert("RGBA")
     source = rgba.load()
@@ -63,14 +79,22 @@ def remove_chroma(
     soft_threshold = hard_threshold + max(0.0, feather)
     hard_sq = hard_threshold * hard_threshold
     soft_sq = soft_threshold * soft_threshold
+    despill_sq = max(0.0, despill_distance) ** 2
+    dominant = (
+        dominant_key_channel(key, minimum_dominance=max(0, despill_min_dominance))
+        if despill
+        else None
+    )
 
     cleared = 0
     feathered = 0
     kept = 0
+    despilled = 0
 
     for y in range(rgba.height):
         for x in range(rgba.width):
             r, g, b, a = source[x, y]
+            channels = [r, g, b]
             dr = r - key[0]
             dg = g - key[1]
             db = b - key[2]
@@ -85,14 +109,26 @@ def remove_chroma(
                 distance = math.sqrt(distance_sq)
                 factor = (distance - hard_threshold) / feather
                 new_alpha = max(0, min(255, round(a * factor)))
-                target[x, y] = (r, g, b, new_alpha)
                 feathered += 1
-                continue
+            else:
+                new_alpha = a
+                kept += 1
 
-            target[x, y] = (r, g, b, a)
-            kept += 1
+            if dominant is not None and new_alpha > 0 and distance_sq <= despill_sq:
+                dominant_index, other_indices = dominant
+                cap = max(channels[other_indices[0]], channels[other_indices[1]]) + despill_margin
+                if channels[dominant_index] > cap:
+                    channels[dominant_index] = max(0, min(255, cap))
+                    despilled += 1
 
-    return output, {"cleared": cleared, "feathered": feathered, "kept": kept}
+            target[x, y] = (*channels, new_alpha)
+
+    return output, {
+        "cleared": cleared,
+        "feathered": feathered,
+        "kept": kept,
+        "despilled": despilled,
+    }
 
 
 def main() -> None:
@@ -117,6 +153,29 @@ def main() -> None:
         default=18.0,
         help="Additional RGB-distance range used for soft alpha falloff beyond --threshold.",
     )
+    parser.add_argument(
+        "--no-despill",
+        action="store_true",
+        help="Disable dominant-channel chroma spill suppression on near-key edge pixels.",
+    )
+    parser.add_argument(
+        "--despill-distance",
+        type=float,
+        default=120.0,
+        help="Maximum RGB-distance from the key color eligible for despill.",
+    )
+    parser.add_argument(
+        "--despill-margin",
+        type=int,
+        default=12,
+        help="Allowed dominant-key-channel margin above the strongest non-key channel after despill.",
+    )
+    parser.add_argument(
+        "--despill-min-dominance",
+        type=int,
+        default=64,
+        help="Minimum key-channel dominance required before automatic despill is enabled.",
+    )
     parser.add_argument("--metadata", type=Path)
     args = parser.parse_args()
 
@@ -127,13 +186,17 @@ def main() -> None:
             key=key,
             hard_threshold=args.threshold,
             feather=args.feather,
+            despill=not args.no_despill,
+            despill_distance=args.despill_distance,
+            despill_margin=args.despill_margin,
+            despill_min_dominance=args.despill_min_dominance,
         )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     result.save(args.output, format="PNG", optimize=True)
 
     metadata = {
-        "version": 1,
+        "version": 2,
         "input": args.input.name,
         "output": args.output.name,
         "key_rgb": list(key),
@@ -141,6 +204,10 @@ def main() -> None:
         "border_width": args.border_width,
         "threshold": args.threshold,
         "feather": args.feather,
+        "despill": not args.no_despill,
+        "despill_distance": args.despill_distance,
+        "despill_margin": args.despill_margin,
+        "despill_min_dominance": args.despill_min_dominance,
         "pixels": counts,
     }
     metadata_path = args.metadata or args.output.with_suffix(".chroma.json")
