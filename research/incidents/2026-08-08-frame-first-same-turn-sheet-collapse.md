@@ -1,7 +1,7 @@
 # Incident — frame-first same-turn jobs collapsed into sequence sheets
 
 Date: 2026-08-08
-Status: CONFIRMED reproduction in a newly created Project; root cause narrowed to current workflow context
+Status: STATIC CONTROL PASS / root cause narrowed to motion orchestration context
 
 ## Test goal
 
@@ -70,78 +70,88 @@ Result:
 
 Therefore retained old Project chat history is **not sufficient to explain the failure** and is no longer the leading cause.
 
-## What is now ruled down
+## Static single-frame control
 
-The following explanation is now weak:
-
-> The old Project's historical 2x2/chibi chats were the primary reason the current frame-first workflow kept returning 2x2 sheets.
-
-The behavior reproduces in a newly created Project with the current configuration.
-
-## Strongest current hypothesis
-
-The current Project Instructions / Sources themselves expose too much global sequence structure to the image-generation call.
-
-In particular, `project/instructions/post-generation-review-test.md` explicitly contains the entire workflow before image generation begins:
-
-`canonical -> motion contract -> F1 -> F2 -> F3 -> F4 -> Python compose -> audit -> repair`
-
-The same Instructions repeatedly mention concepts such as:
-- F1-F4
-- four image-generation jobs
-- 2x2 board
-- sheet / board / panel
-- compose four frames
-- repair selected frames
-
-Many of those terms appear inside negative rules (`do not make a sheet`, `do not make 2x2`). This may still prime the image-generation system with the global multi-pose representation even when the local frame prompt requests one person and one pose.
-
-This is a hypothesis about active context, not a claim about undocumented platform internals. The evidence is:
-- empty/minimal Project static single-pose generation succeeded;
-- full current Project motion workflow reproduces sheetification even in a new Project;
-- stronger local negative wording does not reliably override it;
-- one REPAIR F4 call escaped to a single frame, so the behavior is probabilistic/context-sensitive rather than a hard format constraint.
-
-## Next isolation experiment
-
-Do **not** run another full 4 INITIAL + 4 REPAIR test yet.
-
-Use a newly created or clean test Project and change only the orchestration context.
-
-### Test A — minimal single-frame static control
-Project Instructions:
-- only canonical identity rule
-- one person / one pose / one portrait image
-- no motion workflow, no F labels, no board/compose/audit language
+A static control was then run in the new Project using the same high-resolution canonical and current Project configuration, but without a motion request.
 
 User request:
 `このキャラクターが、正面を向いたまま右手を胸の高さに置いている全身画像を1枚作ってください。`
 
-Expected: one portrait frame.
+Result:
+- one image only
+- one person only
+- one pose only
+- portrait 1024x1536
+- no 2x2 sheet
+- no labels/dividers
+- requested right hand placed at chest height
 
-### Test B — minimal four-call motion orchestration with no board vocabulary
-If A passes, use a minimal temporary Instructions file that says only:
-- internally derive four chronological pose states from one motion request;
-- call image generation four times;
-- each call receives only canonical identity + that call's one pose state;
-- do not mention any other states inside the image prompt;
-- no audit, compose, board, sheet, panel, 2x2, F1-F4 display labels, repair, or Python text before all four image calls finish.
+This is a decisive separation result.
 
-The generation-facing context should contain no board/sheet terminology at all.
+It disproves:
+- `the current Project Sources always force 2x2 output`
+- `merely being inside the new Project is enough to cause sheetification`
+- `the canonical itself causes 2x2 output`
+
+The static output is a redraw, not a direct copy of the canonical. Identity is strongly anchored but non-moving regions are still regenerated at pixel level.
+
+## Strongest current conclusion
+
+The failure is tied to **motion orchestration context**, not ordinary single-pose generation.
+
+Current evidence now points to one or both of:
+
+A. exposing the full four-state workflow (`motion contract`, four chronological states, repeated frame calls) before/during image generation causes the image system to represent the whole sequence in each call;
+
+B. the full Project Instructions repeatedly mention global sequence/layout concepts (`F1-F4`, four jobs, board, 2x2, sheet, compose, audit, repair), so each image-generation call receives too much global multi-frame context even when the local prompt requests only one pose.
+
+The next experiment must distinguish A from B.
+
+## Next isolation experiment
+
+Do not run the full current Instructions again.
+
+### Test B — minimal four-call motion orchestration with zero layout vocabulary
+
+Use temporary Project Instructions containing only:
+- current chat's directly attached canonical is the identity reference;
+- convert the user's motion into four chronological pose states internally;
+- call image generation four times sequentially;
+- each image call receives only the canonical identity rule and that call's one pose state;
+- do not display or pass the other three states to the image call;
+- do not perform repair or audit during this experiment.
+
+Crucially, the temporary Instructions must contain **none** of these concepts or words:
+- board
+- sheet
+- panel
+- 2x2
+- compose
+- grid
+- layout guide
+- Python compose
+- machine audit
+- repair
+- comparison
+- F1/F2/F3/F4 as visible generation labels
+
+The four states can be represented internally as `state_a` through `state_d` or equivalent, but image prompts must receive only one state at a time.
 
 Interpretation:
-- A PASS, B PASS -> current full Instructions/Sources are contaminating generation context; redesign orchestration to keep audit/board vocabulary out of the pre-generation context.
-- A PASS, B FAIL -> four-call motion orchestration itself is enough to trigger sequence representation; same-turn frame-first is not reliable without a true isolated execution boundary.
-- A FAIL -> even minimal current Project static generation is contaminated; inspect Project setup before any motion architecture work.
+- Test B PASS -> current full Instructions/Sources contaminate generation context; redesign production orchestration so layout/audit vocabulary is unavailable until generation finishes.
+- Test B FAIL -> four-state same-turn motion orchestration itself is enough to trigger sequence representation in this Project path; per-frame same-turn automation is unreliable without a true isolated execution boundary.
 
 ## Do not repeat
 
 - Do not add more `no sheet / no 2x2` wording to the current full Instructions.
 - Do not blame old Project chat memory as the main cause after the new-Project reproduction.
-- Do not treat `1 visual job = 1 frame` as demonstrated just because one repair call happened to escape into a single frame.
+- Do not treat `1 visual job = 1 frame` as demonstrated just because one repair call escaped into a single frame.
 - Do not restore `four-pose-portrait.png`.
 - Do not switch back to low-resolution canonical.
+- Do not rerun the full 4 INITIAL + repair workflow before Test B.
 
 ## Architectural implication
 
-The likely design error is that orchestration, audit, and output-layout rules were all placed in Project context before image generation. For the next design, generation-facing context and post-generation/audit context must be separated as much as the ChatGPT Project execution model permits.
+Generation-facing context and post-generation/audit context must be separated as much as the ChatGPT Project execution model permits.
+
+The static-control PASS proves the image model can produce a correct single-pose portrait in the same new Project. The unresolved question is whether removing global layout/audit vocabulary is enough to preserve that behavior across four same-turn motion calls.
