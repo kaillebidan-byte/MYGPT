@@ -1,23 +1,16 @@
 # POSTGEN-G1 — explicit follow-up critic runbook
 
 Date: 2026-08-10 JST
-Status: **CURRENT NEXT USER PROCEDURE**
+Status: **ALTERNATE ROUTE / PROMPT RETAINED / NEXT PROCEDURE MOVED TO CRITIC ROUTE COMPARISON**
 
-Prerequisite:
-- G1a-1 already generated the R2-B image in `MYGPT Single Frame Worker POSTGEN G1`;
-- no `POSTGEN_AUDIT` text was produced automatically;
-- remain in that same conversation.
+This runbook was written after Instant same-turn auto-audit failed.
 
-## Do not change anything first
+A later live result showed that a Branch -> Thinking critic can return `POSTGEN_AUDIT` text without generating another image.
 
-Do not:
-- regenerate;
-- open a new chat;
-- reattach the canonical;
-- edit GPT Instructions;
-- enable Action;
-- enable Code Interpreter;
-- run Worker Orchestrator.
+Current next procedure is now:
+- `research/plans/2026-08-10-postgen-critic-route-comparison-runbook.md`
+
+The prompt below remains the exact Route-A prompt for testing the parent Instant conversation on the same candidate.
 
 ## Send exactly this second user message
 
@@ -37,27 +30,4 @@ POSTGEN_AUDIT {"identity_obvious_drift":true|false,"pose_obvious_error":true|fal
 - verdict: 上の3項目がすべてfalseならPASS、それ以外はFAIL
 ```
 
-## PASS
-
-PASS if:
-- no image-generation UI/tool activity starts;
-- one ordinary text response appears;
-- it contains `POSTGEN_AUDIT` with concrete booleans and PASS/FAIL;
-- it evaluates the already-generated image, not a hypothetical/new image.
-
-## FAIL
-
-FAIL if any occurs:
-- another image is generated;
-- assistant refuses/cannot inspect the preceding generated image;
-- no normal text response appears;
-- response ignores the structured audit request.
-
-## Return evidence
-
-Send back:
-1. `explicit follow-up: PASS` or `FAIL`;
-2. exact assistant response text;
-3. screenshot only if behavior is visually ambiguous or another image generation starts.
-
-Do not proceed to Actions/Code Interpreter until this result is reviewed.
+Do not add Actions/Code Interpreter or regenerate while the critic-route comparison is still open.
