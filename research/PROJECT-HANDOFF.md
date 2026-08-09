@@ -1,6 +1,6 @@
 # MYGPT調整プロジェクト — CURRENT HANDOFF
 
-更新日: 2026-08-09 19:03 JST
+更新日: 2026-08-09 19:12 JST
 
 GitHub `main` を正本とする。チャット記憶、古いhandoff、superseded decisionだけを根拠に過去方式へ戻さない。
 
@@ -9,11 +9,12 @@ GitHub `main` を正本とする。チャット記憶、古いhandoff、supersed
 1. `research/PROJECT-HANDOFF.md` — このCURRENT
 2. `research/KNOWN-ISSUES.md` — 現在の既知不具合 / 制約 / 解決済み問題
 3. `research/experiments/2026-08-09-worker-fanout-isolated-generation-recovery-output-checkpoint.md` — Worker Fanout最新実機checkpoint
-4. `extensions/mygpt-worker-fanout-v3/README.md` — Worker Fanout現行version / acceptance
-5. `research/decisions/2026-08-08-production-v0-generalized-verdict.md` — generation品質の正本
-6. `research/SEARCH-INDEX.md` — 既存例 / 中国語圏 / prior-art / community検索の入口
-7. `research/reference/README.md` — 実装・再利用資料の検索入口
-8. `research/runtime/2026-08-08-single-frame-worker-live-snapshot.md` — Custom GPT worker実機snapshot
+4. `research/prior-art/2026-08-09-selectable-output-directory-browser-prior-art.md` — selected-folder既存例 / reuse判断
+5. `extensions/mygpt-worker-fanout-v3/README.md` — Worker Fanout現行source/version
+6. `research/decisions/2026-08-08-production-v0-generalized-verdict.md` — generation品質の正本
+7. `research/SEARCH-INDEX.md` — 既存例 / 中国語圏 / prior-art / community検索の入口
+8. `research/reference/README.md` — 実装・再利用資料の検索入口
+9. `research/runtime/2026-08-08-single-frame-worker-live-snapshot.md` — Custom GPT worker実機snapshot
 
 research全体の資料地図:
 - `research/README.md`
@@ -155,20 +156,20 @@ Confirmed:
 - service worker correctly refused to write without permission
 - recovered files remained safely in default Downloads staging folder
 
-Therefore do not touch generation/recovery paths for this failure.
+Therefore do not touch generation/recovery paths for this failure。
 
-### v0.4.7 — selected-folder permission recovery
+### v0.4.7 — reactive permission patch, PROVISIONAL
 
 Status:
-**IMPLEMENTED / LIVE PENDING**
+**STATIC IMPLEMENTED / LIVE TEST DEFERRED UNTIL PRIOR-ART ALIGNMENT**
 
-Local patch only:
+Patch currently present:
 - `output_directory_store.js` adds `requestWritePermission(handle)`
-- `popup.js` detects `PERMISSION_REQUIRED`
-- popup button becomes `保存先を再許可して保存`
+- `popup.js` can detect `PERMISSION_REQUIRED`
+- popup button can become `保存先を再許可して保存`
 - user click requests read/write permission on the existing stored handle
 - after grant, output-directory metadata revision is renewed
-- unchanged `output_relocator.js` observes that revision and resumes relocation
+- unchanged `output_relocator.js` can resume relocation
 - manifest version `0.4.7`
 
 Unchanged:
@@ -177,19 +178,60 @@ Unchanged:
 - `output_relocator.js`
 - attachment / paste / submit / completion mechanisms
 
-Chromium permission constraint:
-- a stored FileSystem handle and its current permission are separate state
-- permission may return to `prompt`
-- re-requesting write permission requires a user gesture
-
-Detailed record:
-- `research/KNOWN-ISSUES.md` KI-004
-- current Worker Fanout checkpoint
-- extension README
+The later reuse audit confirmed that stored handle + `queryPermission/requestPermission` is the correct standard pattern, but identified a better ordering: permission should be preflighted on the user's Run click before starting a long generation cycle.
 
 ---
 
-## 5. Near-frozen paths
+## 5. Existing-solutions / prior-art review — COMPLETE
+
+Record:
+- `research/prior-art/2026-08-09-selectable-output-directory-browser-prior-art.md`
+
+### Preferred existing pattern — Chrome / VS Code Web
+
+Browser-only standard approach:
+
+```text
+showDirectoryPicker({mode:"readwrite"})
+-> persist FileSystemDirectoryHandle in IndexedDB
+-> later queryPermission({mode:"readwrite"})
+-> if needed requestPermission({mode:"readwrite"}) from user gesture
+-> write with File System Access API
+```
+
+Chrome documentation uses VS Code Web as the concrete persisted-handle example.
+
+### Candidates checked and not adopted wholesale
+
+- `chrome.downloads`
+  - valid for Downloads-relative v0.4.5 staging
+  - cannot silently target arbitrary absolute folders
+- `idb-keyval`
+  - mature tiny IndexedDB helper; Chrome sample uses it
+  - optional only; current extension stores one record and has no bundler
+- GoogleChromeLabs `browser-fs-access`
+  - mature File System Access wrapper/fallback
+  - does not remove MYGPT-specific persisted-directory permission/resume lifecycle
+- `native-file-system-adapter`
+  - broad portability ponyfill
+  - overkill for current Vivaldi/Chromium native API target
+- AutoGPT 0.0.71
+  - browser download uses `chrome.downloads.download`
+  - output URL/gallery plumbing exists
+  - no audited arbitrary-directory permission module to transplant
+- Autojourney Pro Downloader
+  - separate desktop companion solves browser download limitations/native folders
+  - do not add a desktop dependency while browser-only standard API is viable
+
+### Reuse rule for this fix
+
+Use the **Chrome official / VS Code Web permission lifecycle**, not another custom filesystem architecture.
+
+No extra third-party dependency is justified yet.
+
+---
+
+## 6. Near-frozen paths
 
 新しい失敗証拠がない限り変更しない:
 
@@ -207,41 +249,55 @@ Detailed record:
 - runToken / stale async guard
 - passive completion monitoring
 - v0.4.5 image collector
-- v0.4.6/v0.4.7 `output_relocator.js` unless relocation itself produces failing evidence
+- `output_relocator.js` unless relocation itself produces failing evidence
 
 問題が出た場合は、失敗した層だけ局所修正する。
 
 ---
 
-## 6. NEXT ONLY
+## 7. NEXT ONLY
 
-Fresh v0.4.7 live acceptanceを1回行う。
+**まだfresh v0.4.7 generation testをしない。**
 
-Important:
-- extension Reload/updateで `chrome.storage.session` は消える
-- したがって今回すでに完了したv0.4.6 runtimeをv0.4.7へreload後に自動再開はできない
-- 今回の3画像は `Downloads/MYGPT-Worker-Fanout/` にあるので、その3枚は保持または手動移動でよい
+先にpermission acquisitionだけをChrome/VS Code型のpreflightへ揃える。
 
-Fresh acceptance:
+Target ordering:
 
-1. v0.4.7へ差し替え/Reload
+```text
+user presses Run
+-> custom folder selected?
+   -> no: continue existing default flow
+   -> yes: verify write permission now
+       -> granted: start fanout
+       -> prompt: request permission while Run user gesture is available
+       -> denied/error: do not start generation
+-> existing v0.4.4 fanout
+-> existing v0.4.5 recovery
+-> existing output relocation/write/verify
+```
+
+Post-run `PERMISSION_REQUIRED`は、長いrun中にpermissionが変化した場合のdefensive fallbackとして残す。
+
+Permission preflight alignment後のacceptance:
+
+1. extensionを差し替え/Reload
 2. source Custom GPT tabをReload
 3. 保存先フォルダを選択
-4. 通常のF2/F3/F4を1回実行
-5. generation `COMPLETE`
-6. `Recovery: COMPLETE`
-7. `Output: PERMISSION_REQUIRED`ならpopupを開き `保存先を再許可して保存`
-8. browser permissionを許可
+4. Runを押す
+5. write permissionが未許可なら**generation開始前**にbrowser permissionを解決
+6. permission deniedならF2/F3/F4を開始しない
+7. grantedならgeneration `COMPLETE`
+8. `Recovery: COMPLETE`
 9. `Output: COMPLETE`
 10. F2/F3/F4 `output=COMPLETE/<filename>`
 11. selected folderに3枚存在
 12. verified relocation後だけtemporary Downloads copiesが削除されること
 
-**v0.4.7がPASSしたらWorker Fanoutの機能追加を止め、画像差分の話へ戻る。**
+**selected-folder acceptanceがPASSしたらWorker Fanoutの機能追加を止め、画像差分の話へ戻る。**
 
 ---
 
-## 7. External search / prior-art route
+## 8. External search / prior-art route
 
 新しい外部検索を始める前に:
 
@@ -252,6 +308,7 @@ Fresh acceptance:
 を読む。
 
 既存資産:
+- selectable output-directory/browser filesystem prior art
 - 中国語圏 image-generation practices
 - 中国圏 character-consistency prior art
 - planner / isolated-worker既存例survey
@@ -262,7 +319,7 @@ Fresh acceptance:
 
 ---
 
-## 8. Deferred — 今やらない
+## 9. Deferred — 今やらない
 
 ### Branch -> Thinking image generation
 
@@ -283,11 +340,11 @@ Custom GPTをInstantで起動
 - canonical / Custom GPT Instructions / local packetが正しく継承されるか
 - direct Thinking failureを回避できるか
 
-v0.4.7 acceptanceや画像差分分析より先に実装しない。
+selected-folder acceptanceや画像差分分析より先に実装しない。
 
 ---
 
-## 9. Handoff / repository maintenance rule
+## 10. Handoff / repository maintenance rule
 
 `research/handoffs/` は過去時点のsnapshotとして保存する。
 
