@@ -1,8 +1,8 @@
 # Worker Fanout — isolated generation / recovery / output checkpoint
 
 Date: 2026-08-09 JST
-Updated: 2026-08-09 19:03 JST
-Status: **v0.4.4 FANOUT LIVE PASS / v0.4.5 IMAGE RECOVERY LIVE PASS / v0.4.6 OUTPUT PERMISSION FAIL / v0.4.7 FIX STATIC, LIVE PENDING**
+Updated: 2026-08-09 19:12 JST
+Status: **v0.4.4 FANOUT LIVE PASS / v0.4.5 IMAGE RECOVERY LIVE PASS / v0.4.6 OUTPUT PERMISSION FAIL / v0.4.7 PROVISIONAL STATIC / PRIOR-ART REVIEW COMPLETE**
 
 ## Purpose
 
@@ -27,18 +27,24 @@ Display family:
 MYGPT Worker Fanout v4
 ```
 
-Current manifest version after the permission fix: `0.4.7`.
+Current manifest version: `0.4.7`.
+
+Important: v0.4.7 was patched before the dedicated prior-art review requested after the v0.4.6 live failure. Its permission-recovery direction matches Chrome's documented pattern, but treat the current code as **provisional** until the permission preflight is aligned with the reviewed prior art.
 
 ## Architecture rule retained
 
-Preserve live-proven paths. Patch only the layer for which new failure evidence exists.
+Preserve live-proven paths. Patch only the layer for which new failure evidence exists, and search existing implementations before adding a new browser/filesystem mechanism.
 
-Implementation lookup remains:
+Implementation lookup:
 
 - `research/reference/2026-08-09-extension-reuse-inventory.md`
 - `research/reference/2026-08-09-autogpt-0.0.71-internal-structure-map.md`
 - `research/audits/2026-08-09-autogpt-0.0.71-deep-architecture-analysis.md`
 - `research/decisions/2026-08-09-autogpt-stripped-clone-current.md`
+
+Output-directory prior art:
+
+- `research/prior-art/2026-08-09-selectable-output-directory-browser-prior-art.md`
 
 ## v0.4.4 — isolated fanout LIVE PASS
 
@@ -141,20 +147,20 @@ This is a clean separation result:
 - image recovery/download: PASS;
 - selected-directory relocation: did not start because write permission was `prompt`.
 
-The persisted directory handle still existed. The missing operation was a user-gesture `requestPermission({mode:"readwrite"})` when permission had returned to `prompt`.
+The persisted directory handle still existed. The missing operation was a user-gesture permission grant when permission had returned to `prompt`.
 
 The three v0.4.6 images were not lost. They remained in the proven v0.4.5 staging directory under Downloads.
 
-## v0.4.7 — permission reauthorization patch
+## v0.4.7 — provisional permission reauthorization patch
 
-Scope is intentionally local.
+A local patch was made before the dedicated prior-art review.
 
 Changed:
 
 - `output_directory_store.js`
   - adds `requestWritePermission(handle)`;
 - `popup.js`
-  - keeps the current selected handle available in popup memory;
+  - keeps the selected handle available in popup memory;
   - detects `PERMISSION_REQUIRED` / non-granted permission;
   - changes the button label to `保存先を再許可して保存`;
   - on user click, calls `requestPermission({mode:"readwrite"})` on the existing handle;
@@ -162,7 +168,7 @@ Changed:
 - `manifest.json`
   - version `0.4.7`.
 - `tests/test_output_directory.js`
-  - adds static contract checks for the reauthorization path.
+  - static contract checks for the reauthorization path.
 
 Unchanged:
 
@@ -174,57 +180,121 @@ Unchanged:
 - `runtime_guard.js`;
 - `content.js`.
 
-### Recovery sequence
+The core idea is not novel: the later prior-art review confirms that stored handle + `queryPermission` / `requestPermission` is Chrome's documented pattern.
+
+However, the current v0.4.7 UX waits until post-generation relocation has already reached `PERMISSION_REQUIRED`. The prior-art review suggests a better ordering before the next live test.
+
+## Prior-art review — completed before further implementation
+
+Record:
+
+`research/prior-art/2026-08-09-selectable-output-directory-browser-prior-art.md`
+
+### Confirmed existing solutions
+
+#### Chrome / VS Code Web
+
+Preferred browser-only pattern:
 
 ```text
-Recovery COMPLETE
--> service worker sees selected directory permission = prompt
--> Output PERMISSION_REQUIRED
--> popup displays 保存先を再許可して保存
--> user clicks
--> stored handle.requestPermission({mode:"readwrite"})
--> granted
--> output-directory metadata revision changes
--> unchanged output_relocator.js observes change
--> F2/F3/F4 relocation resumes
--> createWritable
--> exact byte-size verify
--> temporary Downloads copy removal only after verify
--> Output COMPLETE
+showDirectoryPicker({mode:"readwrite"})
+-> persist FileSystemDirectoryHandle in IndexedDB
+-> later queryPermission({mode:"readwrite"})
+-> if needed requestPermission({mode:"readwrite"}) from user gesture
+-> write with File System Access API
 ```
 
-This is not a regeneration path.
+Chrome documentation explicitly uses VS Code Web as a mature real-world example of persisted FileSystem handles.
 
-## Important limitation of the current failed run
+#### `chrome.downloads`
 
-Installing/reloading v0.4.7 clears the MV3 `chrome.storage.session` runtime used by the current v0.4.6 run. Therefore v0.4.7 cannot retroactively resume the already-finished v0.4.6 runtime after extension reload.
+Cannot silently target an arbitrary absolute directory. Its filename is Downloads-relative, so it remains appropriate for v0.4.5 staging/fallback but is not the custom-directory solution.
 
-For the already-recovered v0.4.6 images, the safe action is simply to keep or manually move the three files currently present under `Downloads/MYGPT-Worker-Fanout/`.
+#### `idb-keyval`
 
-A fresh v0.4.7 run is required to validate automatic permission recovery.
+Mature tiny IndexedDB helper and used in Chrome's sample, but not automatically adopted because Worker Fanout has no bundler and stores only one directory record.
 
-## v0.4.7 live acceptance
+#### GoogleChromeLabs `browser-fs-access`
 
-1. replace/reload the unpacked extension with v0.4.7;
+Useful open/save/fallback wrapper, but does not replace MYGPT's persistent selected-directory + permission-resume lifecycle. Do not add the dependency for current Chromium-only scope.
+
+#### `native-file-system-adapter`
+
+Broader ponyfill/adapter. Useful for portability, but unnecessary for current Vivaldi/Chromium native File System Access scope.
+
+#### AutoGPT / Autojourney
+
+The supplied AutoGPT 0.0.71 uses `chrome.downloads.download` for browser downloads and has output URL/gallery plumbing. It does not provide a reusable arbitrary-directory permission module.
+
+Autojourney's separate Pro Downloader is prior art for another architecture:
+
+```text
+extension -> desktop downloader -> native filesystem
+```
+
+Do not add a separate desktop dependency while the browser-only standard solution remains viable.
+
+## Next implementation action — reuse official ordering, not another custom mechanism
+
+Before another live run, change only the permission acquisition ordering:
+
+```text
+user presses Run
+-> custom folder selected?
+   -> no: continue existing v0.4.5/default flow
+   -> yes: verify write permission immediately
+       -> granted: start existing fanout
+       -> prompt: request permission while Run user gesture is available
+       -> denied/error: do not start generation
+-> existing v0.4.4 fanout
+-> existing v0.4.5 recovery
+-> existing relocation/write/verify
+```
+
+Keep the existing post-run `PERMISSION_REQUIRED` state as a defensive fallback if permission changes/revokes during a long run.
+
+This preflight ordering follows the editor/IDE-style permission model and prevents a full generation cycle from finishing before discovering that the selected destination is not writable.
+
+### No additional dependency unless evidence requires it
+
+Do not add:
+- `browser-fs-access`;
+- `native-file-system-adapter`;
+- `idb-keyval` bundling;
+- native desktop Downloader;
+
+for this fix unless a concrete need appears that the current Chromium native API cannot satisfy.
+
+## Important limitation of the failed v0.4.6 run
+
+Installing/reloading a new extension version clears the MV3 `chrome.storage.session` runtime used by the current run. A new version cannot retroactively resume the already-finished v0.4.6 runtime after extension reload.
+
+For the already-recovered v0.4.6 images, keep or manually move the three files under `Downloads/MYGPT-Worker-Fanout/`.
+
+## Live acceptance after permission-preflight alignment
+
+Do not spend another generation run testing the provisional reactive-only ordering first.
+
+After the permission preflight is aligned:
+
+1. replace/reload the unpacked extension;
 2. reload the source Custom GPT tab;
 3. select the intended output folder;
-4. run normal F2/F3/F4 once;
-5. require three-slot generation `COMPLETE`;
-6. require `Recovery: COMPLETE`;
-7. if Chromium returns the stored handle permission to `prompt`, require `Output: PERMISSION_REQUIRED` and popup button `保存先を再許可して保存`;
-8. click that button and grant write permission;
+4. press Run;
+5. if write permission is not already granted, the popup must resolve it **before worker generation starts**;
+6. if permission is denied, no F2/F3/F4 generation should start;
+7. if granted, require three-slot generation `COMPLETE`;
+8. require `Recovery: COMPLETE`;
 9. require `Output: COMPLETE`;
 10. require F2/F3/F4 `output=COMPLETE/<filename>`;
 11. verify the selected directory contains all three outputs;
 12. verify temporary Downloads copies are removed only after destination verification.
 
-The appearance of one reauthorization prompt is acceptable. Background auto-grant is not an acceptance requirement because the permission request is user-mediated.
-
-## Next main research topic after v0.4.7 acceptance
+## Next main research topic after selected-folder acceptance
 
 Return to **image-difference analysis**.
 
-Do not expand Worker Fanout further unless the v0.4.7 acceptance exposes another concrete output-layer failure.
+Do not expand Worker Fanout further unless the selected-folder acceptance exposes another concrete output-layer failure.
 
 ## Deferred future Worker Fanout investigation — do not implement now
 
@@ -256,5 +326,7 @@ This remains deferred until selected-folder acceptance and image-difference anal
 - image generation completion monitoring: live proven;
 - generated-image automatic recovery: live proven;
 - v0.4.6 selected-folder first live run: permission-recovery failure isolated;
-- v0.4.7 permission patch: implemented, static validation pending/followed by live acceptance;
+- v0.4.7 reactive permission patch: provisional static implementation;
+- existing-solutions / prior-art review: complete;
+- next Worker Fanout action: align permission preflight with Chrome/VS Code pattern before another live run;
 - next main topic after acceptance: image differences.
