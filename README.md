@@ -8,11 +8,12 @@ GitHub `main` を正本とする。古い実験記録や過去handoffより、CU
 
 1. `research/PROJECT-HANDOFF.md` — **現在地・次にやること・凍結済み方針**
 2. `research/decisions/2026-08-09-identity-quality-closed-loop-direction.md` — **現在のidentity-quality方向**
-3. `research/experiments/2026-08-09-post-image-dialogue-audit-loop-reassessment.md` — **post-image dialogue / Actions再監査**
-4. `research/KNOWN-ISSUES.md` — **既知不具合 / 制約 / 回避策 / 解決済み問題の索引**
-5. `research/SEARCH-INDEX.md` — **既存例検索 / 中国語圏調査 / prior art / community browser automation / 公開GPT調査の入口**
-6. `research/README.md` — **research全体の資料地図と読み順**
-7. `extensions/mygpt-worker-fanout-v3/README.md` — **Worker Orchestrator現行実装**
+3. `research/plans/2026-08-09-identity-quality-closed-loop-execution-plan.md` — **現在の実行順・gate・sample数・stop condition**
+4. `research/experiments/2026-08-09-post-image-dialogue-audit-loop-reassessment.md` — **post-image dialogue / Actions再監査**
+5. `research/KNOWN-ISSUES.md` — **既知不具合 / 制約 / 回避策 / 解決済み問題の索引**
+6. `research/SEARCH-INDEX.md` — **既存例検索 / 中国語圏調査 / prior art / community browser automation / 公開GPT調査の入口**
+7. `research/README.md` — **research全体の資料地図と読み順**
+8. `extensions/mygpt-worker-fanout-v3/README.md` — **Worker Orchestrator現行実装**
 
 実装内部を探す場合は `research/reference/README.md` から入る。
 外部例を探す場合は `research/SEARCH-INDEX.md` から入る。
@@ -85,6 +86,9 @@ Detailed reassessment:
 Current decision:
 - `research/decisions/2026-08-09-identity-quality-closed-loop-direction.md`
 
+Current execution plan:
+- `research/plans/2026-08-09-identity-quality-closed-loop-execution-plan.md`
+
 Working architecture:
 
 ```text
@@ -131,62 +135,58 @@ The earlier identity candidates remain:
 
 But they now run **after** the post-image runtime gate.
 
-## NEXT ONLY — `POSTGEN-G1`
+## CURRENT EXECUTION PLAN
 
-Worker output-folder work is closed for now.
+The exact order, sample counts, PASS/FAIL criteria, retry caps and stop conditions are maintained in:
 
-Before changing identity prompts or browser collector logic, characterize the newly discovered post-image stage under Instant using a **separate experimental audited Custom GPT clone**.
+`research/plans/2026-08-09-identity-quality-closed-loop-execution-plan.md`
 
-`POSTGEN-G1` must determine:
-1. image + final audit text are in the same assistant turn or separate turns;
-2. when current terminal monitoring marks the slot COMPLETE;
-3. whether current `image_collector.js` still selects the intended generated image;
-4. whether a read-only JSON/text Action can run after image generation;
-5. optionally, whether Code Interpreter can access the generated image as a usable file.
+Current sequence:
 
-Why this precedes ID-V1:
-- current collector searches the **latest assistant turn** for the image;
-- a post-image audit turn could change that assumption;
-- runtime evidence must precede state-machine or collector patches.
+1. Phase 0 — create a separate experimental audited Custom GPT; production worker remains unchanged.
+2. Phase 1 / `POSTGEN-G1` — observe Instant post-image turn/tool/collector structure before any browser-code change.
+3. Phase 2 / `ID-V1` — A/B current wording vs canonical edit/source wording across R1 and R2 stress classes; initial screen uses 2 independent candidates per condition per pose.
+4. Phase 3 / `ID-V2` — only if pose conditioning remains a material failure source; add exactly one worker-local minimal visual pose guide.
+5. Phase 4 — compare same-worker critic with an independent non-generating judge using existing candidates first.
+6. Phase 5 — reuse MaSC / DreamBench++ only after image transport is proven.
+7. Phase 6 — best-of-2 only as a hard-frame/failed-first-pass retry; initial cap is 2 candidates per slot before human escalation.
+8. Phase 7 — optional single canonical-derived local detail crop only for persistent localized drift.
+9. Phase 8 — Branch -> Thinking later as an execution-strategy comparison, not an identity-conditioning method.
 
-If runtime requires it, future slot phases may become:
+### NEXT ONLY — `POSTGEN-G1`
 
-```text
-GENERATING
--> IMAGE_READY
--> AUDITING
--> ACCEPTED / RETRY_REQUIRED
-```
+Do not change Worker Orchestrator v0.5.0 code or the production worker before this runtime gate.
 
-Do not implement this before `POSTGEN-G1` evidence.
+POSTGEN-G1 must determine:
+- whether generated image and audit text live in the same assistant turn or separate turns;
+- when the current terminal monitor marks COMPLETE;
+- whether current `image_collector.js` still identifies/recover the correct generated image;
+- whether a narrow read-only text/JSON Action can run after generation;
+- optionally, whether Code Interpreter can access the generated image as a usable file.
 
-After `POSTGEN-G1`:
-1. `ID-V1 + SELF-AUDIT`
-2. `ID-V2 + SELF-AUDIT`
-3. independent non-generating judge GPT comparison
-4. MaSC / DreamBench++ metric reuse after image transport gate
-5. best-of-2 only for hard frames
-6. Branch -> Thinking later, with post-image behavior revalidated separately
+Only evidence from this gate can justify a collector/state-machine patch.
 
 ## Source-of-truth order
 
 1. `research/PROJECT-HANDOFF.md`
-2. `research/KNOWN-ISSUES.md`
-3. latest applicable `research/decisions/` and current checkpoint
-4. related `research/experiments/` / `research/incidents/` / `research/audits/`
-5. `research/SEARCH-INDEX.md` for external examples / prior art
-6. `research/reference/README.md` and referenced implementation maps
-7. historical `research/handoffs/`
-8. frozen legacy assets only when comparison or reproductionに必要
+2. current execution plan when one is explicitly marked CURRENT
+3. `research/KNOWN-ISSUES.md`
+4. latest applicable `research/decisions/` and current checkpoint
+5. related `research/experiments/` / `research/incidents/` / `research/audits/`
+6. `research/SEARCH-INDEX.md` for external examples / prior art
+7. `research/reference/README.md` and referenced implementation maps
+8. historical `research/handoffs/`
+9. frozen legacy assets only when comparison or reproductionに必要
 
 `research/handoffs/` は履歴保存用。CURRENTを決める文書ではない。
-`research/plans/` は過去時点の計画を含むため、`CURRENT`表記が残っていても後続handoff/decision/checkpointと照合する。
+`research/plans/` はhistorical planも含むが、**CURRENT EXECUTION PLANと明示された計画は実行順の正本**として扱う。
 
 ## Repository areas
 
 - `extensions/` — browser automation実装
 - `audit/scripts/` — chroma removal / compose / machine audit
 - `research/decisions/` — 採用済み方針とsupersession
+- `research/plans/` — gated execution plan / historical plans
 - `research/experiments/` — PASS/FAIL実験記録とcheckpoints
 - `research/incidents/` — 不具合・失敗原因の詳細記録
 - `research/chatgpt-project-practices/` — Web検索台帳、Projects/imagegen調査、中国語圏調査、planner-worker既存例
@@ -201,10 +201,11 @@ After `POSTGEN-G1`:
 
 ## Maintenance rule
 
-GitHub `main` は会話記憶より優先されるdurable stateである。実機PASS/FAIL、CURRENT architecture、既知不具合、検索上の重要発見、実装baselineが変わった場合、ユーザーから毎回「GitHub更新」と明示されなくても、作業の区切りで関連する正本・索引・checkpointの整合を確認し、必要なものを同じ作業単位で更新する。
+GitHub `main` は会話記憶より優先されるdurable stateである。実機PASS/FAIL、CURRENT architecture、既知不具合、検索上の重要発見、実装baseline、CURRENT execution planが変わった場合、ユーザーから毎回「GitHub更新」と明示されなくても、作業の区切りで関連する正本・索引・checkpointの整合を確認し、必要なものを同じ作業単位で更新する。
 
 更新トリガー:
 - CURRENT architecture / 次作業 / frozen boundary変更 → `research/PROJECT-HANDOFF.md`
+- CURRENT execution sequence / gate / sample count / stop condition変更 → 該当CURRENT plan + `PROJECT-HANDOFF.md`
 - 再発性bug・制約・workaround・解決状態変更 → `research/KNOWN-ISSUES.md`
 - 実機PASS/FAIL・version acceptance・operational milestone変更 → 該当 `research/experiments/*checkpoint*.md` と必要なら extension README
 - generation方式の本線・重要な棄却理由・実験遷移変更 → `research/MOTION-GENERATION-EXPERIMENT-LOG.md`
@@ -212,7 +213,7 @@ GitHub `main` は会話記憶より優先されるdurable stateである。実�
 - 外部検索の新しい軸・既存例・中国語圏/community/prior-artの重要発見 → `research/SEARCH-INDEX.md` + `research/chatgpt-project-practices/search-ledger.md` または該当topic note
 - 実装再利用・selector・内部構造・extension sourceの調査結果変更 → `research/reference/README.md` と該当reference/audit
 - live Custom GPT / browser runtime設定変更 → `research/runtime/` の該当snapshot
-- rootで見えるCURRENT statusや入口が変わる変更 → この `README.md`
+- rootで見えるCURRENT statusまたは入口が変わる変更 → この `README.md`
 
 運用ルール:
 1. 詳細をindexへ重複コピーせず、詳細記録を1か所に置いてindex/handoffからリンクする。
