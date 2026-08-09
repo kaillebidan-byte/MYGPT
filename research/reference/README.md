@@ -2,6 +2,10 @@
 
 This directory is for implementation lookup material that should prevent repeated re-analysis of supplied extension archives.
 
+**外部事例・中国語圏・論文・公開GPT・community prior artを探す場合はこのdirectoryではなく `research/SEARCH-INDEX.md` から入る。**
+
+この `reference/` は、既に取得・解析した実装資産の内部構造や再利用箇所を探す入口。
+
 ## Worker Fanout reuse inventory — read first for implementation work
 
 1. `research/reference/2026-08-09-extension-reuse-inventory.md`
@@ -52,3 +56,11 @@ Current reuse direction:
 - combine with VoiceBridge for route/lifecycle/DOM diagnostics and Vivaldi background-tab behavior.
 
 The original AutoGPT archive is not stored in the repository; the reference docs carry the derived implementation information needed for normal work.
+
+## Lookup split
+
+Use:
+- `research/SEARCH-INDEX.md` — external existing examples / China-region / prior art / community implementations
+- `research/reference/README.md` — already-acquired implementation internals / reuse map
+- `research/PROJECT-HANDOFF.md` — CURRENT project state
+- `research/KNOWN-ISSUES.md` — current failure/constraint index
