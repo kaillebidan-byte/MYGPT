@@ -80,12 +80,25 @@ v0.4.4/v0.4.5で実機成功した生成・送信・回収経路は、新しい�
 
 ## Maintenance rule
 
-実機PASS/FAIL、CURRENT architecture、既知不具合、検索上の重要発見が変わった場合、ユーザーから毎回「GitHub更新」と明示されなくても、作業の区切りで該当CURRENT/index文書の整合を確認する。
+GitHub `main` は会話記憶より優先されるdurable stateである。実機PASS/FAIL、CURRENT architecture、既知不具合、検索上の重要発見、実装baselineが変わった場合、ユーザーから毎回「GitHub更新」と明示されなくても、作業の区切りで関連する正本・索引・checkpointの整合を確認し、必要なものを同じ作業単位で更新する。
 
-特に:
-- CURRENT変更 → `PROJECT-HANDOFF.md`
-- known issue変更 → `KNOWN-ISSUES.md`
-- 外部検索の新しい軸 → `SEARCH-INDEX.md` + search ledger/topic note
-- 実装検索導線 → `reference/README.md`
+更新トリガー:
 
-を放置しない。
+- CURRENT architecture / 次作業 / frozen boundary変更 → `research/PROJECT-HANDOFF.md`
+- 再発性bug・制約・workaround・解決状態変更 → `research/KNOWN-ISSUES.md`
+- 実機PASS/FAIL・version acceptance・operational milestone変更 → 該当 `research/experiments/*checkpoint*.md` と必要なら extension README
+- generation方式の本線・重要な棄却理由・実験遷移変更 → `research/MOTION-GENERATION-EXPERIMENT-LOG.md`
+- 新しいdecisionまたは旧decisionの撤回 → `research/decisions/` と、古い文書側のsupersession表示
+- 外部検索の新しい軸・既存例・中国語圏/community/prior-artの重要発見 → `research/SEARCH-INDEX.md` + `research/chatgpt-project-practices/search-ledger.md` または該当topic note
+- 実装再利用・selector・内部構造・extension sourceの調査結果変更 → `research/reference/README.md` と該当reference/audit
+- live Custom GPT / browser runtime設定変更 → `research/runtime/` の該当snapshot
+- rootで見えるCURRENT statusや入口が変わる変更 → この `README.md`
+
+運用ルール:
+
+1. 詳細をindexへ重複コピーせず、詳細記録を1か所に置いてindex/handoffからリンクする。
+2. 古いhandoff・incident・experimentは履歴として残し、後続証拠で結論が変わった場合は削除よりsupersessionを明示する。
+3. `CURRENT` と書かれた文書が後続実機結果と衝突していないか、節目ごとに確認する。
+4. 新しいWeb検索を始める前に `research/SEARCH-INDEX.md` と search ledgerを確認し、既調査の一般検索を無意味に繰り返さない。
+5. source codeの成功済み経路は、文書整備のためだけには変更しない。
+6. チャット終了時だけ更新するのではなく、実機acceptanceや設計判断が確定した時点でもdurable stateへ反映する。
