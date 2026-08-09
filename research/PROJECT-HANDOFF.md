@@ -1,78 +1,61 @@
 # MYGPT調整プロジェクト — CURRENT HANDOFF
 
-更新日: 2026-08-09 20:12 JST
+更新日: 2026-08-10 JST
 
 GitHub `main` をdurable stateの正本とする。未merge候補や古いhandoffをCURRENTとして扱わない。
 
 ## 次チャットで最初に読む
 
 1. `research/PROJECT-HANDOFF.md` — このCURRENT
-2. `research/decisions/2026-08-09-identity-quality-closed-loop-direction.md` — **現在のidentity-quality方向**
-3. `research/plans/2026-08-09-identity-quality-closed-loop-execution-plan.md` — **現在の実行順・gate・stop condition**
-4. `research/experiments/2026-08-09-post-image-dialogue-audit-loop-reassessment.md` — post-image dialogue / Actions再監査
-5. `research/prior-art/2026-08-09-identity-preserving-variation-isolated-workers.md` — identity研究 / ID-V1〜V4
-6. `research/SEARCH-INDEX.md` — 既存例 / prior art検索入口
-7. `README.md` — root status
-8. `extensions/mygpt-worker-fanout-v3/README.md` — Worker Orchestrator v0.5.0
-9. `research/KNOWN-ISSUES.md` — 既知不具合 / 制約
-10. `research/reference/README.md` — 実装・再利用資料入口
+2. `research/decisions/2026-08-10-post-image-critic-requires-explicit-followup-turn.md` — **POSTGEN-G1a-1後の最新runtime判断**
+3. `research/experiments/2026-08-10-postgen-g1a1-manual-result.md` — **G1a-1実機FAIL証拠**
+4. `research/plans/2026-08-09-identity-quality-closed-loop-execution-plan.md` — identity-quality全体計画
+5. `research/decisions/2026-08-09-identity-quality-closed-loop-direction.md` — closed-loop方向
+6. `research/prior-art/2026-08-09-identity-preserving-variation-isolated-workers.md` — identity研究
+7. `extensions/mygpt-worker-fanout-v3/README.md` — Worker Orchestrator v0.5.0
+8. `research/SEARCH-INDEX.md` — prior-art検索入口
+9. `research/KNOWN-ISSUES.md`
+10. `research/reference/README.md`
 
 ---
 
-## 1. CURRENT generation baseline
+## 1. Production generation baseline
 
 **Production v0 generalized PASS**
 
 Validated:
-- 1 canonical character
+- one canonical character
 - F1 = canonical
-- F2/F3/F4のみ独立生成
-- one worker = one local static pose
+- F2/F3/F4 are independent isolated generations
+- one worker sees one local static pose only
 - front-facing baseline
 - chroma background
-- generated frameを次frameのidentity sourceにしない
-- failed frameだけoriginal canonicalからlocal retry
+- generated frame is never promoted to identity source
+- failed frame retries from original canonical in a fresh isolated worker
 
-Generation-facing workerへ出さない:
+Do not expose to a generation-facing worker:
 - full motion
 - other slots
-- progress / sequence
-- board / sheet / 2x2 concepts
+- progress/sequence
+- board/sheet/2x2 concepts
 - previous generated frames as identity source
 
-Generation品質の正本:
-- `research/decisions/2026-08-08-production-v0-generalized-verdict.md`
-
----
-
-## 2. CURRENT production worker
-
-Name:
+Production worker remains unchanged:
 `MYGPT Single Frame Worker Test`
-
-Route:
-`/g/g-6a76f033fc088191846913f86ba0625d-mygpt-single-frame-worker-test`
 
 Validated default:
 - Instant
-- Image generation ON
+- Image Generation ON
 - Web OFF
 - Code/Data Analysis OFF
 - Knowledge NONE
 - Actions NONE
-- canonical direct reference
-- current one static pose only
-
-Important: current live Instructions explicitly stop after generation. Preserve this as the control baseline; do not edit it for the new audit-loop experiment.
-
-Runtime snapshot:
-- `research/runtime/2026-08-08-single-frame-worker-live-snapshot.md`
 
 ---
 
-## 3. CURRENT browser automation — Worker Orchestrator v0.5.0
+## 2. Browser automation baseline
 
-Source on `main`:
+Current extension on `main`:
 `extensions/mygpt-worker-fanout-v3/`
 
 Display/version:
@@ -82,270 +65,188 @@ Display/version:
 Status:
 **SELECTED-FOLDER LIVE PASS**
 
-Proven inherited core:
+Frozen/proven unless new evidence says otherwise:
 - one-worker-at-a-time preparation
 - 15s open settle
-- AutoGPT DataTransfer attachment
+- DataTransfer attachment
 - 15s attach settle
 - MAIN-world paste
-- Translation Loop native click
+- native send click
 - positive submit evidence
 - 5s cooldown
 - passive completion monitoring
-- v0.4.5 image recovery
-- v0.5.0 Run-time output-folder permission preflight
-- selected-folder final save LIVE PASS
+- image recovery
+- selected-folder permission preflight
+- verified output relocation
 
-Near-frozen unless new failure evidence appears:
-- `background.js`
-- attachment / paste / send primitives
-- terminal monitoring behavior
-- `image_collector.js`
-- `output_relocator.js`
+Do not patch `background.js`, `image_collector.js`, `output_relocator.js`, attachment/paste/send, or terminal monitoring for the current G1 result.
 
-### Session strategies
-
-`fresh-chat`
-- `supported: true`
-- LIVE PASS
-
-`branch-thinking`
-- `supported: false`
-- RESERVED ONLY
-
-Do not implement Branch by adding conditionals inside the proven fresh-chat engine. Future Branch logic belongs behind the strategy boundary.
+Session strategies:
+- `fresh-chat`: supported / LIVE PASS
+- `branch-thinking`: reserved / unsupported
 
 ---
 
-## 4. NEW runtime evidence — post-image dialogue
+## 3. Identity-quality direction
 
-User live evidence on 2026-08-09:
-- **Instantのみ**、画像モデルが生成を終えた後に対話モデルへ戻れることを確認。
+Goal: pet-feature-like stable visual variations from one canonical while changing pose/state.
 
-This materially expands the quality architecture.
-
-Confirmed only:
+Research-supported architecture remains:
 
 ```text
-Instant image generation
--> post-image dialogue stage can resume
+identity conditioning
+separate from
+pose/structure conditioning
+separate from
+evaluation/selection
 ```
 
-Not yet assumed:
-- Thinking has the same behavior
-- generated image bytes are automatically available to Code Interpreter
-- generated image file references are automatically transferable to GPT Actions
-
-OpenAI current GPT configuration docs confirm that custom GPTs can include image generation / Code Interpreter capabilities and external API Actions; Apps and Actions are the documented mutually-exclusive pair. This makes post-generation tool orchestration a valid test direction, but image-file transport remains a separate gate.
-
-Detailed record:
-- `research/experiments/2026-08-09-post-image-dialogue-audit-loop-reassessment.md`
+Longer-term candidates remain:
+- `ID-V1`: canonical as edit/source image
+- `ID-V2`: canonical + exactly one worker-local pose/structure guide
+- independent judge GPT
+- MaSC / DreamBench++ reuse after image transport gate
+- best-of-2 only for hard/failed frames
+- optional canonical-derived local crop only for persistent local drift
+- Branch -> Thinking later as an execution strategy, not identity conditioning
 
 ---
 
-## 5. CURRENT identity-quality direction — closed loop
+## 4. POSTGEN-G1a-1 — NEW LIVE RESULT
+
+Experimental clone:
+`MYGPT Single Frame Worker POSTGEN G1`
+
+Fixed pose:
+R2-B clear shallow bow, selected because its historical first-pass pose/identity/topology was PASS.
+
+G1a-1 attempted this assumption:
+
+```text
+one user pose request
+-> image generation
+-> automatic ordinary assistant POSTGEN_AUDIT text
+```
+
+Live result on 2026-08-10:
+- image generation succeeded;
+- generated portrait returned;
+- no `POSTGEN_AUDIT` body text appeared;
+- user reported `画像生成のみで本文無`;
+- DOM observation contained the user turn and an assistant/image turn whose extracted text was only `編集`;
+- no turn contained `POSTGEN_AUDIT`.
+
+Verdict:
+**G1a-1 FAIL — Instructions alone did not force same-user-turn post-image dialogue continuation.**
+
+Evidence:
+- `research/experiments/2026-08-10-postgen-g1a1-manual-result.md`
+
+Do not run the old G1a-2 orchestrator compatibility test yet. Its prerequisite audit turn did not exist.
+
+---
+
+## 5. Revised runtime decision
+
+Do not equate:
+
+```text
+image generation can be followed by dialogue-model use
+```
+
+with:
+
+```text
+image tool automatically continues into ordinary assistant text in the same user turn
+```
+
+The second behavior failed in G1a-1.
+
+CURRENT candidate architecture is now explicit-turn orchestration:
+
+```text
+USER TURN 1: local pose request
+-> image generation
+-> IMAGE_READY
+-> bind/capture generated candidate
+
+USER TURN 2: audit-only request
+-> dialogue model critic
+-> structured audit JSON
+-> ACCEPT / RETRY_REQUIRED
+```
 
 Decision:
-- `research/decisions/2026-08-09-identity-quality-closed-loop-direction.md`
+- `research/decisions/2026-08-10-post-image-critic-requires-explicit-followup-turn.md`
 
-Execution plan:
-- `research/plans/2026-08-09-identity-quality-closed-loop-execution-plan.md`
+This fits the browser extension well because it already has proven send/observe primitives.
 
-The plan, not this handoff, is the source of truth for exact sample counts, PASS/FAIL criteria, retry caps and stop conditions.
-
-The earlier identity plan remains useful:
-- `ID-V1` canonical as edit/source image
-- `ID-V2` canonical + one worker-local pose guide
-- `ID-V4` best-of-N isolated candidates
-- `ID-V3` optional canonical-derived detail crop
-
-But these now run inside a stronger architecture:
+Critical future ordering:
 
 ```text
-ORIGINAL CANONICAL
-+ one local pose/structure condition
-+ minimal text
-        |
-        v
-isolated generator
-        |
-        v
-IMAGE_READY
-        |
-        v
-post-image structured critic
-        |
-        +--> identity audit
-        +--> pose / topology audit
-        +--> optional read-only Action policy lookup
-        +--> optional machine metric after file-access gate
-        |
-        v
-ACCEPT / RETRY_REQUIRED
-        |
-        +--> ACCEPT: recover/finalize
-        |
-        +--> RETRY_REQUIRED:
-              NEW isolated worker
-              ORIGINAL canonical again
-              failed local constraints only
+GENERATION_COMPLETE
+-> bind generation turn + candidate image FIRST
+-> persist candidate metadata
+-> submit audit prompt
+-> wait for audit response
+-> parse audit
 ```
 
-### Research reused
-
-Do not invent evaluation from scratch first.
-
-Priority reuse:
-- DreamBench++ — GPT/VLM concept-preservation and prompt-following evaluation
-- Beyond the Pixels — hierarchical feature-level identity audit
-- EditRefiner — perception -> reasoning -> localized action -> evaluation
-- MaSC — masked concept-preservation metric
-- existing MYGPT chroma removal for easy foreground masks
-
-`audit/scripts/machine_audit_board.py` remains mechanical/chroma-only; it explicitly does not judge identity.
+Do not rely on generic `latest assistant` after an audit turn exists.
 
 ---
 
-## 6. Actions / Code Interpreter boundary
+## 6. NEXT ONLY — manual explicit follow-up critic gate
 
-### First Action use — image bytes NOT required
+Use the **same G1a-1 conversation that already contains the R2-B generated image**.
 
-Preferred narrow endpoints:
+Do not regenerate.
+Do not open a new chat.
+Do not change GPT settings.
+Do not enable Action or Code Interpreter yet.
 
-```text
-getAuditPolicy(version)
-recordAudit(run_id, slot_id, candidate_id, audit_json)
-getRetryPolicy(failure_codes)
-```
+Send one second user message that explicitly says this is not an image-generation request and asks for audit-only structured text of the immediately preceding generated image against the attached canonical and R2-B target.
 
-Use Actions after image generation so GitHub/policy/tool context does not enter the generation-facing packet.
+PASS if:
+- no second image is generated;
+- ordinary dialogue-model text is returned;
+- result contains the requested structured audit;
+- the critic clearly evaluates the already-generated candidate in the same conversation.
 
-Do not give the generator a broad general-purpose GitHub API surface if a small read-only policy endpoint is enough.
+If PASS:
+- next isolate Action on this explicit audit turn;
+- then Code Interpreter file access separately;
+- only after that design extension state changes.
 
-### Image metric Action — later
-
-Only after image transport is proven:
-
-```text
-runIdentityMetric(canonical, candidate)
-```
-
-Do not assume historical `openaiFileIdRefs`-style generated-image transfer works automatically.
-
-### Code Interpreter — gated
-
-Potential:
-- post-image dialogue reads versioned scripts/specs
-- run deterministic local checks
-- combine machine JSON + visual critic JSON
-
-First verify generated image is actually accessible to Code Interpreter after native image generation.
-
-If not, keep Code Interpreter out of the critical path and use external/browser image transport later.
+If FAIL:
+- same-worker post-image critic is not dependable in this form;
+- move evaluation toward an independent judge GPT using recovered candidate + canonical.
 
 ---
 
-## 7. Same-worker critic vs independent judge
-
-### Same-worker post-image critic
-
-Use first because:
-- no candidate-image transport needed
-- canonical + generated result are already in context
-- lowest implementation cost
-
-Role:
-- diagnostic structured audit only
-- no unbounded autonomous same-chat regeneration
-
-### Independent judge GPT
-
-Preferred final evaluator if self-audit is biased.
-
-Possible flow:
-
-```text
-generator worker
--> candidate capture/recovery
--> separate judge GPT
-   canonical + candidate
--> structured identity verdict
-```
-
-Judge can be non-generating, so multi-image comparison does not create the generation-time 2x2/sheetification risk.
-
----
-
-## 8. CURRENT EXECUTION PLAN
-
-Operational source:
-- `research/plans/2026-08-09-identity-quality-closed-loop-execution-plan.md`
-
-Current gated sequence:
-
-1. Phase 0 — clone an experimental audited Custom GPT; keep production worker unchanged.
-2. Phase 1 / `POSTGEN-G1` — characterize Instant post-image turn/tool/collector behavior before changing code.
-3. Phase 2 / `ID-V1` — control wording vs canonical edit/source wording; initial screen = 2 independent candidates per condition on R1 and R2 stress classes.
-4. Phase 3 / `ID-V2` — only if text-only pose conditioning remains a material failure source; add exactly one worker-local minimal pose guide.
-5. Phase 4 — compare same-worker critic with an independent non-generating judge using already-generated candidates.
-6. Phase 5 — reuse MaSC / DreamBench++ only after image transport is solved.
-7. Phase 6 — best-of-2 only as a gated hard-frame retry; initial cap = 2 candidates per slot before human escalation.
-8. Phase 7 — optional one canonical-derived local crop only for persistent localized drift.
-9. Phase 8 — Branch -> Thinking later as a separate execution-strategy comparison.
-
-### Immediate next action — `POSTGEN-G1`
-
-Before changing identity prompts or browser collector logic:
-
-1. create/clone the experimental audited Custom GPT;
-2. leave production worker unchanged;
-3. do not change Worker Orchestrator v0.5.0 code;
-4. use one known local pose packet;
-5. generate one candidate under Instant;
-6. force one short structured post-image text audit without a second image generation;
-7. record whether image/audit are same turn or separate turns;
-8. record terminal-monitor evidence and current collector result;
-9. test a narrow read-only Action after generation if configured;
-10. Code Interpreter image accessibility is an optional separate subtest, not a prerequisite for the first PASS.
-
-Do not patch `image_collector.js` or introduce `IMAGE_READY/AUDITING` states before this evidence exists.
-
----
-
-## 9. Frozen boundaries
+## 7. Frozen boundaries
 
 Until contrary evidence:
-- original canonical remains sole identity source
-- generated frame is never promoted to canonical
+- original canonical is the sole identity authority
 - one pose/state per generation-facing worker
-- no 4-pose guide or sequence context in generator
-- no F2 -> F3 -> F4 image chaining
+- no generated-frame chaining
+- no multi-pose generator context
 - fresh isolated retry
-- v0.5.0 successful fanout/recovery/output core stays intact
+- production worker unchanged
+- Worker Orchestrator v0.5.0 unchanged
+- no autonomous unlimited regenerate/edit loop
 
 ---
 
-## 10. Search / prior-art route
+## 8. Repository maintenance
 
-Before new external research:
-
-`research/SEARCH-INDEX.md`
--> `research/chatgpt-project-practices/search-ledger.md`
--> relevant topic note / prior-art
-
-Do not repeat broad searches already marked DONE unless new runtime evidence creates a genuinely new angle.
-
----
-
-## 11. Repository maintenance rule
-
-At each meaningful result, update durable state without waiting for an explicit GitHub-update request:
+At each meaningful result update without waiting for an explicit request:
 1. CURRENT / next action -> `PROJECT-HANDOFF.md`
-2. execution order / gates / stop conditions -> current execution plan
-3. known issue -> `KNOWN-ISSUES.md`
-4. version PASS/FAIL -> checkpoint + extension README + root README as needed
-5. external/prior-art result -> `SEARCH-INDEX.md` + topic note
-6. implementation reuse result -> `reference/README.md` / audit note
-7. stale CURRENT text -> supersede or update
+2. gate/result -> experiment note
+3. changed runtime/architecture decision -> `research/decisions/`
+4. execution order / stop condition -> current plan
+5. known bug -> `KNOWN-ISSUES.md`
+6. external research -> `SEARCH-INDEX.md` + topic note
+7. successful code baseline -> extension README/checkpoint/root README as appropriate
 
-Do not change frozen code merely for documentation consistency.
+Do not mutate frozen successful code for documentation-only reasons.
