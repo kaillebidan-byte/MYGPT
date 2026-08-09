@@ -14,190 +14,214 @@ OpenAI Support acknowledged on the OpenAI Developer Community (2026-07-19) that 
 Primary source:
 - https://community.openai.com/t/image-generation-broken-in-all-our-custom-gpts-since-the-new-default-model-the-gpt-returns-the-internal-mnt-data-png-path-instead-of-rendering/1383942/9
 
-Related reports in the same thread show the failure correlating strongly with Thinking and much lower failure on Instant, but account/session/client variability exists.
+Current official product documentation still says:
+- Images with thinking is supported on eligible paid ChatGPT plans;
+- GPTs with Image Generation enabled can use the current ChatGPT image-generation model.
 
-## Important variability / counterevidence already present before MYGPT N2
+Therefore the failure is treated as a runtime/tool-routing defect, not an intended product prohibition.
 
-The same community thread did **not** establish that all Custom GPT image generation was universally broken:
-- one user reported that their Custom GPT image generation still worked on iPad and on the web UI in Firefox/Chrome;
-- another user reported the same Custom GPT could work in some accounts/sessions and fail in others;
-- OpenAI Support itself described the Thinking/reasoning failure as affecting `some Custom GPTs`, not all Custom GPT sessions.
+## Current model-rollout caveat
 
-However, those reports did not cleanly prove the exact condition `Custom GPT + Thinking + successful native image generation`, because the successful Custom-GPT report did not state that Thinking was selected. A later reply explicitly asked that user to retry under Thinking.
+GPT-5.6 is progressively rolling out in ChatGPT. Paid reasoning selections may now map to GPT-5.6 Sol reasoning levels where available.
 
-Separate July 2026 community evidence also shows ordinary ChatGPT Thinking image generation can fail transiently and then succeed on retry, and another report described Thinking succeeding while Instant failed. Those are useful evidence that tool availability can be runtime/session-dependent, but they are not Custom-GPT-specific proof.
+New tests must record the exact visible model/reasoning label. Do not assume an older chat labelled `Thinking` and a current reasoning route are necessarily the same runtime.
 
-Therefore the pre-N2 evidence already supported this narrower interpretation:
-- the failure is intermittent / environment-dependent rather than a universal platform capability prohibition;
-- Thinking is disproportionately implicated in the Custom-GPT failure pattern;
-- success of a Custom GPT in an unspecified model mode does not prove Thinking success.
+Official current source:
+- https://help.openai.com/en/articles/20001354-gpt-56-in-chatgpt
 
-## MYGPT local counterexample added 2026-08-08
+---
 
-MYGPT later produced a direct local counterexample:
-- clean-seed branch of `MYGPT Single Frame Worker Test`
-- switched from Instant to Thinking inside the branched Custom-GPT conversation
-- native image generation succeeded
-- two A/B standalone portrait alternatives were returned
-- canonical reference and requested anatomical-right-arm pose remained effective
+## External variability / counterevidence
 
-See:
+The same Developer Community issue does **not** establish that all Custom GPT image generation is universally broken:
+- some users reported Custom GPT image generation working on particular clients/accounts;
+- failure rate varies across sessions/accounts;
+- OpenAI Support explicitly described the Thinking/reasoning issue as affecting `some Custom GPTs`.
+
+However, current reports also show:
+- capability minimalization does not reliably fix it;
+- a brand-new neutral GPT with only Image Generation can still fail;
+- explicit `render inline` / `do not expose /mnt/data` instructions can help some attempts but remain inconsistent;
+- re-prompting can sometimes force a second-attempt render but is not stable;
+- changing browsers/devices/accounts is diagnostic variability, not a production fix.
+
+Do not spend primary research cycles re-testing those as if they were established solutions.
+
+---
+
+## MYGPT local counterexample — N2
+
+MYGPT produced a direct local Thinking image-generation success on 2026-08-08.
+
+Actual route:
+
+```text
+Custom GPT / Instant
+-> canonical directly attached
+-> clean non-generating seed turn
+-> Branch in new chat
+-> switch branch to Thinking
+-> single-pose image request
+-> native image generation SUCCESS
+```
+
+Observed:
+- two A/B standalone portrait alternatives;
+- canonical reference remained effective.
+
+Record:
 - `research/experiments/2026-08-08-n2-branch-thinking-followup-result.md`
 
-This supersedes any project-level statement that Custom-GPT Thinking is inherently unable to generate images.
-It does **not** prove that Branch caused Thinking availability, nor that Thinking is as reliable as Instant.
+Important correction:
+- N2 disproves a universal `Custom GPT Thinking cannot generate images` rule;
+- N2 does **not** prove Branch caused the success;
+- N2 combined at least three variables: clean Instant seed, later model switch, and Branch.
 
-## 2026-08-10 re-search — existing workaround patterns
+Detailed causal reassessment:
+- `research/audits/2026-08-10-custom-gpt-thinking-imagegen-existing-methods-reassessment.md`
 
-Current official product documentation says:
-- ChatGPT Images 2.0 supports `images with thinking` on paid plans that include Thinking;
-- GPTs with Image Generation enabled in Capabilities can use the current ChatGPT image-generation model;
-- users can manually switch a Custom GPT conversation to another available model even when the GPT has a recommended model.
+---
 
-Therefore the observed failures are not documented as an intended capability prohibition.
+## Existing route candidates — revised ranking
 
-Existing workaround patterns found in OpenAI-hosted sources:
+### T0 — direct fresh Custom GPT + Thinking
 
-### W1 — Manually use Instant inside the Custom GPT
+Known-unreliable baseline class.
+Use as a matched control only after a candidate route passes.
 
-OpenAI Support's explicit temporary workaround for the known `Thinking -> /mnt/data or no image` pattern.
+### T1 — same-chat warm seed -> switch to Thinking, no Branch
 
-Verdict:
-- strongest support / most established workaround;
-- not a Thinking solution;
-- this is MYGPT's current production default.
+```text
+new Custom-GPT chat / Instant
+-> attach canonical
+-> clean seed, no image yet
+-> switch SAME chat to Thinking/reasoning
+-> image request
+```
 
-### W2 — Retry the same image request in Thinking
+Status:
+**UNTESTED / HIGHEST INFORMATION VALUE.**
 
-OpenAI Developer Community reports ordinary ChatGPT Thinking image generation sometimes fails once and succeeds on retry with the same valid concept.
+Why first:
+- isolates whether Branch was actually necessary in N2;
+- if T1 works, the useful factor may be warm context / delayed model switch rather than Branch.
 
-Verdict:
-- evidence that the failure can be transient;
-- weak as production strategy because success is nondeterministic;
-- not enough to call Thinking stable.
+### T2 — clean seed -> Branch -> Thinking
 
-### W3 — Use the Images/Create Image surface instead of ordinary chat routing
+Exact structural reproduction of N2.
 
-OpenAI's current Images documentation supports creating images through the Images surface / Create Image flow. Community reports describe cases where the Images page works while a normal Thinking chat fails.
+Status:
+- one local success;
+- reliability unknown;
+- run after T1 according to the focused gate.
 
-Verdict:
-- plausible route to force image-generation UX/tool routing;
-- not demonstrated to preserve a Custom GPT's Instructions/Knowledge/Actions context;
-- therefore not directly suitable for MYGPT worker production without an explicit inheritance test.
+### T3 — successful Instant image response -> retry/regenerate with Thinking
 
-### W4 — Clean seed -> Branch -> switch branch to Thinking -> image request
+Current ChatGPT UI officially supports retrying responses with Thinking/Pro.
 
-MYGPT local evidence:
-- fresh/clean Custom-GPT seed with canonical attached;
-- Branch in new chat;
-- switch branched conversation from Instant to Thinking;
-- native image generation succeeded once and returned A/B alternatives.
+Status:
+**UNTESTED inside MYGPT Custom-GPT native image generation.**
 
-Verdict:
-- strongest local Thinking success path;
-- causal mechanism unproven;
-- only one successful image-generation sample, so reliability remains unknown.
+Why worth testing:
+- first-party UI path;
+- preserves exact original request/context;
+- may initialize the reasoning/tool route differently from direct Thinking.
 
-### W5 — Use regular ChatGPT instead of the Custom GPT and reproduce the worker protocol in prompt/context
+### T4 — Images / Create Image surface
 
-A community workaround suggested copying the Custom GPT's instruction protocol into a normal ChatGPT session because ordinary ChatGPT image generation was more reliable for some users.
+Official supported image-generation surface.
 
-Verdict:
-- useful fallback for owner-only workflows;
-- loses the direct Custom-GPT configuration boundary unless the orchestrator reproduces it;
-- not preferred while MYGPT depends on Custom GPT worker configuration and future Actions.
+MYGPT limitation:
+- inheritance of Custom-GPT Instructions/Knowledge/Actions is not established.
 
-### W6 — Different client/browser/account/session
+Use only as fallback diagnostic.
 
-Community evidence shows substantial variability across browsers/devices/accounts/sessions, including Custom GPT image generation working for some users on iPad and web while others fail.
+### T5 — prompt-only forcing / no-commentary / render-inline instructions
 
-Verdict:
-- diagnostic fallback only;
-- not a controllable architecture-level solution.
+Historical community technique.
 
-## Current ranking for MYGPT
+Current 2026 defect evidence says prompt-only fixes remain inconsistent.
+Use only after route selection as a packet refinement, not as the main fix.
 
-For production stability:
-1. `Custom GPT + Instant` — proven local production path and OpenAI Support workaround.
-2. `Instant generation -> Branch/Thinking critic` — current promising role split; Thinking does not need to generate.
-3. `clean seed -> Branch -> Thinking image generation` — only if a controlled reliability test shows it is materially better than direct Thinking.
-4. direct `Custom GPT + Thinking image generation` — research-only until repeatability is demonstrated.
-5. Images/Create Image surface or normal-chat protocol copy — fallback experiments, because Custom-GPT context inheritance is not established.
+### T6 — ordinary ChatGPT with copied Custom-GPT protocol
 
-## Separate unresolved question: Instant output quality
+Community fallback when Custom GPT routing fails.
 
-The above workaround only establishes tool availability. It does NOT establish that Instant produces image outputs suitable for MYGPT.
+MYGPT limitation:
+- loses direct Custom-GPT boundary and future Actions unless reproduced externally.
 
-ChatGPT Images documentation says Thinking adds reasoning/tool use around image generation. It does not provide a MYGPT-specific guarantee that Instant and Thinking are equivalent for:
-- canonical identity fidelity
-- single-frame pose fidelity
-- garment/accessory topology
-- left/right correctness
-- exact endpoint/intermediate positioning
+Emergency fallback only.
 
-Therefore MYGPT must treat these as two independent gates:
+---
 
-1. `Thinking availability gate`
-   - can a Custom GPT in Thinking mode actually invoke and return native image generation?
+## Officially supported but not a Thinking fix
 
-2. `Instant quality gate`
-   - if Instant can generate, does it meet MYGPT's fidelity threshold?
+### Instant
 
-A Thinking failure caused by the known platform issue is not evidence against the context-isolated Custom GPT worker architecture itself.
-An Instant generation success is also not sufficient evidence that the architecture is production-usable unless fidelity passes.
+OpenAI Support's current explicit temporary workaround for the known Thinking-specific failure class.
 
-## Required controls
+This remains MYGPT's production generator because it is locally proven.
 
-To separate Custom-GPT effects from model-mode effects, compare the same canonical and exact same static prompt across:
-- normal Chat / Thinking
-- normal Chat / Instant
-- Custom GPT / Thinking
-- Custom GPT / Instant
+### Branch
 
-Use fresh conversations and direct canonical attachment in every condition.
+`Branch in a new chat` is a first-party ChatGPT feature that creates a new conversation continuing from the chosen point.
 
-For the Branch hypothesis, add a separate controlled pair:
-- Custom GPT / direct Thinking from fresh chat
-- Custom GPT / clean-seed Branch -> switch to Thinking
+Branch is therefore a legitimate test mechanism, but not itself documented as an image-generation workaround.
 
-Do not infer Branch causality from one successful counterexample.
+### Retry with Thinking/Pro
 
-## Evaluation axes
+The current ChatGPT retry UI can regenerate a response with a reasoning model.
 
-Functional/tool gate:
-- image tool invoked
-- visible image returned
-- no `/mnt/data/...`-only response
-- no false claim that image generation is unavailable
+This is an official UI path and should be tested before building a custom browser workaround, but no official source says it fixes Custom-GPT image-generation routing.
 
-Carrier gate:
-- 1 image
-- 1 character
-- 1 pose
-- portrait
-- no multi-panel / labels / dividers
+---
 
-Pose gate:
-- anatomical right side correct
-- requested hand height correct
-- unaffected limbs/head/torso remain close to canonical
+## Separate GPT-Image-2 session-reuse issue
 
-Identity/topology gate:
-- proportions
-- silhouette
-- hat/hair boundary
-- chest emblem
-- large sleeve topology
-- waist ornament
-- tassel/cord attachment and count
-- lower garment
-- shoes
-- overlap / occlusion order
+A separate 2026 community investigation reports image/noise reuse across repeated generations in one session and recommends restarting/reloading a session for that image-quality/context-reuse problem.
 
-## Interpretation
+Do not conflate that with the Custom-GPT Thinking `/mnt/data or no image` defect.
 
-- Custom Thinking fails, Custom Instant passes quality: worker architecture remains viable with Instant-only execution, while the Thinking path is affected by a runtime/platform defect in that session.
-- Custom Thinking succeeds: this disproves a universal Thinking-unavailable rule but does not establish reliability; compare output shape and fidelity separately.
-- Custom Instant generates but quality is materially worse than normal-chat controls: Custom GPT worker is not yet suitable.
-- Normal Instant is also materially worse: limitation likely comes from Instant-mode reasoning/prompt preparation rather than Custom GPT alone.
-- Custom Instant uniquely worse than Normal Instant: Custom-GPT runtime/configuration adds a separate quality problem.
+MYGPT's isolated fresh-worker architecture already limits repeated same-session image contamination.
+
+---
+
+## CURRENT focused test plan
+
+Source of truth:
+- `research/plans/2026-08-10-custom-gpt-thinking-imagegen-route-matrix.md`
+
+Immediate order:
+1. T1 same-chat warm seed -> Thinking, no Branch;
+2. if needed, T2 clean seed -> Branch -> Thinking;
+3. if both fail, T3 Instant image -> retry/regenerate with Thinking;
+4. only after a candidate route works, collect matched direct-T0 controls and repeatability samples.
+
+Do not begin with a broad `3+3` or `5+5` matrix.
+First isolate the causal route with the fewest attempts.
+
+A single success is a counterexample, not stability.
+A candidate route is promoted for quality testing only after a pragmatic repeatability screen (initially at least 4/5 native visible image returns).
+
+If no Thinking route reaches that level:
+- stop treating Thinking as production generator;
+- retain Instant generation;
+- use Thinking as critic/reasoner where its already-observed behavior is useful;
+- reopen only after product/runtime evidence changes.
+
+---
+
+## Separate unresolved quality question
+
+Tool availability and image quality are separate gates.
+
+Even if a Thinking route becomes repeatable, compare separately:
+- canonical identity fidelity;
+- pose fidelity;
+- garment/accessory topology;
+- left/right correctness;
+- endpoint positioning;
+- output multiplicity;
+- latency and browser-automation reliability.
+
+Do not replace Instant production solely because Thinking can invoke the image tool.
