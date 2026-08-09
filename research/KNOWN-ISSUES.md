@@ -1,6 +1,6 @@
 # MYGPT known issues / limitations index
 
-更新日: 2026-08-09 19:12 JST
+更新日: 2026-08-09 19:27 JST
 
 この文書は既知不具合・制約の**索引**。詳細な再現ログや原因分析は `research/incidents/` / `research/experiments/` / `research/audits/` に置く。
 
@@ -48,12 +48,13 @@ Status: `ACTIVE`
 現在の扱い:
 - production defaultはInstantを維持
 - 将来、`Instantで準備 -> Branch -> Thinking -> image generation` を独立実験する
-- selected-output acceptanceや画像差分分析より先に実装しない
+- v5では`branch-thinking` strategy名だけ予約し、v0.5.0では`unsupported`
+- selected-output acceptanceや画像差分分析より先にBranch実装を始めない
 
 Evidence:
 - `research/experiments/2026-08-08-n2-branch-thinking-followup-result.md`
 - `research/runtime/2026-08-08-single-frame-worker-live-snapshot.md`
-- `research/experiments/2026-08-09-worker-fanout-isolated-generation-recovery-output-checkpoint.md`
+- `research/plans/2026-08-09-worker-orchestrator-v5-architecture.md`
 
 ### KI-003 — `1 request = 1 image` は候補数保証にならない
 
@@ -101,7 +102,7 @@ Cause class:
 - that permission request requires a user gesture, so the service worker can detect `prompt` but cannot silently grant it.
 
 Prior-art result:
-- Chrome's official File System Access guidance uses `queryPermission()` then `requestPermission()` for stored handles;
+- Chrome official guidance uses `queryPermission()` then `requestPermission()` for stored handles;
 - Chrome documents VS Code Web as a concrete IndexedDB persisted-handle example;
 - `chrome.downloads` remains Downloads-relative and cannot silently target an arbitrary absolute directory;
 - mature helper libraries (`browser-fs-access`, `native-file-system-adapter`, `idb-keyval`) were checked, but none should be added wholesale for the current one-directory Chromium-only requirement;
@@ -110,21 +111,23 @@ Prior-art result:
 Evidence:
 - `research/prior-art/2026-08-09-selectable-output-directory-browser-prior-art.md`
 
-v0.4.7 current state:
-- reactive popup reauthorization is implemented;
-- its stored-handle + `requestPermission({mode:"readwrite"})` concept matches the standard pattern;
-- treat it as provisional because permission is currently discovered only after the long run reaches relocation.
+Main v0.4.7 state:
+- reactive popup reauthorization exists;
+- conceptually matches the standard stored-handle permission pattern;
+- remains provisional because permission is discovered after the long run reaches relocation.
 
-Next fix boundary:
-- preflight selected-directory write permission on the **Run user gesture before generation starts**;
-- if permission is `prompt`, request it then;
-- if denied/error, do not start F2/F3/F4;
-- retain post-run `PERMISSION_REQUIRED` as a defensive fallback if permission changes during a run;
-- do not modify v0.4.4 fanout, v0.4.5 collector, or relocation/write verification without new failing evidence.
+v0.5.0 candidate:
+- development branch: `worker-orchestrator-v5`;
+- custom-folder permission is preflighted from the **Run user gesture before generation starts**;
+- `prompt` -> `requestPermission({mode:"readwrite"})` during Run click;
+- denied/error -> abort before F2/F3/F4 worker creation;
+- granted -> existing proven fresh-chat engine starts;
+- post-run `PERMISSION_REQUIRED` remains only as a defensive fallback;
+- v0.4.4 fanout, v0.4.5 collector, and `output_relocator.js` are unchanged in the branch diff.
 
-Acceptance pending after preflight alignment:
-- Run resolves selected-folder permission before generation;
-- denied permission starts no workers;
+Acceptance pending:
+- branch v0.5.0 Run resolves selected-folder permission before generation;
+- denied permission starts zero workers;
 - granted permission permits normal three-worker generation and `Recovery: COMPLETE`;
 - final `Output: COMPLETE`;
 - F2/F3/F4 `output=COMPLETE/<filename>`;
@@ -133,8 +136,8 @@ Acceptance pending after preflight alignment:
 
 Evidence:
 - `research/experiments/2026-08-09-worker-fanout-isolated-generation-recovery-output-checkpoint.md`
-- `extensions/mygpt-worker-fanout-v3/README.md`
-- `research/prior-art/2026-08-09-selectable-output-directory-browser-prior-art.md`
+- `research/plans/2026-08-09-worker-orchestrator-v5-architecture.md`
+- branch `worker-orchestrator-v5:extensions/mygpt-worker-fanout-v3/README.md`
 
 ---
 
