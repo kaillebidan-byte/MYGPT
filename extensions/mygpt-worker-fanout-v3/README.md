@@ -1,208 +1,183 @@
 # MYGPT Worker Fanout v4
 
-Status: **v0.4.4 fanout LIVE PASS / v0.4.5 image recovery LIVE PASS / v0.4.6 selectable output folder STATIC PASS candidate — live test pending**
+Status: **v0.4.4 fanout LIVE PASS / v0.4.5 image recovery LIVE PASS / v0.4.6 selected-folder permission recovery FAIL / v0.4.7 fix STATIC candidate**
 
-Current architecture:
-
-```text
-Translation Loop control plane
-        +
-AutoGPT ChatGPT upload/paste/passive observer
-        +
-VoiceBridge-style lifecycle monitor
-        +
-v0.4.5 post-generation image recovery
-        +
-v0.4.6 optional user-selected output relocation
-```
-
-The current rule remains: do not redesign proven orchestration. New behavior is layered after the known-good path.
-
-## Proven v0.4.4 execution model
-
-The live-tested fanout path is unchanged:
-
-1. open exactly one worker tab and make it active;
-2. wait about 15 seconds (`OPEN_WAIT`);
-3. verify the Custom GPT identity and empty composer;
-4. attach the canonical using the existing AutoGPT `DataTransfer -> input.files -> change` path and bounded retry;
-5. wait about 15 seconds (`ATTACH_WAIT`);
-6. paste only that slot packet in MAIN world;
-7. arm the passive observer before activation;
-8. submit with Translation Loop / Prompt Stacker native `button.click()`; Enter fallback remains disabled;
-9. require positive submit evidence from Translation Loop DOM evidence and/or AutoGPT passive conversation fetch evidence;
-10. once positive submit evidence is confirmed, wait about 5 seconds (`COOLDOWN`);
-11. open the next slot worker without waiting for the previous image generation to complete.
-
-The 15-second waits absorb ChatGPT/Vivaldi UI timing around tab initialization and image attachment. Generation completion monitoring remains passive and never gates opening the next worker. Sequence waits are stored in runtime state and resumed by `chrome.alarms` (`mygpt-v4-sequence-step`). Worker tabs remain open for inspection.
-
-### v0.4.4 live evidence
-
-All three slots completed in the same run:
+Current source:
 
 ```text
-F2: COMPLETE | attach=autogpt-upload+visible-attachment/attachment-marker@attempt-1 | send=native-click/translation-loop-dom | done=image-turn-stable
-F3: COMPLETE | attach=autogpt-upload+visible-attachment/attachment-marker@attempt-1 | send=native-click/translation-loop-dom | done=oracle-action-bar
-F4: COMPLETE | attach=autogpt-upload+visible-attachment/attachment-marker@attempt-1 | send=native-click/translation-loop-dom | done=image-turn-stable
+extensions/mygpt-worker-fanout-v3/
 ```
 
-This is the baseline. Do not change its attachment, paste, submit, submit-evidence, sequencing or completion mechanisms without new failing evidence.
+Current manifest version: `0.4.7`.
 
-## v0.4.5 image recovery — LIVE PASS
+## Proven generation and recovery boundary
 
-v0.4.5 added image recovery without modifying `background.js`.
+The following path is live-proven and must not be redesigned without new failing evidence:
 
-After all F2/F3/F4 generations are `COMPLETE`:
+```text
+open F2 only
+-> 15 s OPEN_WAIT
+-> AutoGPT DataTransfer attachment
+-> 15 s ATTACH_WAIT
+-> MAIN-world slot paste
+-> Translation Loop native click
+-> positive submit evidence
+-> 5 s COOLDOWN
+-> open F3
+-> same
+-> open F4
+-> passive generation completion monitoring
+-> v0.4.5 image recovery
+```
 
-1. `image_collector.js` inspects the latest assistant turn in each worker;
-2. selects the largest generated-image candidate in that turn;
-3. saves it with `chrome.downloads` under `Downloads/MYGPT-Worker-Fanout/`;
-4. tracks the real browser download through `chrome.downloads.onChanged`;
-5. marks each slot `imageRecovery.status = COMPLETE` only after the download itself completes;
-6. reconciles persisted download ids if the MV3 service worker restarts.
+`background.js` owns the proven fanout. `image_collector.js` owns the proven generated-image recovery. Both remain unchanged in v0.4.7.
 
-The full F2/F3/F4 recovery path passed the live test on 2026-08-09.
+### v0.4.4 — isolated fanout LIVE PASS
 
-## v0.4.6 selectable output folder
+All F2/F3/F4 slots reached `COMPLETE` in one live run.
 
-v0.4.6 keeps both the v0.4.4 fanout and v0.4.5 collector unchanged. It adds a separate output layer.
+Frozen / near-frozen mechanisms:
 
-### Default mode
+- one-worker-at-a-time preparation;
+- `OPEN_SETTLE_MS = 15000`;
+- AutoGPT `DataTransfer -> input.files -> change` attachment;
+- bounded attachment retry;
+- `ATTACH_SETTLE_MS = 15000`;
+- MAIN-world synthetic paste;
+- observer-before-trigger ordering;
+- Translation Loop native click;
+- Enter fallback disabled;
+- positive submit evidence;
+- `SLOT_COOLDOWN_MS = 5000`;
+- runToken / stale async guard;
+- passive completion monitoring.
 
-If no custom folder is selected, behavior is unchanged:
+### v0.4.5 — image recovery LIVE PASS
+
+After all generation slots complete, `image_collector.js`:
+
+1. inspects the latest assistant turn in each worker;
+2. chooses the generated-image candidate;
+3. saves through `chrome.downloads` under `Downloads/MYGPT-Worker-Fanout/`;
+4. tracks actual browser-download completion;
+5. records `imageRecovery.status = COMPLETE` only after the download completes.
+
+The F2/F3/F4 generation-to-download path is live-proven.
+
+## Selected output folder layer
+
+The selected-folder feature is deliberately layered after v0.4.5.
+
+Default mode remains:
 
 ```text
 Downloads/MYGPT-Worker-Fanout/
 ```
 
-Runtime output state becomes `DEFAULT_DOWNLOADS` after the existing v0.4.5 recovery completes.
+Selected-folder mode uses:
 
-### Selected-folder mode
+- `output_directory_store.js` — persists `FileSystemDirectoryHandle` in IndexedDB and manages permission checks;
+- `output_relocator.js` — copies recovered image bytes to the selected directory, verifies exact byte size, then removes the temporary Downloads file;
+- `popup.js` — folder selection and permission-recovery UI.
 
-The popup now has:
+`output_relocator.js` is unchanged between v0.4.6 and v0.4.7.
 
-- `保存先フォルダを選択`;
-- `既定Downloadsに戻す`.
+## v0.4.6 live result — permission recovery FAIL
 
-The selected `FileSystemDirectoryHandle` is stored in extension-origin IndexedDB. Small metadata (`name`, revision, selected time, mode) is stored in `chrome.storage.local`.
-
-The custom-folder path runs only after `Recovery: COMPLETE`:
-
-1. resolve the existing v0.4.5 `imageRecovery.sourceUrl` inside the owning worker tab;
-2. fetch the image as a blob in that page context;
-3. transfer the image bytes to the service worker;
-4. create a uniquely named file in the selected directory;
-5. write through `createWritable()`;
-6. reopen the written file and require exact byte-size agreement;
-7. only after verification, remove the temporary v0.4.5 Downloads file with `chrome.downloads.removeFile`;
-8. mark the slot `outputTransfer.status = COMPLETE`.
-
-This intentionally uses v0.4.5 as a safe staging/recovery layer instead of replacing a live-proven collector during the first arbitrary-folder implementation.
-
-Name collisions use `name (1).ext`, `name (2).ext`, and so on rather than overwriting an existing output.
-
-If the stored directory handle no longer has write permission, the extension reports `Output: PERMISSION_REQUIRED` and does not silently redirect that selected-folder run to another destination. Re-select the folder from the popup to renew access.
-
-Changing the output directory after an already-completed run applies to later runs; it does not retroactively move an old completed run.
-
-## Layer ownership
-
-### Translation Loop 0.5.1
-
-- `runtime_guard.js` — runToken/stale-run rejection/serialized mutations;
-- `prompt_stacker_runner.js` — composer-local send discovery and native click;
-- `loop_core.js` — positive submit evidence;
-- `terminal_gate.js` — completion classification;
-- background/content lifecycle patterns and watchdog behavior.
-
-Prompt Stacker-derived code remains under `LICENSE-PROMPT-STACKER`.
-
-### AutoGPT 0.0.71
-
-- MAIN-world ChatGPT adapter;
-- file input re-resolution;
-- `DataTransfer -> input.files -> change` attachment;
-- bounded attachment retry;
-- synthetic paste;
-- observer-before-trigger nonce ordering;
-- passive conversation fetch/WebSocket observation;
-- conceptual precedent for keeping output/download handling separate from the generation engine.
-
-No Bearer capture or direct internal ChatGPT API calls are used.
-
-### VoiceBridge 0.2.6
-
-- long-lived monitor port;
-- background scan ping;
-- generation/turn-state observation;
-- hidden/background-tab rescan model.
-
-### v0.4.5 / v0.4.6 output layers
-
-- `image_collector.js` — proven browser-download recovery;
-- `output_directory_store.js` — selected directory handle persistence;
-- `output_relocator.js` — optional post-recovery verified relocation to the selected directory;
-- `service_worker.js` — thin import wrapper around the unchanged layers.
-
-## Extension-context invalidation
-
-A reloaded/updated extension invalidates old content-script contexts. The existing hard-stop behavior remains unchanged: old content instances clear reconnect/scan timers, disconnect monitor ports and observers, remove route/page listeners, and do not reconnect.
-
-For a clean live test after replacing the unpacked extension, Reset/close worker tabs from the previous version and reload the source Custom GPT tab before starting a new run.
-
-## Runtime sequence
-
-Generation per active slot:
-
-`QUEUED -> OPENING -> OPEN_WAIT -> VERIFYING/STAGED -> ATTACHED -> ATTACH_WAIT -> SUBMITTING -> SUBMITTED/GENERATING -> COOLDOWN`
-
-Completion later occurs passively as `SETTLING -> COMPLETE`.
-
-Post-generation output:
+The first selected-folder live run on 2026-08-09 produced:
 
 ```text
-all slots COMPLETE
-  -> Recovery PENDING/RECOVERING
-  -> Recovery COMPLETE
-  -> no selected directory: Output DEFAULT_DOWNLOADS
-  -> selected directory: Output PENDING/TRANSFERRING -> COMPLETE
+Phase: COMPLETE / COOLDOWN | Recovery: COMPLETE | Output: PERMISSION_REQUIRED
+F2: COMPLETE | image=COMPLETE/...F2.png | output=-
+F3: COMPLETE | image=COMPLETE/...F3.png | output=-
+F4: COMPLETE | image=COMPLETE/...F4.png | output=-
+output OUTPUT_DIRECTORY_PERMISSION_REQUIRED: {"permission":"prompt"}
 ```
 
-## v0.4.6 live test
+Interpretation:
 
-1. replace/reload the unpacked extension with v0.4.6;
-2. reload the source Custom GPT tab;
-3. open the popup and choose `保存先フォルダを選択`;
-4. choose a writable test directory and confirm the popup reports it as selected/writeable;
-5. run the normal F2/F3/F4 fanout once;
-6. require all three generation slots to reach `COMPLETE` through the existing v0.4.4 evidence path;
-7. require `Recovery: COMPLETE` through the existing v0.4.5 path;
-8. require `Output: COMPLETE` and each slot `output=COMPLETE/<filename>`;
-9. verify exactly the expected F2/F3/F4 outputs exist in the selected directory and open normally;
-10. verify the temporary files created under `Downloads/MYGPT-Worker-Fanout/` were removed after successful relocation;
-11. use `既定Downloadsに戻す` and confirm a later run retains the original v0.4.5 default behavior.
+- fanout succeeded;
+- all three image generations succeeded;
+- v0.4.5 download recovery succeeded;
+- failure was isolated to the selected-directory write permission;
+- the persisted directory handle still existed, but `queryPermission({mode:"readwrite"})` returned `prompt`;
+- the service worker cannot itself satisfy a permission prompt that requires a user gesture.
 
-## Static checks
+The original three images remained safely present in `Downloads/MYGPT-Worker-Fanout/` because relocation never reached verified completion.
 
-The selectable-folder layer has passed local static checks:
+## v0.4.7 — user-gesture permission recovery
+
+v0.4.7 fixes only the missing permission-recovery path.
+
+When the selected folder is still known but permission is no longer `granted`:
 
 ```text
-node --check output_directory_store.js
-node --check output_relocator.js
-node --check popup.js
-node --check service_worker.js
-python -m json.tool manifest.json
-node tests/test_output_directory.js
+Output: PERMISSION_REQUIRED
+        ↓
+popup button becomes
+保存先を再許可して保存
+        ↓
+user click
+        ↓
+existing FileSystemDirectoryHandle.requestPermission({mode:"readwrite"})
+        ↓
+permission granted
+        ↓
+output-directory metadata revision is renewed
+        ↓
+existing output_relocator.js observes the metadata change
+        ↓
+F2/F3/F4 relocation resumes
+        ↓
+write -> size verify -> temporary Downloads removal
 ```
 
-Expected output:
+The user does not need to choose a different directory merely because permission returned to `prompt`.
 
-```text
-Selectable output directory layer: PASS
-STATIC_PATCH_CHECKS=PASS
-```
+If the user actually wants a different folder while permission is already valid, the same control displays `保存先フォルダを変更` and opens `showDirectoryPicker()`.
 
-The live v0.4.6 folder-selection path is still pending.
+### Why this interaction is required
+
+File System Access directory handles can be stored in IndexedDB, but write permission is not guaranteed to remain granted. When permission must be requested again, `requestPermission()` must be triggered from a user interaction. Therefore a background service worker may detect `prompt`, but it cannot replace the popup click that grants access.
+
+## Selected-folder integrity rules
+
+These remain unchanged:
+
+- no selected directory -> `Output: DEFAULT_DOWNLOADS`;
+- existing destination names are not overwritten; `name (1).ext`, `name (2).ext`, etc. are used;
+- written file size must exactly match the source bytes;
+- temporary default-Downloads copy is removed only after destination verification;
+- no silent fallback to another directory after an explicitly selected directory fails;
+- no new `chrome.downloads.download()` is added to `output_relocator.js`.
+
+## v0.4.7 live acceptance
+
+After replacing/reloading the unpacked extension:
+
+1. reload the source Custom GPT tab because extension reload invalidates old content-script contexts;
+2. choose a test output folder;
+3. run normal F2/F3/F4 fanout;
+4. require generation `COMPLETE` and `Recovery: COMPLETE`;
+5. if `Output: PERMISSION_REQUIRED` appears, reopen the popup and click `保存先を再許可して保存`;
+6. grant write permission in the browser prompt;
+7. require `Output: COMPLETE`;
+8. require F2/F3/F4 `output=COMPLETE/<filename>`;
+9. verify the three files exist and open in the selected folder;
+10. verify temporary `Downloads/MYGPT-Worker-Fanout/` copies are removed only after successful relocation.
+
+A permission-recovery click is acceptable behavior when Chromium has returned the stored handle to `prompt`; automatic background prompting is not treated as an acceptance requirement.
+
+## Static contract
+
+`tests/test_output_directory.js` now requires:
+
+- manifest `0.4.7`;
+- selected-folder picker remains read/write;
+- popup contains `PERMISSION_REQUIRED` recovery logic;
+- popup exposes `保存先を再許可して保存`;
+- `output_directory_store.js` exposes `requestWritePermission()`;
+- existing `output_relocator.js` still performs write, size verification and cleanup without starting another browser download.
 
 ## External/product layers intentionally absent
 
