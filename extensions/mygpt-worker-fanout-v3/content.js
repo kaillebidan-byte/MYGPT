@@ -9,7 +9,7 @@
     CAPTURE: "MYGPT_V4_CAPTURE",
     OBSERVED: "MYGPT_V4_OBSERVED"
   });
-  const PAGE_OBS_EVENT = "MYGPT_V3_PAGE_OBSERVED"; // page observer event name kept for compatibility
+  const PAGE_OBS_EVENT = "MYGPT_V3_PAGE_OBSERVED";
   const MONITOR_PORT = "mygpt-worker-monitor";
 
   const STOP_SELECTORS = [
@@ -29,6 +29,8 @@
   let monitorPort = null;
   let reconnectTimer = null;
   let scanTimer = null;
+  let observer = null;
+  let runtimeBridgeDead = false;
   let currentHref = location.href;
   let lastGeneration = false;
 
@@ -44,12 +46,55 @@
     return currentWorkerIdentity()?.ok === true;
   }
 
+  function isContextInvalidatedError(error) {
+    return /extension context invalidated|context invalidated/i.test(String(error?.message || error || ""));
+  }
+
+  function stopRuntimeBridge() {
+    if (runtimeBridgeDead) return;
+    runtimeBridgeDead = true;
+    if (reconnectTimer !== null) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    if (scanTimer !== null) {
+      clearTimeout(scanTimer);
+      scanTimer = null;
+    }
+    if (observer) {
+      try { observer.disconnect(); } catch (_) {}
+    }
+    if (monitorPort) {
+      const port = monitorPort;
+      monitorPort = null;
+      try { port.disconnect(); } catch (_) {}
+    }
+    try { window.removeEventListener(PAGE_OBS_EVENT, onPageObserved); } catch (_) {}
+    try { window.removeEventListener("popstate", onPopState); } catch (_) {}
+    try { window.removeEventListener("hashchange", onHashChange); } catch (_) {}
+  }
+
+  function runtimeBridgeAlive() {
+    if (runtimeBridgeDead) return false;
+    try {
+      return Boolean(chrome?.runtime?.id);
+    } catch (error) {
+      if (isContextInvalidatedError(error)) stopRuntimeBridge();
+      return false;
+    }
+  }
+
   function safeRuntimeSendMessage(payload) {
+    if (!runtimeBridgeAlive()) return;
     try {
       const pending = chrome.runtime.sendMessage(payload);
-      if (pending && typeof pending.catch === "function") pending.catch(() => {});
-    } catch (_) {
-      // Extension reload/invalidation can throw synchronously before a Promise exists.
+      if (pending && typeof pending.catch === "function") {
+        pending.catch((error) => {
+          if (isContextInvalidatedError(error)) stopRuntimeBridge();
+        });
+      }
+    } catch (error) {
+      if (isContextInvalidatedError(error)) stopRuntimeBridge();
     }
   }
 
@@ -222,12 +267,16 @@
     };
   }
 
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (!message || typeof message.type !== "string") return false;
-    if (message.type === MSG.GET_IDENTITY) { sendResponse(buildIdentity()); return false; }
-    if (message.type === MSG.CAPTURE) { sendResponse({ ok: true, snapshot: capture() }); return false; }
-    return false;
-  });
+  try {
+    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+      if (!message || typeof message.type !== "string") return false;
+      if (message.type === MSG.GET_IDENTITY) { sendResponse(buildIdentity()); return false; }
+      if (message.type === MSG.CAPTURE) { sendResponse({ ok: true, snapshot: capture() }); return false; }
+      return false;
+    });
+  } catch (error) {
+    if (isContextInvalidatedError(error)) stopRuntimeBridge();
+  }
 
   function reportObserved(reason, pageEvent = null) {
     if (!isWorkerContext()) return;
@@ -238,10 +287,23 @@
     });
   }
 
-  window.addEventListener(PAGE_OBS_EVENT, (event) => reportObserved("page-observer", event?.detail || null));
+  function onPageObserved(event) {
+    if (runtimeBridgeDead) return;
+    reportObserved("page-observer", event?.detail || null);
+  }
+
+  function onPopState() {
+    if (!runtimeBridgeDead) reportObserved("popstate");
+  }
+
+  function onHashChange() {
+    if (!runtimeBridgeDead) reportObserved("hashchange");
+  }
+
+  window.addEventListener(PAGE_OBS_EVENT, onPageObserved);
 
   function postMonitorState(source) {
-    if (!monitorPort || !isWorkerContext()) return;
+    if (runtimeBridgeDead || !monitorPort || !isWorkerContext()) return;
     try { monitorPort.postMessage({ type: "mygpt-worker-monitor-state", source, snapshot: capture() }); }
     catch (_) {}
   }
@@ -258,37 +320,60 @@
   }
 
   function connectMonitor() {
-    if (!isWorkerContext() || monitorPort) return;
-    try { monitorPort = chrome.runtime.connect({ name: MONITOR_PORT }); }
-    catch (_) { scheduleReconnect(); return; }
+    if (runtimeBridgeDead || !isWorkerContext() || monitorPort || !runtimeBridgeAlive()) return;
+    try {
+      monitorPort = chrome.runtime.connect({ name: MONITOR_PORT });
+    } catch (error) {
+      if (isContextInvalidatedError(error)) {
+        stopRuntimeBridge();
+        return;
+      }
+      scheduleReconnect();
+      return;
+    }
     monitorPort.onMessage.addListener((message) => {
-      if (message?.type !== "mygpt-worker-scan-now") return;
+      if (runtimeBridgeDead || message?.type !== "mygpt-worker-scan-now") return;
       postMonitorState("background-ping");
     });
     monitorPort.onDisconnect.addListener(() => {
       monitorPort = null;
+      if (runtimeBridgeDead) return;
+      try {
+        const lastError = chrome.runtime.lastError;
+        if (lastError && isContextInvalidatedError(lastError)) {
+          stopRuntimeBridge();
+          return;
+        }
+      } catch (error) {
+        if (isContextInvalidatedError(error)) {
+          stopRuntimeBridge();
+          return;
+        }
+      }
       if (isWorkerContext()) scheduleReconnect();
     });
     postMonitorState("connect");
   }
 
   function scheduleReconnect() {
-    if (!isWorkerContext() || reconnectTimer !== null) return;
+    if (runtimeBridgeDead || !isWorkerContext() || reconnectTimer !== null) return;
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null;
-      if (isWorkerContext()) connectMonitor();
+      if (!runtimeBridgeDead && isWorkerContext()) connectMonitor();
     }, 1000);
   }
 
   function scheduleLocalScan(delay = 250) {
+    if (runtimeBridgeDead) return;
     clearTimeout(scanTimer);
     scanTimer = setTimeout(() => {
+      if (runtimeBridgeDead) return;
       const hrefChanged = location.href !== currentHref;
       const generation = generationIsActive();
       const generationChanged = generation !== lastGeneration;
       if (hrefChanged) {
         currentHref = location.href;
-        if (isWorkerContext()) connectMonitor();
+        if (!runtimeBridgeDead && isWorkerContext()) connectMonitor();
         else disconnectMonitor();
       }
       if (hrefChanged || generationChanged) {
@@ -300,9 +385,9 @@
   }
 
   lastGeneration = generationIsActive();
-  const observer = new MutationObserver(() => scheduleLocalScan(180));
+  observer = new MutationObserver(() => scheduleLocalScan(180));
   observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
-  addEventListener("popstate", () => reportObserved("popstate"));
-  addEventListener("hashchange", () => reportObserved("hashchange"));
+  addEventListener("popstate", onPopState);
+  addEventListener("hashchange", onHashChange);
   if (isWorkerContext()) connectMonitor();
 })();
