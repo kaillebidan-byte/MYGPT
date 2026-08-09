@@ -1,6 +1,6 @@
 # POSTGEN-G1 experimental Custom GPT configuration
 
-Date: 2026-08-09 JST
+Date: 2026-08-10 JST
 Status: **CURRENT TEST CONFIG / DO NOT APPLY TO PRODUCTION WORKER**
 
 ## Purpose
@@ -18,9 +18,7 @@ This worker exists only to characterize the post-image runtime under Instant. It
 
 ## Builder operation
 
-Use the current production worker as the source and choose the GPT editor more-options menu (`...`) -> duplicate GPT.
-
-Official OpenAI editor documentation confirms the duplicate option is available from the GPT editor more-options menu.
+Duplicate the current production worker from the GPT editor `...` menu.
 
 ## Name
 
@@ -30,22 +28,17 @@ Official OpenAI editor documentation confirms the duplicate option is available 
 
 `添付された基準画像から指定された1つの静止姿勢を1枚生成し、生成後に短い構造化監査だけを返すPOSTGEN-G1実験用GPT。`
 
-## Recommended model / runtime
+## Runtime / capabilities — G1a
 
-- keep the duplicated worker's current recommended model unchanged;
-- run the test on the Instant path;
-- do not switch to Thinking for POSTGEN-G1.
-
-## Capabilities — G1a first run
-
+- use Instant
 - Image generation: ON
 - Web search: OFF
 - Code Interpreter & Data Analysis: OFF
 - Actions: NONE
-- Apps: NONE / not active
+- Apps: not active
 - Knowledge: NONE
 
-Do not enable Action or Code Interpreter in the first run. Those are later subtests so tool failures cannot be confused with post-image dialogue behavior.
+Do not enable Action or Code Interpreter in the first run.
 
 ## Instructions — exact G1a text
 
@@ -103,18 +96,34 @@ POSTGEN_AUDIT {"identity_obvious_drift":true|false,"pose_obvious_error":true|fal
 このPOSTGEN_AUDITは生成後のruntime観測用であり、監査結果を使って同じ会話内で画像を直してはいけない。
 ```
 
-## G1a prompt
+## Fixed G1a-1 control input — R2-B
 
-Use one already-known pose packet from the current test set. Do not add a new difficult pose and do not add a visual pose guide.
+Do not choose a pose manually. POSTGEN-G1a-1 uses the historical R2-B pose that passed first-pass visual review.
 
-The user message should contain only the one local static-pose request used for the selected control pose. The canonical image is attached directly as usual.
-
-## Expected output shape
-
-Expected successful behavior:
+Attach original canonical `kokyo_base_20260805.png` directly and send exactly:
 
 ```text
-assistant/image generation
+人物は正面を向いたまま、両足を基準画像と同じ位置で接地させてください。腰から上の上体を前へ傾け、浅いお辞儀として明確に読める姿勢にしてください。頭部は上体と一緒に前下方へ追従させ、首だけを曲げないでください。身体を横向きや斜め横向きへ回転させず、正面基準を維持してください。両腕は新しい独立したジェスチャーを作らず、基準画像の左右関係を保ったまま身体の両側に置き、大袖は上体前傾に受動的に追従して自然に垂らしてください。膝を大きく曲げず、足の位置を変えないでください。それ以外の表情、衣装構造、装飾、体格は基準画像を維持してください。人物1体、1姿勢、全身、正面基準、縦長の1枚だけを生成してください。
+```
+
+Historical evidence for R2-B:
+- clear shallow bow PASS;
+- torso/head move as one posture;
+- no side rotation;
+- arms passive;
+- feet planted;
+- identity/topology usable;
+- neutral expression retained.
+
+References:
+- `research/experiments/2026-08-08-p1-r2-torso-bow-plan.md`
+- `research/experiments/2026-08-08-p1-r2-first-pass-result.md`
+- `research/audits/2026-08-08-p1-r2-final-composed-audit.md`
+
+## Expected output
+
+```text
+one image generation
 -> one generated image
 -> POSTGEN_AUDIT {...}
 -> stop
@@ -122,22 +131,17 @@ assistant/image generation
 
 No second image generation is allowed.
 
-## G1b Action subtest — only after G1a is understood
+## G1b / G1c
 
-Keep G1a instructions and generation behavior unchanged. Add one narrow read-only Action only.
+Do not enable Actions or Code Interpreter until G1a evidence has been reviewed.
 
-The first Action should return simple text/JSON and require no image upload. Its only purpose is to prove an Action can be called after image generation.
+G1b later:
+- one narrow read-only text/JSON Action;
+- no image upload.
 
-Do not introduce general GitHub browsing in the generator stage.
-
-## G1c Code Interpreter subtest — only after G1a/G1b
-
-Enable Code Interpreter & Data Analysis without changing the image-generation task.
-
-Question to test after image generation:
-- can the dialogue model access the generated image as a usable file/path from Code Interpreter?
-
-Do not install identity metrics yet. This is only a file-access gate.
+G1c later:
+- enable Code Interpreter only to test whether the generated image is available as a usable file/path;
+- do not install identity metrics yet.
 
 ## Frozen control
 
@@ -145,5 +149,5 @@ Do not modify:
 - `MYGPT Single Frame Worker Test`;
 - Worker Orchestrator v0.5.0 code;
 - production worker route/settings;
-- current canonical;
-- current generation packet semantics beyond the post-image audit addition in this clone.
+- original canonical;
+- generation semantics beyond the post-image audit addition in this clone.
