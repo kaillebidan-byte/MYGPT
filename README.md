@@ -7,10 +7,12 @@ GitHub `main` を正本とする。古い実験記録や過去handoffより、CU
 ## Start here
 
 1. `research/PROJECT-HANDOFF.md` — **現在地・次にやること・凍結済み方針**
-2. `research/KNOWN-ISSUES.md` — **既知不具合 / 制約 / 回避策 / 解決済み問題の索引**
-3. `research/SEARCH-INDEX.md` — **既存例検索 / 中国語圏調査 / prior art / community browser automation / 公開GPT調査の入口**
-4. `research/README.md` — **research全体の資料地図と読み順**
-5. `extensions/mygpt-worker-fanout-v3/README.md` — **Worker Orchestrator現行実装**
+2. `research/decisions/2026-08-09-identity-quality-closed-loop-direction.md` — **現在のidentity-quality方向**
+3. `research/experiments/2026-08-09-post-image-dialogue-audit-loop-reassessment.md` — **post-image dialogue / Actions再監査**
+4. `research/KNOWN-ISSUES.md` — **既知不具合 / 制約 / 回避策 / 解決済み問題の索引**
+5. `research/SEARCH-INDEX.md` — **既存例検索 / 中国語圏調査 / prior art / community browser automation / 公開GPT調査の入口**
+6. `research/README.md` — **research全体の資料地図と読み順**
+7. `extensions/mygpt-worker-fanout-v3/README.md` — **Worker Orchestrator現行実装**
 
 実装内部を探す場合は `research/reference/README.md` から入る。
 外部例を探す場合は `research/SEARCH-INDEX.md` から入る。
@@ -28,6 +30,7 @@ GitHub `main` を正本とする。古い実験記録や過去handoffより、CU
 - front-facing baseline camera
 - chroma background
 - deterministic board / strip post-processing
+- generated frameを次frameのidentity sourceにしない
 
 Generation品質の正本:
 - `research/decisions/2026-08-08-production-v0-generalized-verdict.md`
@@ -49,49 +52,121 @@ User live confirmation on 2026-08-09:
 - final selected output directory save succeeded
 - files were confirmed present in the selected directory
 
-v0.5.0 follows the reviewed Chrome / VS Code Web File System Access lifecycle:
-
-```text
-Run click
--> queryPermission({mode:"readwrite"})
--> if needed requestPermission({mode:"readwrite"}) while user gesture exists
--> granted: start proven fresh-chat fanout
--> recovery
--> verified relocation to selected directory
-```
-
 The successful v4 generation/recovery core remains unchanged. In particular, `background.js`, `image_collector.js`, `output_relocator.js`, attachment, paste, native send, submit evidence and completion monitoring were not redesigned for v0.5.0.
-
-Prior-art record:
-- `research/prior-art/2026-08-09-selectable-output-directory-browser-prior-art.md`
 
 Operational checkpoint:
 - `research/experiments/2026-08-09-worker-fanout-isolated-generation-recovery-output-checkpoint.md`
 
 ### Session strategy boundary
 
-v0.5.0 introduces an explicit session strategy registry:
-- `fresh-chat` — SUPPORTED / LIVE PASS; routes to the proven v4 run engine
-- `branch-thinking` — RESERVED / `supported:false`; future only
+v0.5.0 strategies:
+- `fresh-chat` — SUPPORTED / LIVE PASS
+- `branch-thinking` — RESERVED / `supported:false`
 
-Future `Instant preparation -> Branch -> Thinking -> generation` work should be implemented as a separate session engine rather than by inserting a large conditional chain into the proven fresh-chat engine.
+Future Branch/Thinking work remains a separate session engine and must not be inserted into the proven fresh-chat state machine.
 
-Architecture record:
-- `research/plans/2026-08-09-worker-orchestrator-v5-architecture.md`
+### NEW — post-image dialogue under Instant
 
-### Remaining edge cases
+User live evidence:
+- under the tested **Instant** path, the dialogue model can resume after native image generation finishes.
+- Thinking has not been verified for this behavior yet.
 
-The successful selected-folder path is accepted. These defensive cases are not yet separately exercised:
-- explicit permission denial before Run
-- permission revocation during an active long run
+This reopens post-generation quality control inside a Custom GPT without requiring generation to be the terminal step.
 
-They do not block the current successful selected-folder baseline.
+Do not overclaim:
+- post-image dialogue is live evidence;
+- generated-image bytes automatically reaching Code Interpreter or Actions is **not** yet proven.
 
-## Next main topic
+Detailed reassessment:
+- `research/experiments/2026-08-09-post-image-dialogue-audit-loop-reassessment.md`
 
-Worker output-folder development is closed for now after the v0.5.0 live pass.
+### CURRENT identity-quality direction — closed loop
 
-Return to the paused **image-difference analysis**. Do not expand Branch/Thinking automation unless its priority is explicitly raised or new evidence requires it.
+Current decision:
+- `research/decisions/2026-08-09-identity-quality-closed-loop-direction.md`
+
+Working architecture:
+
+```text
+ORIGINAL CANONICAL
++ one worker-local pose/structure condition
++ minimal local text
+        |
+        v
+isolated generator
+        |
+        v
+IMAGE_READY
+        |
+        v
+post-image structured critic
+        |
+        +--> identity / pose / topology audit
+        +--> optional narrow Action policy lookup
+        +--> optional machine metric after image-file gate
+        |
+        v
+ACCEPT / RETRY_REQUIRED
+        |
+        +--> ACCEPT: recover/finalize
+        |
+        +--> RETRY_REQUIRED:
+              NEW isolated worker
+              ORIGINAL canonical again
+              failed local constraints only
+```
+
+Prior-art reuse before inventing new evaluation:
+- DreamBench++ — GPT/VLM concept-preservation evaluation
+- Beyond the Pixels — hierarchical feature-level identity comparison
+- EditRefiner — perception/reasoning/action/evaluation loop
+- MaSC — foreground-mask-based concept-preservation metric
+- existing MYGPT chroma removal for foreground masks
+
+The earlier identity candidates remain:
+- `ID-V1` — canonical as edit/source image
+- `ID-V2` — canonical + one local pose visual guide
+- `ID-V4` — best-of-N isolated candidates
+- `ID-V3` — optional canonical-derived detail crop
+
+But they now run **after** the post-image runtime gate.
+
+## NEXT ONLY — `POSTGEN-G1`
+
+Worker output-folder work is closed for now.
+
+Before changing identity prompts or browser collector logic, characterize the newly discovered post-image stage under Instant using a **separate experimental audited Custom GPT clone**.
+
+`POSTGEN-G1` must determine:
+1. image + final audit text are in the same assistant turn or separate turns;
+2. when current terminal monitoring marks the slot COMPLETE;
+3. whether current `image_collector.js` still selects the intended generated image;
+4. whether a read-only JSON/text Action can run after image generation;
+5. optionally, whether Code Interpreter can access the generated image as a usable file.
+
+Why this precedes ID-V1:
+- current collector searches the **latest assistant turn** for the image;
+- a post-image audit turn could change that assumption;
+- runtime evidence must precede state-machine or collector patches.
+
+If runtime requires it, future slot phases may become:
+
+```text
+GENERATING
+-> IMAGE_READY
+-> AUDITING
+-> ACCEPTED / RETRY_REQUIRED
+```
+
+Do not implement this before `POSTGEN-G1` evidence.
+
+After `POSTGEN-G1`:
+1. `ID-V1 + SELF-AUDIT`
+2. `ID-V2 + SELF-AUDIT`
+3. independent non-generating judge GPT comparison
+4. MaSC / DreamBench++ metric reuse after image transport gate
+5. best-of-2 only for hard frames
+6. Branch -> Thinking later, with post-image behavior revalidated separately
 
 ## Source-of-truth order
 
