@@ -1,6 +1,8 @@
 # MYGPT Worker Orchestrator v5
 
-Branch: `worker-orchestrator-v5`
+Current branch: `main`
+
+Promoted from development branch `worker-orchestrator-v5` through PR #10 after live success.
 
 Status: **v0.5.0 SELECTED-FOLDER LIVE PASS**
 
