@@ -1,7 +1,30 @@
 # Identity quality closed-loop — gated execution plan
 
 Date: 2026-08-09 JST
-Status: **CURRENT EXECUTION PLAN / IMPLEMENTATION NOT STARTED**
+Updated: 2026-08-10 JST
+Status: **CURRENT QUALITY PLAN / TEMPORARILY DEFERRED BY THINKING IMAGE-GENERATION ROUTE GATE**
+
+## Temporary priority override — 2026-08-10
+
+This remains the source of truth for the identity-quality phases, sample design, evaluator progression and stop conditions **after runtime routing is settled**.
+
+It is **not** the current immediate execution plan.
+
+The user-prioritized CURRENT focused gate is:
+- `research/plans/2026-08-10-custom-gpt-thinking-imagegen-route-matrix.md`
+
+Immediate NEXT ONLY is currently:
+- **T1 — same-chat warm Instant seed -> switch same chat to Thinking/reasoning -> R2-B image request, no Branch**.
+
+Reason:
+- historical N2 proved one Thinking image-generation success but confounded clean Instant seed, delayed model switch and Branch;
+- those route variables must be isolated before browser automation or identity-quality A/B work resumes.
+
+Resume this identity-quality plan only after the focused Thinking route gate reaches one of its stop conditions:
+1. a Thinking generator route reaches the pragmatic repeatability screen and is selected; or
+2. no route reaches that screen and production remains `Instant generator -> Thinking critic/reasoner`.
+
+Historical POSTGEN-G1 findings are retained below as evidence, but `POSTGEN-G1` is no longer NEXT ONLY.
 
 ## Goal
 
@@ -14,8 +37,11 @@ The plan assumes the following live-proven base:
 - each generator sees only the canonical + its own one-pose packet;
 - generated frames are never chained as identity sources;
 - Worker Orchestrator v0.5.0 fresh-chat generation/recovery/output is LIVE PASS;
-- under Instant, the dialogue model can resume after image generation;
-- selected-folder output is already solved.
+- selected-folder output is already solved;
+- Instant image generation is the current production generator;
+- post-image same-turn automatic audit did not occur in G1a-1;
+- Branch -> Thinking has produced a text-only structured critic result on an already-generated image;
+- historical N2 produced one native Thinking image-generation success through a clean-seed Branch route, but route causality/repeatability remain unresolved.
 
 The plan deliberately separates:
 
@@ -35,6 +61,8 @@ Related current decision:
 
 Runtime reassessment:
 - `research/experiments/2026-08-09-post-image-dialogue-audit-loop-reassessment.md`
+- `research/experiments/2026-08-10-postgen-g1a1-manual-result.md`
+- `research/experiments/2026-08-10-postgen-branch-thinking-critic-result.md`
 
 Prior art:
 - `research/prior-art/2026-08-09-identity-preserving-variation-isolated-workers.md`
@@ -59,7 +87,7 @@ Experimental changes belong in cloned experimental GPTs and, if browser code is 
 
 ---
 
-# Phase 0 — freeze control and create experimental audit worker
+# Historical Phase 0 — freeze control and create experimental audit worker
 
 ## Purpose
 
@@ -78,104 +106,30 @@ Validated control characteristics:
 - Code/Data Analysis OFF
 - Actions NONE
 - Knowledge NONE
-- stop after image generation
 
 ## Experimental worker
 
-Create a clone dedicated to post-image tests.
+`MYGPT Single Frame Worker POSTGEN G1` was created for the post-image runtime test.
 
-Initial experimental settings:
-- Instant
-- Image Generation ON
-- Web OFF
-- Code Interpreter OFF for the first POSTGEN-G1 run
-- one narrow read-only Action may be enabled only for the Action subtest
-- no broad GitHub repository access in generation-facing instructions
-- same canonical + one local pose only
+Historical G1a-1 result:
+- image generation succeeded;
+- automatic `POSTGEN_AUDIT` text did not appear in the same user turn;
+- therefore same-turn automatic continuation is not a valid architecture assumption.
 
-The only behavioral difference required for POSTGEN-G1 is:
-
-```text
-image generation
--> after image is ready, emit one short structured text audit
--> do not generate/edit another image
-```
-
-## Exit condition
-
-Experimental worker exists and the production/control worker is unchanged.
+This phase is evidence, not the current next action.
 
 ---
 
-# Phase 1 — POSTGEN-G1: characterize post-image runtime before changing code
+# Historical Phase 1 — POSTGEN-G1 runtime characterization
 
-Priority: **P0 / NEXT ONLY**
+POSTGEN-G1 established two useful facts:
 
-## Question
+1. Instructions alone did not force ordinary assistant audit text after native image generation in the same user turn.
+2. A later Branch -> Thinking path could inspect the already-generated image and return structured `POSTGEN_AUDIT` text without generating another image.
 
-What exactly happens in the ChatGPT DOM/runtime when Instant resumes dialogue after image generation?
+It also exposed the browser-side constraint that an audit-only assistant turn can become later than the image-bearing assistant turn, so a future audit integration must bind the generation turn/image before sending the audit request.
 
-This gate exists because current `image_collector.js` searches the **latest assistant turn** for the generated image.
-
-## Test input
-
-Use:
-- original canonical;
-- one already-understood local pose packet;
-- no other F2/F3/F4 context;
-- no visual pose guide yet;
-- no identity prompt experiment yet.
-
-## Post-image audit output
-
-Keep the first audit intentionally short and deterministic, for example a fixed JSON-shaped text object with fields such as:
-
-```text
-identity_obvious_drift
-pose_obvious_error
-topology_obvious_error
-verdict
-```
-
-The purpose is runtime observation, not high-quality identity scoring yet.
-
-## Required observations
-
-Record all of the following:
-
-1. image generation completes;
-2. dialogue model resumes without a second user turn if that is the observed behavior;
-3. image and audit text are in the same assistant turn or separate assistant turns;
-4. current completion monitor's terminal evidence and timing;
-5. current `image_collector.js` result;
-6. whether recovered image is still the correct candidate;
-7. whether audit text remains available after recovery;
-8. if a read-only Action is enabled, whether it can be called after image generation without triggering another image generation;
-9. optional later subtest: whether Code Interpreter can access the generated image as a usable file.
-
-## PASS criteria
-
-POSTGEN-G1 passes if:
-
-- image generation succeeds;
-- post-image audit text is produced;
-- runtime/DOM turn structure is understood;
-- generated image can still be deterministically identified/recovered, either by existing collector behavior or by an evidence-backed minimal selector change;
-- Action/tool use does not force generator context contamination.
-
-## Failure handling
-
-### Case A — current collector still works
-
-Do not modify collector/state machine.
-Proceed to Phase 2.
-
-### Case B — audit becomes a later assistant turn and collector misses image
-
-Patch only the image-turn binding / state boundary in a new extension version.
-Do not redesign attachment/paste/send/recovery/output.
-
-Candidate future states only if required by evidence:
+Potential future states remain:
 
 ```text
 GENERATING
@@ -184,30 +138,13 @@ GENERATING
 -> ACCEPTED / RETRY_REQUIRED
 ```
 
-The candidate image must be bound to the generation turn, not generic `latest assistant`.
-
-### Case C — post-image dialogue itself is unstable
-
-Do not build the quality loop around it yet.
-Fall back to external/independent judge experiments while preserving current generation baseline.
-
-## Deliverable
-
-Create a dedicated experiment record with:
-- exact experimental worker configuration;
-- DOM/turn evidence;
-- collector evidence;
-- Action evidence if tested;
-- Code Interpreter evidence if tested;
-- PASS/FAIL and next local patch, if any.
+Do not patch the current v0.5.0 collector/state machine during the manual Thinking route gate.
 
 ---
 
-# Phase 2 — ID-V1: canonical edit/source wording + structured self-audit
+# Phase 2 — ID-V1: canonical edit/source wording + structured audit
 
-Priority: **P1**
-
-Start only after POSTGEN-G1 is understood.
+Priority after runtime route selection: **P1**
 
 ## Hypothesis
 
@@ -270,9 +207,9 @@ Pose fields:
 
 ## Evaluators
 
-For this phase:
-- same-worker structured critic;
-- human review remains the acceptance authority.
+At first:
+- selected dialogue critic route if accepted;
+- human review remains acceptance authority.
 
 Do not add MaSC or a new judge GPT yet unless needed to resolve a disagreement.
 
@@ -281,10 +218,6 @@ Do not add MaSC or a new judge GPT yet unless needed to resolve a disagreement.
 Adopt edit/source wording only if it improves identity fidelity without a material loss in pose compliance across more than one stress class.
 
 If B improves one pose but harms the other, do not globally replace the control wording; classify when edit-source framing helps.
-
-## Output
-
-One A/B experiment note plus the exact winning/losing packet differences.
 
 ---
 
@@ -336,7 +269,7 @@ Use the same R1/R2 stress classes.
 
 Pose/topology improves while identity remains within the Phase 2 accepted range.
 
-If pose improves but identity degrades, the guide is too appearance-rich or role binding is unclear; simplify the guide before adding more identity text.
+If pose improves but identity degrades, simplify the guide before adding more identity text.
 
 ---
 
@@ -346,7 +279,7 @@ Priority: **P3**
 
 ## Purpose
 
-Measure whether the generator's own post-image critic is systematically optimistic, inconsistent, or blind to the same defects it produced.
+Measure whether the generator's own/post-image critic is systematically optimistic, inconsistent, or blind to defects.
 
 ## Judge GPT design
 
@@ -367,15 +300,15 @@ Because this GPT does not generate images, canonical + candidate comparison does
 Reuse already-generated Phase 2/3 candidates rather than generating a fresh dataset first.
 
 For each candidate, record:
-- same-worker critic verdict;
+- selected dialogue critic verdict;
 - independent judge verdict;
 - human verdict.
 
 ## Adoption rule
 
-Use independent judge as final gate if it tracks human review materially better than same-worker self-audit.
+Use independent judge as final gate if it tracks human review materially better.
 
-If both are similar, keep the simpler same-worker critic for first-line diagnosis and reserve independent judge for ambiguous/hard cases.
+If both are similar, keep the simpler critic for first-line diagnosis and reserve independent judge for ambiguous/hard cases.
 
 ---
 
@@ -402,14 +335,7 @@ At least one must be proven:
 
 Do not turn `machine_audit_board.py` into an identity metric; it remains geometry/chroma-only.
 
-## Role
-
 Machine metric is supporting evidence, not the only acceptance signal.
-
-Keep dimensions separate:
-- identity preservation;
-- pose compliance;
-- mechanical/background quality.
 
 ---
 
@@ -419,18 +345,11 @@ Priority: **P5**
 
 Only after an evaluator is trusted.
 
-## Default behavior
+Default behavior:
+- use one candidate first;
+- trigger a second independent candidate only when first candidate is `RETRY_REQUIRED`, the frame is a known-hard class, or the judge is uncertain.
 
-Do not double all generation cost globally.
-
-Use one candidate first.
-
-Trigger a second independent candidate only when:
-- first candidate is `RETRY_REQUIRED`;
-- the frame belongs to a known-hard class;
-- or the judge is uncertain.
-
-## Flow
+Flow:
 
 ```text
 original canonical + same local target
@@ -448,20 +367,14 @@ original canonical + same local target
 
 Never use candidate A as identity input for B.
 
-## Retry cap
-
 Initial research cap:
-- maximum 2 generated candidates per slot before escalating to human/manual review.
-
-Do not create an unlimited autonomous generation loop.
+- maximum 2 generated candidates per slot before human/manual review.
 
 ---
 
 # Phase 7 — optional canonical-derived local detail reference
 
 Priority: **P6 / only if failures remain localized**
-
-This corresponds to earlier `ID-V3`.
 
 Use only when evidence says one small structure repeatedly drifts despite accepted global identity conditioning.
 
@@ -473,39 +386,30 @@ Not allowed:
 - generated multiview;
 - multiple simultaneous identity crops by default.
 
-Test one region at a time, e.g. active sleeve or waist ornament.
+Test one region at a time.
 
 ---
 
-# Phase 8 — Branch -> Thinking execution strategy
+# Execution-strategy axis after route selection
 
-Priority: **LATER / separate axis**
+Thinking is not an identity-conditioning method. It is a runtime/execution strategy.
 
-Do not treat Thinking as an identity-conditioning method.
+The focused route matrix now tests these candidate generator routes before any automation:
+- T1 same-chat warm seed -> Thinking;
+- T2 clean seed -> Branch -> Thinking;
+- T3 Instant image -> retry/regenerate with Thinking;
+- T0 direct Thinking only as matched baseline.
 
-It is an execution/runtime strategy to test after the identity/audit loop is understood under Instant.
+If a route becomes repeatable, add it behind the existing session-strategy boundary rather than modifying the proven `fresh-chat` engine.
 
-Future gate:
+If no Thinking route reaches the route matrix acceptance screen, retain:
 
 ```text
-Instant preparation
--> Branch in new chat
--> verify Custom GPT identity/context
--> switch branch to Thinking
--> generate
--> verify post-image dialogue/tool behavior again
--> run the same accepted identity audit
+Instant = generator
+Thinking = optional critic/reasoner
 ```
 
-Required comparison:
-- Instant accepted pipeline vs Branch->Thinking accepted pipeline;
-- generation quality;
-- identity quality;
-- pose compliance;
-- post-image dialogue/tool reliability;
-- runtime/automation reliability.
-
-Do not modify the proven `fresh-chat` engine to implement Branch. Add a separate strategy behind the existing strategy boundary.
+and resume identity-quality work from Phase 2.
 
 ---
 
@@ -549,7 +453,7 @@ canonical identifier
 pose packet identifier
 conditioning variant
 candidate identifier
-same-worker audit JSON
+critic audit JSON
 independent-judge JSON if used
 machine metric JSON if used
 human verdict
@@ -567,12 +471,11 @@ Do not save only prose summaries. Structured evidence is required before automat
 Stop adding complexity when a simpler layer already solves the target reliably.
 
 Examples:
-
 - if ID-V1 materially improves identity and pose is already acceptable, do not force visual pose guides into production;
-- if same-worker critic tracks human judgment well, independent judge may remain a hard-case tool;
+- if the selected dialogue critic tracks human judgment well, independent judge may remain a hard-case tool;
 - if VLM/human evaluation is sufficient, do not add a heavyweight metric just because it exists;
 - if one candidate usually passes, best-of-2 remains retry-only;
-- if Instant already meets quality target, Branch->Thinking remains optional research.
+- if Instant already meets the quality target and no Thinking generator route is repeatable, do not block production on Thinking generation.
 
 The objective is pet-feature-like stable visual variation, not maximal pipeline complexity.
 
@@ -580,12 +483,9 @@ The objective is pet-feature-like stable visual variation, not maximal pipeline 
 
 # Immediate next action
 
-**Run Phase 1: POSTGEN-G1.**
+This plan is temporarily deferred.
 
-Before that run:
-1. create/clone the experimental audited Custom GPT;
-2. leave production worker unchanged;
-3. do not change Worker Orchestrator v0.5.0 code;
-4. use one known local pose packet;
-5. collect DOM/turn/recovery evidence;
-6. update this plan and CURRENT documents from the result before proceeding to ID-V1.
+Follow:
+`research/plans/2026-08-10-custom-gpt-thinking-imagegen-route-matrix.md`
+
+**NEXT ONLY: T1 same-chat warm seed -> Thinking/reasoning, no Branch.**
