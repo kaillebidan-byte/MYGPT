@@ -148,49 +148,168 @@
     return null;
   }
 
-  async function attachFile(fileSpec, options = {}) {
+  function fileInputReflects(input, file) {
+    const selected = input?.files?.[0] || null;
+    return Boolean(
+      input?.files?.length === 1 &&
+      selected &&
+      selected.name === file.name &&
+      selected.size === file.size &&
+      selected.type === file.type
+    );
+  }
+
+  async function dispatchAttachmentAttempt(file, options = {}) {
     const doc = options.document || document;
-    const made = createFile(fileSpec);
-    if (!made.ok) return made;
     const initial = await waitForComposer(doc, options.composerTimeout || 15000);
-    if (!initial) return { ok: false, reason: "COMPOSER_OR_FILE_INPUT_NOT_FOUND" };
+    if (!initial) return { ok: false, retryable: true, reason: "COMPOSER_OR_FILE_INPUT_NOT_FOUND" };
 
     const before = attachmentSnapshot(doc);
     const transfer = new DataTransfer();
-    transfer.items.add(made.file);
-    const input = getFileInput(doc); // re-resolve after React can remount composer
-    if (!input) return { ok: false, reason: "FILE_INPUT_NOT_FOUND" };
+    transfer.items.add(file);
+
+    // Re-resolve immediately before assignment. ChatGPT can remount the composer/file input.
+    const input = getFileInput(doc);
+    if (!input) return { ok: false, retryable: true, reason: "FILE_INPUT_NOT_FOUND" };
     try { input.files = transfer.files; }
     catch (error) {
-      return { ok: false, reason: "FILE_INPUT_ASSIGN_FAILED", detail: error instanceof Error ? error.message : String(error) };
+      return {
+        ok: false,
+        retryable: true,
+        reason: "FILE_INPUT_ASSIGN_FAILED",
+        detail: error instanceof Error ? error.message : String(error)
+      };
     }
-    if (input.files?.length !== 1) return { ok: false, reason: "FILE_INPUT_ASSIGN_NOT_REFLECTED" };
+    if (!fileInputReflects(input, file)) {
+      return { ok: false, retryable: true, reason: "FILE_INPUT_ASSIGN_NOT_REFLECTED" };
+    }
 
     // Exact AutoGPT primitive: one bubbling change event; no synthetic input event.
     input.dispatchEvent(new Event("change", { bubbles: true }));
+
     const settled = await waitForUploadSettled(doc, {
       timeout: options.uploadTimeout || 90000,
       interval: options.uploadInterval || 250,
       stableCycles: 3
     });
-    if (!settled) return { ok: false, reason: "UPLOAD_SETTLE_TIMEOUT", name: made.file.name };
+    if (!settled) {
+      return { ok: false, retryable: false, reason: "UPLOAD_SETTLE_TIMEOUT", sawSpinner: null };
+    }
 
-    // The worker is foregrounded while this runs. Require positive attachment UI
-    // evidence so a slot can never be submitted without the canonical image.
-    const visible = await waitFor(() => attachmentVisible(made.file.name, before, doc), {
-      timeout: options.attachmentUiTimeout || 10000,
+    // UI evidence is a guard against sending a text-only slot, but it is not allowed
+    // to turn one transient React/file-input miss into a permanent slot failure.
+    const visible = await waitFor(() => attachmentVisible(file.name, before, doc), {
+      timeout: options.attachmentUiTimeout || 5000,
       interval: 200
     });
-    if (!visible) return { ok: false, reason: "ATTACHMENT_UI_NOT_CONFIRMED", name: made.file.name };
+    if (!visible) {
+      return {
+        ok: false,
+        retryable: true,
+        reason: "ATTACHMENT_UI_NOT_CONFIRMED",
+        sawSpinner: settled.sawSpinner,
+        before,
+        after: attachmentSnapshot(doc)
+      };
+    }
+
     return {
       ok: true,
-      evidence: "autogpt-upload+visible-attachment",
       attachmentUiEvidence: visible.kind,
-      sawSpinner: settled.sawSpinner,
-      name: made.file.name,
-      size: made.file.size,
-      type: made.file.type
+      sawSpinner: settled.sawSpinner
     };
+  }
+
+  async function attachFile(fileSpec, options = {}) {
+    const doc = options.document || document;
+    const made = createFile(fileSpec);
+    if (!made.ok) return made;
+
+    const initial = await waitForComposer(doc, options.composerTimeout || 15000);
+    if (!initial) return { ok: false, reason: "COMPOSER_OR_FILE_INPUT_NOT_FOUND" };
+
+    // Preserve the known-good AutoGPT upload primitive. The only recovery added here
+    // is one bounded retry after re-resolving the React file input. This addresses the
+    // live F4-only race without touching submit/monitor behavior or allowing text-only send.
+    const originalSnapshot = attachmentSnapshot(doc);
+    const attempts = [];
+    const maxAttempts = Number.isFinite(options.maxAttachmentAttempts)
+      ? Math.max(1, Math.min(2, Math.floor(options.maxAttachmentAttempts)))
+      : 2;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      if (attempt > 1) {
+        // If the first attempt was merely slow, accept its late-arriving UI evidence
+        // instead of dispatching a second change and risking a duplicate attachment.
+        const late = attachmentVisible(made.file.name, originalSnapshot, doc);
+        if (late) {
+          return {
+            ok: true,
+            evidence: "autogpt-upload+visible-attachment",
+            attachmentUiEvidence: `${late.kind}@attempt-1-late`,
+            attachmentAttempts: 1,
+            recoveredLate: true,
+            name: made.file.name,
+            size: made.file.size,
+            type: made.file.type
+          };
+        }
+        await sleep(options.retryDelay || 750);
+        const afterDelay = attachmentVisible(made.file.name, originalSnapshot, doc);
+        if (afterDelay) {
+          return {
+            ok: true,
+            evidence: "autogpt-upload+visible-attachment",
+            attachmentUiEvidence: `${afterDelay.kind}@attempt-1-late`,
+            attachmentAttempts: 1,
+            recoveredLate: true,
+            name: made.file.name,
+            size: made.file.size,
+            type: made.file.type
+          };
+        }
+      }
+
+      const result = await dispatchAttachmentAttempt(made.file, {
+        document: doc,
+        composerTimeout: options.composerTimeout || 15000,
+        uploadTimeout: options.uploadTimeout || 90000,
+        uploadInterval: options.uploadInterval || 250,
+        attachmentUiTimeout: options.attachmentUiTimeout || 5000
+      });
+      attempts.push({
+        attempt,
+        ok: result.ok === true,
+        reason: result.reason || null,
+        sawSpinner: result.sawSpinner ?? null,
+        before: result.before || null,
+        after: result.after || null
+      });
+
+      if (result.ok) {
+        return {
+          ok: true,
+          evidence: "autogpt-upload+visible-attachment",
+          attachmentUiEvidence: `${result.attachmentUiEvidence}@attempt-${attempt}`,
+          attachmentAttempts: attempt,
+          sawSpinner: result.sawSpinner,
+          name: made.file.name,
+          size: made.file.size,
+          type: made.file.type
+        };
+      }
+      if (!result.retryable || attempt >= maxAttempts) {
+        return {
+          ok: false,
+          reason: result.reason || "ATTACHMENT_FAILED",
+          name: made.file.name,
+          attachmentAttempts: attempt,
+          attempts
+        };
+      }
+    }
+
+    return { ok: false, reason: "ATTACHMENT_FAILED", name: made.file.name, attempts };
   }
 
   async function pastePrompt(text, options = {}) {
@@ -258,7 +377,8 @@
     COMPOSER_SELECTOR, FILE_INPUT_SELECTOR, PROMPT_PARAGRAPH_SELECTOR, PROMPT_ROOT_SELECTOR, SUBMIT_SELECTOR,
     ATTACHMENT_UI_SELECTORS, normalizeText, getComposer, getFileInput, getPromptRoot, getPromptEditor,
     getSubmitButton, isUploading, attachmentSnapshot, attachmentVisible, editorText, composerStructuredText,
-    composerDraftText, waitFor, waitForComposer, createFile, waitForUploadSettled, attachFile, pastePrompt
+    composerDraftText, waitFor, waitForComposer, createFile, waitForUploadSettled, fileInputReflects,
+    dispatchAttachmentAttempt, attachFile, pastePrompt
   });
   globalScope.MYGPTChatGPTAdapter = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
