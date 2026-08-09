@@ -1,0 +1,82 @@
+name: Apply Worker Fanout v0.4.4
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-worker-v044.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Patch v0.4.4
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          root = Path('extensions/mygpt-worker-fanout-v3')
+
+          p = root / 'background.js'
+          s = p.read_text()
+          old = '''  await guard.mutateIfToken(token, (current) => ({\n    next: {\n      ...current,\n      phase: "MONITORING",\n      sequenceStage: "WAIT_COMPLETE",\n      nextActionAt: 0\n    }\n  }));\n  await clearSequenceAlarm();\n  await appendLog("slot_submitted", {\n    slotId: slot.slotId,\n    tabId: slot.tabId,\n    nonce,\n    proof: evidence.proof,\n    conversationId\n  });\n}\n'''
+          new = '''  await appendLog("slot_submitted", {\n    slotId: slot.slotId,\n    tabId: slot.tabId,\n    nonce,\n    proof: evidence.proof,\n    conversationId\n  });\n\n  // The sequential delay exists only to absorb ChatGPT/Vivaldi attachment and\n  // composer timing. Do not wait for image-generation completion before the\n  // next isolated worker is opened. Completion monitoring remains passive.\n  await scheduleAfterSequentialSlot(token, slot.slotId);\n}\n'''
+          assert old in s, 'submit WAIT_COMPLETE block not found'
+          s = s.replace(old, new, 1)
+          old2 = '''  if (complete) {\n    await appendLog("slot_complete", { slotId: slot.slotId, tabId, proof, source });\n    if (runtime.activeSlotId === slot.slotId && runtime.sequenceStage === "WAIT_COMPLETE") {\n      await scheduleAfterSequentialSlot(runtime.runToken, slot.slotId);\n    }\n  }\n'''
+          new2 = '''  if (complete) {\n    await appendLog("slot_complete", { slotId: slot.slotId, tabId, proof, source });\n  }\n'''
+          assert old2 in s, 'completion-gated advance block not found'
+          s = s.replace(old2, new2, 1)
+          p.write_text(s)
+
+          p = root / 'manifest.json'
+          s = p.read_text()
+          assert '"version": "0.4.3"' in s
+          p.write_text(s.replace('"version": "0.4.3"', '"version": "0.4.4"', 1))
+
+          p = root / 'README.md'
+          s = p.read_text()
+          s = s.replace('Status: **v0.4.3 STATIC PASS candidate — sequential one-worker-at-a-time live test pending**', 'Status: **v0.4.4 STATIC PASS candidate — submit-gated sequential fanout live test pending**')
+          s = s.replace('## v0.4.3 execution model', '## v0.4.4 execution model')
+          s = s.replace('''10. monitor the same worker until terminal completion;\n11. wait about 5 seconds (`COOLDOWN`);\n12. only then open the next slot worker.\n\nSequence waits are stored in runtime state and resumed by `chrome.alarms` (`mygpt-v4-sequence-step`). Completed worker tabs remain open for inspection; later workers are not opened early.''', '''10. once positive submit evidence is confirmed, wait about 5 seconds (`COOLDOWN`);\n11. open the next slot worker without waiting for the previous image generation to complete.\n\nThe 15-second waits exist only to absorb ChatGPT/Vivaldi UI timing around tab initialization and image attachment. Generation completion monitoring remains passive and never gates opening the next worker. Sequence waits are stored in runtime state and resumed by `chrome.alarms` (`mygpt-v4-sequence-step`). Worker tabs remain open for inspection.''')
+          s = s.replace('`QUEUED -> OPENING -> OPEN_WAIT -> VERIFYING/STAGED -> ATTACHED -> ATTACH_WAIT -> SUBMITTING -> SUBMITTED/GENERATING -> SETTLING -> COMPLETE -> COOLDOWN`\n\nThen the next slot begins. Errors are slot-local and also pass through the cooldown before continuing.', '`QUEUED -> OPENING -> OPEN_WAIT -> VERIFYING/STAGED -> ATTACHED -> ATTACH_WAIT -> SUBMITTING -> SUBMITTED/GENERATING -> COOLDOWN`\n\nThen the next slot begins immediately after the cooldown; `SETTLING -> COMPLETE` may occur later in parallel and is informational only. Errors are slot-local and also pass through the cooldown before continuing.')
+          p.write_text(s)
+
+          p = root / 'tests/test_sequential_workers.js'
+          s = p.read_text()
+          assert 'assert.match(source, /sequenceStage: "WAIT_COMPLETE"/);' in s
+          s = s.replace('assert.match(source, /sequenceStage: "WAIT_COMPLETE"/);', 'assert.doesNotMatch(source, /WAIT_COMPLETE/);')
+          marker = 'assert.match(source, /scheduleSequenceAlarm\\(token, "COOLDOWN", SLOT_COOLDOWN_MS\\)/);'
+          assert marker in s
+          s = s.replace(marker, marker + '\nassert.match(source, /await scheduleAfterSequentialSlot\\(token, slot\\.slotId\\);/);', 1)
+          p.write_text(s)
+
+          p = root / 'tests/test_v4_contract.js'
+          s = p.read_text()
+          assert 'assert.equal(manifest.version, "0.4.3");' in s
+          p.write_text(s.replace('assert.equal(manifest.version, "0.4.3");', 'assert.equal(manifest.version, "0.4.4");', 1))
+          PY
+      - name: Verify
+        shell: bash
+        run: |
+          set -e
+          cd extensions/mygpt-worker-fanout-v3
+          python -m json.tool manifest.json >/dev/null
+          for f in *.js; do node --check "$f"; done
+          for t in tests/*.js; do node "$t"; done
+      - name: Commit patched source
+        shell: bash
+        run: |
+          set -e
+          rm -f .github/workflows/apply-worker-v044.yml
+          git config user.name 'MYGPT automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Worker Fanout v0.4.4: advance after submit evidence'
+          git push origin HEAD:main
