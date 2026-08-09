@@ -1,6 +1,6 @@
 # MYGPT調整プロジェクト — CURRENT HANDOFF
 
-更新日: 2026-08-09 18:29 JST
+更新日: 2026-08-09 18:36 JST
 
 GitHub `main` を正本とする。チャット記憶、古いhandoff、superseded decisionだけを根拠に過去方式へ戻さない。
 
@@ -10,8 +10,9 @@ GitHub `main` を正本とする。チャット記憶、古いhandoff、supersed
 2. `research/KNOWN-ISSUES.md` — 現在の既知不具合 / 制約 / 解決済み問題
 3. `research/experiments/2026-08-09-worker-fanout-isolated-generation-recovery-output-checkpoint.md` — Worker Fanout最新実機checkpoint
 4. `research/decisions/2026-08-08-production-v0-generalized-verdict.md` — generation品質の正本
-5. `research/reference/README.md` — 実装・再利用資料の検索入口
-6. `research/runtime/2026-08-08-single-frame-worker-live-snapshot.md` — Custom GPT worker実機snapshot
+5. `research/SEARCH-INDEX.md` — 既存例 / 中国語圏 / prior-art / community検索の入口
+6. `research/reference/README.md` — 実装・再利用資料の検索入口
+7. `research/runtime/2026-08-08-single-frame-worker-live-snapshot.md` — Custom GPT worker実機snapshot
 
 research全体の資料地図:
 - `research/README.md`
@@ -91,7 +92,8 @@ Important supersession:
 - passive fetch/WS observationとBearer capture/direct internal APIは別機構として扱う
 - current Worker Fanoutはpassive evidenceを利用するが、Bearer captureやactive private APIをproduction前提にはしていない
 
-古い `research/decisions/2026-08-08-three-extension-synthesis.md` と過去handoffは履歴として残すが、CURRENT実装判断では2026-08-09のreference/audit/decisionを優先する。
+古い `research/decisions/2026-08-08-three-extension-synthesis.md` はhistorical decisionとして直接superseded化済み。
+現在の実装判断では2026-08-09のreference/audit/decisionを優先する。
 
 ---
 
@@ -208,7 +210,33 @@ F4 output=COMPLETE/<filename>
 
 ---
 
-## 7. Deferred — 今やらない
+## 7. External search / prior-art route
+
+新しい外部検索を始める前に:
+
+`research/SEARCH-INDEX.md`
+→ `research/chatgpt-project-practices/search-ledger.md`
+→ 該当topic note / prior-art
+
+を読む。
+
+既存資産:
+- 中国語圏 image-generation practices
+- 中国圏 character-consistency prior art
+- planner / isolated-worker既存例survey
+- OpenGPTs / Autojourney等の中国/community browser automation precedent
+- 公開画像生成Custom GPTのreuse調査
+
+同じ一般検索を言い換えて繰り返さない。
+
+特に:
+- `research/experiments/2026-08-08-n3-orchestration-ceiling.md` はprior-art記録として残すが、未検証結論はhistorical
+- `research/chatgpt-project-practices/planner-worker-isolation.md` は既存例surveyとして有効だが、外部API PoCを次候補とした当時の結論はCURRENTではない
+- `research/public-image-gpt-reuse/` は2026-08-07のhistorical再構築研究であり、CURRENT productionではない
+
+---
+
+## 8. Deferred — 今やらない
 
 ### Branch -> Thinking image generation
 
@@ -233,7 +261,7 @@ v0.4.6 acceptanceや画像差分分析より先に実装しない。
 
 ---
 
-## 8. Known issues
+## 9. Known issues
 
 索引:
 - `research/KNOWN-ISSUES.md`
@@ -249,14 +277,19 @@ v0.4.6 acceptanceや画像差分分析より先に実装しない。
 
 ---
 
-## 9. Handoff rule
+## 10. Handoff / repository maintenance rule
 
 `research/handoffs/` は過去時点のsnapshotとして保存する。
 
 次チャット開始時に古いhandoffをCURRENTとして採用しない。まずこの `PROJECT-HANDOFF.md` を読み、必要な場合だけ過去handoffへ降りる。
 
-CURRENTが変わったら:
-1. この文書を更新
-2. 必要なら `KNOWN-ISSUES.md` を更新
-3. 詳細証拠を `experiments/` / `incidents/` / `audits/` に保存
-4. root `README.md` のCURRENT statusが食い違っていないか確認
+ユーザーが毎回GitHub更新を明示しなくても、作業の区切りでCURRENTとの差分を確認する。
+
+更新対象:
+1. CURRENT / next action変更 → `PROJECT-HANDOFF.md`
+2. known issue変更 → `KNOWN-ISSUES.md`
+3. external searchの新軸 → `SEARCH-INDEX.md` + search ledger/topic note
+4. implementation lookup変更 → `reference/README.md`
+5. old `CURRENT` documentが後続証拠と衝突 → superseded化 / historical降格
+
+古い`CURRENT`表記を、後続実機結果と衝突したまま放置しない。
