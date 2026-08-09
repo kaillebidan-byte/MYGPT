@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "MYGPT Worker Fanout v4",
-  "version": "0.4.5",
-  "description": "Sequential isolated Custom GPT workers with proven v0.4.4 fanout plus post-generation recovery of each slot's generated image.",
+  "version": "0.4.6",
+  "description": "Sequential isolated Custom GPT workers with proven fanout, generated-image recovery, and optional user-selected output folders.",
   "permissions": [
     "storage",
     "tabs",
