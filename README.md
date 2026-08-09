@@ -41,11 +41,27 @@ Current proven boundary:
 - **v0.4.4** — sequential isolated F2/F3/F4 fanout: LIVE PASS
 - **v0.4.5** — generated-image recovery to default Downloads: LIVE PASS
 - **v0.4.6** — selected-folder first live run: `PERMISSION_REQUIRED` FAIL isolated after successful recovery
-- **v0.4.7** — popup user-gesture reauthorization fix: IMPLEMENTED / LIVE PENDING
+- **v0.4.7** — reactive popup reauthorization patch exists, but is **PROVISIONAL STATIC** pending alignment with reviewed prior art before another generation test
 
 v0.4.6 failure did **not** regress generation or recovery. The three images were recovered successfully to `Downloads/MYGPT-Worker-Fanout/`; only selected-directory relocation was blocked because the stored directory handle's write permission returned to `prompt`.
 
-v0.4.7 adds `保存先を再許可して保存` so a popup click can call `requestPermission({mode:"readwrite"})` on the existing handle and restart the unchanged relocation layer.
+Existing-solutions / prior-art review is now complete:
+- Chrome official / VS Code Web: persisted `FileSystemDirectoryHandle` in IndexedDB + `queryPermission` / `requestPermission`
+- `chrome.downloads`: Downloads-relative staging only
+- `idb-keyval`: optional tiny persistence helper, not required for current one-record no-bundler extension
+- GoogleChromeLabs `browser-fs-access`: useful reference/fallback wrapper, not a drop-in permission-resume layer
+- `native-file-system-adapter`: broader portability layer, unnecessary for current Vivaldi/Chromium scope
+- AutoGPT 0.0.71: output/download plumbing exists, but no arbitrary-directory permission module to transplant
+- Autojourney Pro Downloader: external desktop-companion alternative, not adopted while browser-only standard API remains viable
+
+Prior-art record:
+- `research/prior-art/2026-08-09-selectable-output-directory-browser-prior-art.md`
+
+Current next Worker Fanout action:
+- do **not** spend another generation run on the reactive-only v0.4.7 flow first;
+- preflight selected-directory write permission on the popup **Run user gesture** before starting F2/F3/F4;
+- keep post-run `PERMISSION_REQUIRED` only as a defensive fallback;
+- do not alter v0.4.4 fanout, v0.4.5 collector, or relocation/write verification without new failing evidence.
 
 Operational checkpoint:
 - `research/experiments/2026-08-09-worker-fanout-isolated-generation-recovery-output-checkpoint.md`
@@ -77,7 +93,7 @@ v0.4.4/v0.4.5で実機成功した生成・送信・回収経路は、新しい�
 - `research/experiments/` — PASS/FAIL実験記録とcheckpoints
 - `research/incidents/` — 不具合・失敗原因の詳細記録
 - `research/chatgpt-project-practices/` — Web検索台帳、Projects/imagegen調査、中国語圏調査、planner-worker既存例
-- `research/prior-art/` — 論文・先行研究
+- `research/prior-art/` — 論文・先行研究・browser implementation prior art
 - `research/public-image-gpt-reuse/` — 公開画像生成GPTのhistorical調査
 - `research/audits/` — source / architecture監査
 - `research/reference/` — 再利用・検索用implementation map
