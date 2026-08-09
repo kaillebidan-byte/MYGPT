@@ -1,23 +1,19 @@
 # MYGPT調整プロジェクト — CURRENT HANDOFF
 
-更新日: 2026-08-09 19:12 JST
+更新日: 2026-08-09 19:27 JST
 
-GitHub `main` を正本とする。チャット記憶、古いhandoff、superseded decisionだけを根拠に過去方式へ戻さない。
+GitHub `main` をdurable stateの正本とする。未mergeの実装候補はbranch名とstatusを明記し、main baselineと混同しない。
 
 ## 次チャットで最初に読む
 
 1. `research/PROJECT-HANDOFF.md` — このCURRENT
-2. `research/KNOWN-ISSUES.md` — 現在の既知不具合 / 制約 / 解決済み問題
-3. `research/experiments/2026-08-09-worker-fanout-isolated-generation-recovery-output-checkpoint.md` — Worker Fanout最新実機checkpoint
-4. `research/prior-art/2026-08-09-selectable-output-directory-browser-prior-art.md` — selected-folder既存例 / reuse判断
-5. `extensions/mygpt-worker-fanout-v3/README.md` — Worker Fanout現行source/version
-6. `research/decisions/2026-08-08-production-v0-generalized-verdict.md` — generation品質の正本
-7. `research/SEARCH-INDEX.md` — 既存例 / 中国語圏 / prior-art / community検索の入口
-8. `research/reference/README.md` — 実装・再利用資料の検索入口
-9. `research/runtime/2026-08-08-single-frame-worker-live-snapshot.md` — Custom GPT worker実機snapshot
-
-research全体の資料地図:
-- `research/README.md`
+2. `README.md` — root status / active development branch
+3. `research/KNOWN-ISSUES.md` — 既知不具合 / 制約
+4. `research/experiments/2026-08-09-worker-fanout-isolated-generation-recovery-output-checkpoint.md` — v0.4.x実機checkpoint
+5. `research/prior-art/2026-08-09-selectable-output-directory-browser-prior-art.md` — selectable folder既存例/reuse判断
+6. `research/plans/2026-08-09-worker-orchestrator-v5-architecture.md` — v5 architecture
+7. `research/SEARCH-INDEX.md` — 既存例 / 中国語圏 / prior-art / community検索入口
+8. `research/reference/README.md` — 実装・再利用資料入口
 
 ---
 
@@ -29,20 +25,20 @@ Validated scope:
 - 1 canonical character
 - F1 = canonical静止姿勢
 - one-shot motion
-- 4 keyposes total
 - F2/F3/F4のみ独立生成
 - front-facing baseline camera
 - chroma background
 - deterministic board / strip post-processing
 
-Current production rule:
+Current generation rule:
 - plannerはfull motionを理解してよい
-- workerへ渡すのはcanonical + current single static poseだけ
-- full motion / other slots / progress / F1-F4 sequence / board / sheet / 2x2 conceptsをworkerへ渡さない
+- generation workerへ渡すのはcanonical + current single static poseだけ
+- full motion / other slots / progress / sequence / board / sheet / 2x2 conceptsをworkerへ渡さない
 - generated frameを次frameのidentity sourceにしない
 - first-pass failureは失敗frameだけcanonicalからlocal retryする
 
-Generation品質を上げるためのglobal tuningはCLOSED。automation都合でworker isolationを弱めない。
+Generation品質の正本:
+- `research/decisions/2026-08-08-production-v0-generalized-verdict.md`
 
 ---
 
@@ -55,7 +51,7 @@ Route:
 `/g/g-6a76f033fc088191846913f86ba0625d-mygpt-single-frame-worker-test`
 
 Validated default:
-- GPT-5.6 Sol / Instant
+- Instant
 - Image generation ON
 - Web OFF
 - Code/Data Analysis OFF
@@ -64,178 +60,189 @@ Validated default:
 - canonical direct reference
 - current one static pose only
 
-Exact live configuration:
+Thinkingはproduction defaultではない。Branch後Thinking画像生成の成功例はあるが、direct Thinking failureとの因果は未確定。
+
+Runtime snapshot:
 - `research/runtime/2026-08-08-single-frame-worker-live-snapshot.md`
 
-Thinkingはproduction defaultではない。Branch後のThinking画像生成成功例はあるが、direct Thinking failureとの因果は未確定。
-
 ---
 
-## 3. CURRENT browser automation architecture
+## 3. Main baseline — Worker Fanout v4
 
-Current direction:
-
-```text
-Translation Loop control plane
-        +
-stripped AutoGPT ChatGPT adapter
-        +
-VoiceBridge lifecycle / hidden-tab observation
-```
-
-Implementation lookup:
-- `research/reference/2026-08-09-extension-reuse-inventory.md`
-- `research/reference/2026-08-09-autogpt-0.0.71-internal-structure-map.md`
-- `research/audits/2026-08-09-autogpt-0.0.71-deep-architecture-analysis.md`
-- `research/decisions/2026-08-09-autogpt-stripped-clone-current.md`
-
-Important supersession:
-- 2026-08-08時点の「AutoGPTはvisible UI primitiveだけ使う」「fetch observationは全面除外」という判断はsuperseded
-- passive fetch/WS observationとBearer capture/direct internal APIは別機構として扱う
-- current Worker Fanoutはpassive evidenceを利用するが、Bearer captureやactive private APIをproduction前提にはしていない
-
-古い `research/decisions/2026-08-08-three-extension-synthesis.md` はhistorical decisionとして直接superseded化済み。
-
----
-
-## 4. Worker Fanout proven boundary
-
-Source:
+Source on `main`:
 `extensions/mygpt-worker-fanout-v3/`
 
-Display family:
-`MYGPT Worker Fanout v4`
+### v0.4.4 — fresh isolated fanout LIVE PASS
 
-### v0.4.4 — isolated fanout LIVE PASS
-
-Live-proven path:
+Proven sequence:
 
 ```text
-F2 worker tabを1つだけ開く
+open F2
 -> 15s OPEN_WAIT
--> canonical attach
+-> AutoGPT DataTransfer attachment
 -> 15s ATTACH_WAIT
--> MAIN-world packet paste
+-> MAIN-world synthetic paste
 -> Translation Loop native click
 -> positive submit evidence
--> 5s COOLDOWN
--> F3を初めて開く
+-> 5s cooldown
+-> open F3
 -> same
--> F4
+-> open F4
 ```
 
-Generation completionは次slot開始条件ではない。各workerは送信後backgroundで生成を続ける。
+Generation completion does not gate opening the next slot. Completion monitoring remains passive.
 
-### v0.4.5 — generated-image recovery LIVE PASS
+### v0.4.5 — image recovery LIVE PASS
 
-- all generation slots COMPLETE後に回収開始
-- latest assistant turnからgenerated-image candidateを選択
+After F2/F3/F4 completion:
+- latest assistant turnからgenerated imageを回収
 - `chrome.downloads`で `Downloads/MYGPT-Worker-Fanout/` へ保存
-- browser downloadの実完了まで監視
+- browser downloadの実完了を確認
 - F2/F3/F4画像保存まで実機PASS
 
-v0.4.5がimage recovery baseline。
+This is the proven recovery baseline.
 
-### v0.4.6 — selected output folder LIVE FAIL isolated
+### v0.4.6 — selected-folder LIVE FAIL isolated
 
 Observed:
 
 ```text
-Phase: COMPLETE / COOLDOWN | Recovery: COMPLETE | Output: PERMISSION_REQUIRED
-F2 image=COMPLETE/...F2.png | output=-
-F3 image=COMPLETE/...F3.png | output=-
-F4 image=COMPLETE/...F4.png | output=-
-output OUTPUT_DIRECTORY_PERMISSION_REQUIRED: {"permission":"prompt"}
+Generation: COMPLETE
+Recovery: COMPLETE
+Output: PERMISSION_REQUIRED
+permission: prompt
 ```
 
 Confirmed:
 - fanout PASS
 - three image generations PASS
-- v0.4.5 image recovery PASS
-- selected directory handle persisted but write permission returned to `prompt`
-- service worker correctly refused to write without permission
-- recovered files remained safely in default Downloads staging folder
+- v0.4.5 recovery PASS
+- selected directory handle persisted
+- write permission returned to `prompt`
+- relocation did not start
+- recovered images remained safely in default Downloads staging
 
-Therefore do not touch generation/recovery paths for this failure。
+The failure is output permission lifecycle only.
 
-### v0.4.7 — reactive permission patch, PROVISIONAL
+### v0.4.7 — reactive fix on main, PROVISIONAL
 
-Status:
-**STATIC IMPLEMENTED / LIVE TEST DEFERRED UNTIL PRIOR-ART ALIGNMENT**
+A popup reauthorization path exists, but do not spend another generation run validating this reactive ordering first.
 
-Patch currently present:
-- `output_directory_store.js` adds `requestWritePermission(handle)`
-- `popup.js` can detect `PERMISSION_REQUIRED`
-- popup button can become `保存先を再許可して保存`
-- user click requests read/write permission on the existing stored handle
-- after grant, output-directory metadata revision is renewed
-- unchanged `output_relocator.js` can resume relocation
-- manifest version `0.4.7`
-
-Unchanged:
-- `background.js`
-- `image_collector.js`
-- `output_relocator.js`
-- attachment / paste / submit / completion mechanisms
-
-The later reuse audit confirmed that stored handle + `queryPermission/requestPermission` is the correct standard pattern, but identified a better ordering: permission should be preflighted on the user's Run click before starting a long generation cycle.
+The prior-art review showed permission should be preflighted from the Run user gesture before a long generation starts.
 
 ---
 
-## 5. Existing-solutions / prior-art review — COMPLETE
+## 4. Existing-solutions review — COMPLETE
 
 Record:
 - `research/prior-art/2026-08-09-selectable-output-directory-browser-prior-art.md`
 
-### Preferred existing pattern — Chrome / VS Code Web
-
-Browser-only standard approach:
+Preferred browser-only pattern is the Chrome / VS Code Web lifecycle:
 
 ```text
 showDirectoryPicker({mode:"readwrite"})
 -> persist FileSystemDirectoryHandle in IndexedDB
 -> later queryPermission({mode:"readwrite"})
 -> if needed requestPermission({mode:"readwrite"}) from user gesture
--> write with File System Access API
+-> write through File System Access API
 ```
 
-Chrome documentation uses VS Code Web as the concrete persisted-handle example.
+Checked but not adopted wholesale:
+- `chrome.downloads` — Downloads-relative only
+- `idb-keyval` — optional helper; unnecessary for one record/no bundler
+- GoogleChromeLabs `browser-fs-access` — useful wrapper, not a drop-in permission-resume layer
+- `native-file-system-adapter` — broader than current Chromium/Vivaldi need
+- AutoGPT 0.0.71 — output/download plumbing but no arbitrary-directory permission module
+- Autojourney Pro Downloader — external desktop companion; unnecessary while browser-native API is viable
 
-### Candidates checked and not adopted wholesale
+Do not invent another filesystem architecture without new failing evidence.
 
-- `chrome.downloads`
-  - valid for Downloads-relative v0.4.5 staging
-  - cannot silently target arbitrary absolute folders
-- `idb-keyval`
-  - mature tiny IndexedDB helper; Chrome sample uses it
-  - optional only; current extension stores one record and has no bundler
-- GoogleChromeLabs `browser-fs-access`
-  - mature File System Access wrapper/fallback
-  - does not remove MYGPT-specific persisted-directory permission/resume lifecycle
-- `native-file-system-adapter`
-  - broad portability ponyfill
-  - overkill for current Vivaldi/Chromium native API target
-- AutoGPT 0.0.71
-  - browser download uses `chrome.downloads.download`
-  - output URL/gallery plumbing exists
-  - no audited arbitrary-directory permission module to transplant
-- Autojourney Pro Downloader
-  - separate desktop companion solves browser download limitations/native folders
-  - do not add a desktop dependency while browser-only standard API is viable
+---
 
-### Reuse rule for this fix
+## 5. ACTIVE DEVELOPMENT — Worker Orchestrator v5
 
-Use the **Chrome official / VS Code Web permission lifecycle**, not another custom filesystem architecture.
+Development branch:
+`worker-orchestrator-v5`
 
-No extra third-party dependency is justified yet.
+Version:
+`0.5.0`
+
+Status:
+**STATIC CANDIDATE / LIVE PENDING**
+
+Architecture record:
+- `research/plans/2026-08-09-worker-orchestrator-v5-architecture.md`
+
+### Why a new line
+
+Future session lifecycle may become:
+
+```text
+Instant preparation
+-> Branch in new chat
+-> switch branch to Thinking
+-> generate in branch
+```
+
+Do not insert that as a large conditional chain inside the proven fresh-chat state machine.
+
+v5 introduces an explicit **session strategy boundary**.
+
+### Current strategies
+
+`fresh-chat`
+- `supported: true`
+- routes to the existing proven `MYGPT_V4_RUN_THREE` engine
+
+`branch-thinking`
+- `supported: false`
+- reserved only
+- no branch automation in v0.5.0
+
+### v5 selected-folder ordering
+
+For a selected custom directory:
+
+```text
+user presses Run
+-> queryPermission({mode:"readwrite"})
+-> prompt => requestPermission({mode:"readwrite"}) during the Run gesture
+-> denied/error => abort before any worker starts
+-> granted => start proven fresh-chat engine
+-> proven recovery
+-> existing relocation/write/verify
+```
+
+The old post-run `PERMISSION_REQUIRED` path remains only as a defensive fallback if permission changes while a long run is active.
+
+### v5 branch diff boundary
+
+Compared with the branch base, v0.5.0 changes only:
+- manifest/name/version
+- popup UI
+- popup Run permission preflight
+- new `session_strategy.js`
+- static contract test
+- branch README
+
+Unchanged:
+- `background.js`
+- `image_collector.js`
+- `output_relocator.js`
+- attachment primitive
+- paste primitive
+- native send
+- submit evidence
+- completion monitoring
+
+Do not merge v5 into main until live acceptance.
 
 ---
 
 ## 6. Near-frozen paths
 
 新しい失敗証拠がない限り変更しない:
-
-- one-worker-at-a-time tab preparation
+- one-worker-at-a-time fresh-chat preparation
 - `OPEN_SETTLE_MS = 15000`
 - AutoGPT `DataTransfer -> input.files -> change`
 - bounded attachment retry
@@ -248,8 +255,8 @@ No extra third-party dependency is justified yet.
 - `SLOT_COOLDOWN_MS = 5000`
 - runToken / stale async guard
 - passive completion monitoring
-- v0.4.5 image collector
-- `output_relocator.js` unless relocation itself produces failing evidence
+- v0.4.5 `image_collector.js`
+- `output_relocator.js` write / size verification / cleanup
 
 問題が出た場合は、失敗した層だけ局所修正する。
 
@@ -257,107 +264,76 @@ No extra third-party dependency is justified yet.
 
 ## 7. NEXT ONLY
 
-**まだfresh v0.4.7 generation testをしない。**
+Next live test is **v0.5.0 on `worker-orchestrator-v5`**, not main v0.4.7.
 
-先にpermission acquisitionだけをChrome/VS Code型のpreflightへ揃える。
-
-Target ordering:
-
-```text
-user presses Run
--> custom folder selected?
-   -> no: continue existing default flow
-   -> yes: verify write permission now
-       -> granted: start fanout
-       -> prompt: request permission while Run user gesture is available
-       -> denied/error: do not start generation
--> existing v0.4.4 fanout
--> existing v0.4.5 recovery
--> existing output relocation/write/verify
-```
-
-Post-run `PERMISSION_REQUIRED`は、長いrun中にpermissionが変化した場合のdefensive fallbackとして残す。
-
-Permission preflight alignment後のacceptance:
-
-1. extensionを差し替え/Reload
-2. source Custom GPT tabをReload
-3. 保存先フォルダを選択
+Acceptance:
+1. branch版unpacked extensionをload
+2. source Custom GPT tabをreload
+3. writable test folderをselect
 4. Runを押す
-5. write permissionが未許可なら**generation開始前**にbrowser permissionを解決
-6. permission deniedならF2/F3/F4を開始しない
-7. grantedならgeneration `COMPLETE`
+5. permissionが`prompt`ならgeneration開始前にbrowser permission promptを解決
+6. permission denied testではworker tabが1つも開始しないこと
+7. granted testではF2/F3/F4 generation `COMPLETE`
 8. `Recovery: COMPLETE`
 9. `Output: COMPLETE`
 10. F2/F3/F4 `output=COMPLETE/<filename>`
 11. selected folderに3枚存在
-12. verified relocation後だけtemporary Downloads copiesが削除されること
+12. temporary Downloads copiesはdestination verification後のみ削除
 
-**selected-folder acceptanceがPASSしたらWorker Fanoutの機能追加を止め、画像差分の話へ戻る。**
+If PASS:
+- v5 selected-folder behaviorをacceptedとしてcheckpoint/KNOWN-ISSUES/root READMEへ反映
+- merge方針を決める
+- Worker output-folder開発を止める
+- 予定どおり**画像差分分析へ戻る**
 
 ---
 
-## 8. External search / prior-art route
+## 8. Deferred future — Branch -> Thinking
 
-新しい外部検索を始める前に:
+OpenAI official product behavior confirms Branch creates a separate chat continuing from an earlier point. v5 therefore treats conversation/session creation as a future replaceable strategy.
+
+Future `branch-thinking` engine should own only:
+- Instant parent preparation
+- branch creation/navigation
+- branch identity/context verification
+- model/reasoning switch to Thinking
+- handoff to existing generation monitor/recovery primitives where compatible
+
+Do not implement this before v0.5.0 selected-folder acceptance and the paused image-difference work unless new evidence changes priority.
+
+---
+
+## 9. Search / prior-art route
+
+Before new external search:
 
 `research/SEARCH-INDEX.md`
-→ `research/chatgpt-project-practices/search-ledger.md`
-→ 該当topic note / prior-art
+-> `research/chatgpt-project-practices/search-ledger.md`
+-> relevant topic note / prior-art
 
-を読む。
+Important existing assets include:
+- selectable output-directory browser prior art
+- China image-generation practices
+- China character-consistency prior art
+- planner/isolated-worker examples
+- OpenGPTs / Autojourney community browser automation precedent
+- public image GPT reuse research
+- AutoGPT / Translation Loop / VoiceBridge implementation maps
 
-既存資産:
-- selectable output-directory/browser filesystem prior art
-- 中国語圏 image-generation practices
-- 中国圏 character-consistency prior art
-- planner / isolated-worker既存例survey
-- OpenGPTs / Autojourney等の中国/community browser automation precedent
-- 公開画像生成Custom GPTのreuse調査
-
-同じ一般検索を言い換えて繰り返さない。
-
----
-
-## 9. Deferred — 今やらない
-
-### Branch -> Thinking image generation
-
-将来検証候補:
-
-```text
-Custom GPTをInstantで起動
--> Instantでは画像生成させない
--> clean conversation stateを作る
--> Branch
--> Branch先だけThinkingへ切り替え
--> Thinkingで画像生成
-```
-
-確認事項:
-- Custom GPT conversationをbranchできるか
-- branch先だけThinkingへ切替可能か
-- canonical / Custom GPT Instructions / local packetが正しく継承されるか
-- direct Thinking failureを回避できるか
-
-selected-folder acceptanceや画像差分分析より先に実装しない。
+Do not repeat broad searches already marked DONE unless product behavior or evidence changed.
 
 ---
 
-## 10. Handoff / repository maintenance rule
+## 10. Repository maintenance rule
 
-`research/handoffs/` は過去時点のsnapshotとして保存する。
+`research/handoffs/` is historical snapshot storage, not CURRENT.
 
-次チャット開始時に古いhandoffをCURRENTとして採用しない。まずこの `PROJECT-HANDOFF.md` を読む。
+At each meaningful implementation/acceptance boundary, update without waiting for an explicit user instruction:
+1. CURRENT / next action -> `PROJECT-HANDOFF.md`
+2. known issue -> `KNOWN-ISSUES.md`
+3. version PASS/FAIL -> current checkpoint + extension README + root README
+4. external/prior-art result -> `SEARCH-INDEX.md` + ledger/topic note
+5. implementation reuse result -> `reference/README.md` / relevant audit
+6. old CURRENT conflicting with later evidence -> mark superseded/historical
 
-ユーザーが毎回GitHub更新を明示しなくても、作業の区切りでCURRENTとの差分を確認する。
-
-最低限追随するもの:
-1. CURRENT / next action変更 → `PROJECT-HANDOFF.md`
-2. known issue変更 → `KNOWN-ISSUES.md`
-3. version PASS/FAIL → current checkpoint + extension README + root README
-4. external searchの新軸 → `SEARCH-INDEX.md` + search ledger/topic note
-5. implementation lookup変更 → `reference/README.md`
-6. old `CURRENT` documentが後続証拠と衝突 → superseded化 / historical降格
-
-古い`CURRENT`表記を、後続実機結果と衝突したまま放置しない。
+Do not leave stale CURRENT text after a later live result.
