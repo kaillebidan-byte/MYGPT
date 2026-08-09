@@ -30,11 +30,26 @@ let selectedFileSpec = null;
 let lastRenderedAt = 0;
 let lastState = null;
 let outputDirectorySelected = false;
+let outputDirectoryHandle = null;
+let outputDirectoryPermission = "missing";
 
 function allPacketsReady() { return SLOT_IDS.every((slotId) => packetEls[slotId].value.trim()); }
 function recoveryBusy(state) { return ["PENDING", "RECOVERING"].includes(state?.recoveryPhase); }
 function outputTransferBusy(state) { return ["PENDING", "TRANSFERRING"].includes(state?.outputPhase); }
 function outputNeedsAction(state) { return ["PERMISSION_REQUIRED", "ERROR", "PARTIAL_ERROR"].includes(state?.outputPhase); }
+function outputPermissionNeedsGesture(state = lastState) {
+  return outputDirectorySelected && Boolean(outputDirectoryHandle) &&
+    (state?.outputPhase === "PERMISSION_REQUIRED" || outputDirectoryPermission !== "granted");
+}
+function updateOutputDirectoryButton(state = lastState) {
+  if (!outputDirectorySelected) {
+    selectOutputDir.textContent = "保存先フォルダを選択";
+    return;
+  }
+  selectOutputDir.textContent = outputPermissionNeedsGesture(state)
+    ? "保存先を再許可して保存"
+    : "保存先フォルダを変更";
+}
 function updateRunEnabled(state = lastState) {
   run.disabled = Boolean(state?.enabled) || recoveryBusy(state) ||
     (outputDirectorySelected && (outputTransferBusy(state) || outputNeedsAction(state))) ||
@@ -42,6 +57,7 @@ function updateRunEnabled(state = lastState) {
   const transferActive = outputDirectorySelected && outputTransferBusy(state);
   selectOutputDir.disabled = transferActive;
   clearOutputDir.disabled = transferActive;
+  updateOutputDirectoryButton(state);
 }
 
 function render(state) {
@@ -134,22 +150,47 @@ async function loadPayload() {
   }
 }
 
+async function publishOutputDirectoryMeta(handle) {
+  const meta = {
+    mode: "directory",
+    name: handle?.name || "",
+    revision: crypto.randomUUID(),
+    selectedAt: Date.now()
+  };
+  await chrome.storage.local.set({ [OUTPUT_META_KEY]: meta });
+  return meta;
+}
+
 async function refreshOutputDirectoryInfo() {
   const store = globalThis.MYGPTOutputDirectoryStore;
   const stored = await chrome.storage.local.get(OUTPUT_META_KEY);
   const meta = stored[OUTPUT_META_KEY] || null;
   const record = store ? await store.getDirectoryRecord().catch(() => null) : null;
   const handle = record?.handle?.kind === "directory" ? record.handle : null;
+  outputDirectoryHandle = handle;
   outputDirectorySelected = Boolean(meta?.mode === "directory" && handle);
   if (!outputDirectorySelected) {
+    outputDirectoryPermission = "missing";
     outputDirInfo.textContent = "既定: Downloads/MYGPT-Worker-Fanout/";
     updateRunEnabled();
     return;
   }
-  const permission = await store.queryWritePermission(handle);
-  const permissionText = permission === "granted" ? "書込可" : permission === "prompt" ? "再許可が必要" : permission;
+  outputDirectoryPermission = await store.queryWritePermission(handle);
+  const permissionText = outputDirectoryPermission === "granted" ? "書込可" :
+    outputDirectoryPermission === "prompt" ? "再許可が必要" : outputDirectoryPermission;
   outputDirInfo.textContent = `選択: ${handle.name || meta.name || "folder"} — ${permissionText}`;
   updateRunEnabled();
+}
+
+async function reauthorizeCurrentOutputDirectory(store) {
+  const handle = outputDirectoryHandle;
+  if (!handle || handle.kind !== "directory") throw new Error("OUTPUT_DIRECTORY_HANDLE_MISSING");
+  let permission = await store.queryWritePermission(handle);
+  if (permission !== "granted") permission = await store.requestWritePermission(handle);
+  if (permission !== "granted") throw new Error(`OUTPUT_DIRECTORY_PERMISSION_${String(permission).toUpperCase()}`);
+  outputDirectoryPermission = permission;
+  await store.setDirectoryHandle(handle);
+  await publishOutputDirectoryMeta(handle);
 }
 
 selectOutputDir.addEventListener("click", async () => {
@@ -158,23 +199,24 @@ selectOutputDir.addEventListener("click", async () => {
     if (typeof window.showDirectoryPicker !== "function") throw new Error("DIRECTORY_PICKER_UNSUPPORTED");
     const store = globalThis.MYGPTOutputDirectoryStore;
     if (!store) throw new Error("OUTPUT_DIRECTORY_STORE_UNAVAILABLE");
-    const previous = await store.getDirectoryHandle().catch(() => null);
+
+    if (outputPermissionNeedsGesture(lastState)) {
+      await reauthorizeCurrentOutputDirectory(store);
+      await refreshOutputDirectoryInfo();
+      return;
+    }
+
     const options = { mode: "readwrite", id: "mygpt-worker-output" };
-    if (previous) options.startIn = previous;
+    if (outputDirectoryHandle) options.startIn = outputDirectoryHandle;
     const handle = await window.showDirectoryPicker(options);
     let permission = await store.queryWritePermission(handle);
-    if (permission !== "granted" && typeof handle.requestPermission === "function") {
-      permission = await handle.requestPermission({ mode: "readwrite" });
-    }
+    if (permission !== "granted") permission = await store.requestWritePermission(handle);
     if (permission !== "granted") throw new Error(`OUTPUT_DIRECTORY_PERMISSION_${String(permission).toUpperCase()}`);
     await store.setDirectoryHandle(handle);
-    const meta = {
-      mode: "directory",
-      name: handle.name || "",
-      revision: crypto.randomUUID(),
-      selectedAt: Date.now()
-    };
-    await chrome.storage.local.set({ [OUTPUT_META_KEY]: meta });
+    outputDirectoryHandle = handle;
+    outputDirectoryPermission = permission;
+    outputDirectorySelected = true;
+    await publishOutputDirectoryMeta(handle);
     await refreshOutputDirectoryInfo();
   } catch (error) {
     if (error?.name === "AbortError") return;
@@ -189,6 +231,8 @@ clearOutputDir.addEventListener("click", async () => {
     if (store) await store.clearDirectoryHandle();
     await chrome.storage.local.remove(OUTPUT_META_KEY);
     outputDirectorySelected = false;
+    outputDirectoryHandle = null;
+    outputDirectoryPermission = "missing";
     outputDirInfo.textContent = "既定: Downloads/MYGPT-Worker-Fanout/";
     updateRunEnabled();
   } catch (error) {
