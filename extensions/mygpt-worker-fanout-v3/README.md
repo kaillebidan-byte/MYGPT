@@ -1,6 +1,6 @@
 # MYGPT Worker Fanout v4
 
-Status: **v0.4.1 STATIC PASS candidate — full 3-worker submit/monitor live test pending**
+Status: **v0.4.2 STATIC PASS candidate — bounded AutoGPT attachment retry live test pending**
 
 This version stops treating READY as the end goal. It reuses the supplied extensions as an integrated worker system:
 
@@ -104,6 +104,22 @@ Partial failures become `PARTIAL_MONITORING` / `PARTIAL_COMPLETE` rather than de
 8. generation continues in isolated tabs and each slot should eventually become `COMPLETE`.
 
 The source tab is restored after all three submits are attempted.
+
+## v0.4.2 attachment regression fix
+
+Live v0.4.1 proved F2/F3 can reach COMPLETE through native-click submission and VoiceBridge/Translation Loop monitoring, while F4 alone stopped at `ATTACHMENT_UI_NOT_CONFIRMED`. The regression was introduced after the AutoGPT upload primitive was already working: v0.3.4 turned attachment UI visibility into a one-shot fatal condition.
+
+v0.4.2 does not change the successful submit or monitor path. It keeps the exact AutoGPT `DataTransfer -> input.files -> change` primitive and adds only one bounded recovery attempt:
+
+1. re-resolve the current React file input immediately before assignment;
+2. verify the assigned file name/size/type on `input.files[0]`;
+3. dispatch exactly one bubbling `change`;
+4. wait for upload settling and positive attachment UI evidence;
+5. if UI evidence is absent, wait briefly and first accept any late-arriving evidence;
+6. only if still absent, re-resolve the input and repeat the same AutoGPT primitive once;
+7. never submit a slot unless positive attachment evidence exists.
+
+This is slot-local recovery. F2/F3 successful behavior, observer-before-click ordering, native click, submission evidence, and completion monitoring are unchanged.
 
 ## v0.4.1 non-worker context fix
 
