@@ -24,15 +24,17 @@ const errorEl = $("error");
 const packetEls = Object.fromEntries(SLOT_IDS.map((id) => [id, $(id)]));
 let selectedFileSpec = null;
 let lastRenderedAt = 0;
+let lastState = null;
 
 function allPacketsReady() { return SLOT_IDS.every((slotId) => packetEls[slotId].value.trim()); }
 function recoveryBusy(state) { return ["PENDING", "RECOVERING"].includes(state?.recoveryPhase); }
-function updateRunEnabled(state = null) { run.disabled = Boolean(state?.enabled) || recoveryBusy(state) || !selectedFileSpec || !allPacketsReady(); }
+function updateRunEnabled(state = lastState) { run.disabled = Boolean(state?.enabled) || recoveryBusy(state) || !selectedFileSpec || !allPacketsReady(); }
 
 function render(state) {
   const updatedAt = Number.isFinite(state?.updatedAt) ? state.updatedAt : 0;
   if (updatedAt && updatedAt < lastRenderedAt) return;
   if (updatedAt) lastRenderedAt = updatedAt;
+  lastState = state || null;
   const stage = state?.sequenceStage && state.sequenceStage !== "IDLE" ? ` / ${state.sequenceStage}` : "";
   const recovery = state?.recoveryPhase && state.recoveryPhase !== "IDLE" ? ` | Recovery: ${state.recoveryPhase}` : "";
   phase.textContent = `${state?.phase || "UNKNOWN"}${stage}${recovery}`;
