@@ -1,49 +1,50 @@
 # MYGPT調整プロジェクト — CURRENT HANDOFF
 
-更新日: 2026-08-09 19:43 JST
+更新日: 2026-08-09 20:05 JST
 
 GitHub `main` をdurable stateの正本とする。未merge候補や古いhandoffをCURRENTとして扱わない。
 
 ## 次チャットで最初に読む
 
 1. `research/PROJECT-HANDOFF.md` — このCURRENT
-2. `README.md` — root status
-3. `research/KNOWN-ISSUES.md` — 既知不具合 / 制約
-4. `research/experiments/2026-08-09-worker-fanout-isolated-generation-recovery-output-checkpoint.md` — Worker Orchestrator checkpoint
-5. `extensions/mygpt-worker-fanout-v3/README.md` — v0.5.0現行実装
-6. `research/prior-art/2026-08-09-selectable-output-directory-browser-prior-art.md` — selectable folder既存例/reuse判断
-7. `research/plans/2026-08-09-worker-orchestrator-v5-architecture.md` — v5 strategy architecture
-8. `research/SEARCH-INDEX.md` — 既存例 / 中国語圏 / prior-art / community検索入口
+2. `research/decisions/2026-08-09-identity-quality-closed-loop-direction.md` — **現在のidentity-quality方向**
+3. `research/experiments/2026-08-09-post-image-dialogue-audit-loop-reassessment.md` — post-image dialogue / Actions再監査
+4. `research/prior-art/2026-08-09-identity-preserving-variation-isolated-workers.md` — identity研究 / ID-V1〜V4
+5. `research/SEARCH-INDEX.md` — 既存例 / prior art検索入口
+6. `README.md` — root status
+7. `extensions/mygpt-worker-fanout-v3/README.md` — Worker Orchestrator v0.5.0
+8. `research/KNOWN-ISSUES.md` — 既知不具合 / 制約
 9. `research/reference/README.md` — 実装・再利用資料入口
 
 ---
 
-## 1. CURRENT generation status
+## 1. CURRENT generation baseline
 
 **Production v0 generalized PASS**
 
-Validated scope:
+Validated:
 - 1 canonical character
-- F1 = canonical静止姿勢
-- one-shot motion
+- F1 = canonical
 - F2/F3/F4のみ独立生成
-- front-facing baseline camera
+- one worker = one local static pose
+- front-facing baseline
 - chroma background
-- deterministic board / strip post-processing
-
-Current generation rule:
-- plannerはfull motionを理解してよい
-- generation workerへ渡すのはcanonical + current single static poseだけ
-- full motion / other slots / progress / sequence / board / sheet / 2x2 conceptsをworkerへ渡さない
 - generated frameを次frameのidentity sourceにしない
-- first-pass failureは失敗frameだけcanonicalからlocal retryする
+- failed frameだけoriginal canonicalからlocal retry
+
+Generation-facing workerへ出さない:
+- full motion
+- other slots
+- progress / sequence
+- board / sheet / 2x2 concepts
+- previous generated frames as identity source
 
 Generation品質の正本:
 - `research/decisions/2026-08-08-production-v0-generalized-verdict.md`
 
 ---
 
-## 2. CURRENT worker
+## 2. CURRENT production worker
 
 Name:
 `MYGPT Single Frame Worker Test`
@@ -61,7 +62,7 @@ Validated default:
 - canonical direct reference
 - current one static pose only
 
-Thinkingはproduction defaultではない。Branch後Thinking画像生成の成功例はあるが、direct Thinking failureとの因果は未確定。
+Important: current live Instructions explicitly stop after generation. Preserve this as the control baseline; do not edit it for the new audit-loop experiment.
 
 Runtime snapshot:
 - `research/runtime/2026-08-08-single-frame-worker-live-snapshot.md`
@@ -80,11 +81,8 @@ Display/version:
 Status:
 **SELECTED-FOLDER LIVE PASS**
 
-### Proven inherited boundary
-
-v0.4.4:
-- fresh isolated F2/F3/F4 fanout LIVE PASS
-- one worker tab at a time for preparation
+Proven inherited core:
+- one-worker-at-a-time preparation
 - 15s open settle
 - AutoGPT DataTransfer attachment
 - 15s attach settle
@@ -93,184 +91,266 @@ v0.4.4:
 - positive submit evidence
 - 5s cooldown
 - passive completion monitoring
+- v0.4.5 image recovery
+- v0.5.0 Run-time output-folder permission preflight
+- selected-folder final save LIVE PASS
 
-v0.4.5:
-- generated-image recovery LIVE PASS
-- default staging under `Downloads/MYGPT-Worker-Fanout/`
-
-### v0.4.6 failure that motivated v0.5.0
-
-Observed:
-
-```text
-Generation: COMPLETE
-Recovery: COMPLETE
-Output: PERMISSION_REQUIRED
-permission: prompt
-```
-
-Failure was isolated to selected-directory permission lifecycle. Generation and recovery remained successful.
-
-### v0.5.0 solution — LIVE PASS
-
-Existing-solutions review selected the Chrome / VS Code Web File System Access lifecycle:
-
-```text
-Run click
--> selected directory exists?
--> queryPermission({mode:"readwrite"})
--> if needed requestPermission({mode:"readwrite"}) during user gesture
--> granted: start proven fresh-chat engine
--> recovery
--> existing relocation / exact-size verify / cleanup
-```
-
-User live confirmation on 2026-08-09:
-- test run succeeded
-- selected output-folder save succeeded
-- generated files were confirmed present in the selected folder
-
-The successful v4 core remained unchanged for v0.5.0:
+Near-frozen unless new failure evidence appears:
 - `background.js`
+- attachment / paste / send primitives
+- terminal monitoring behavior
 - `image_collector.js`
 - `output_relocator.js`
-- attachment
-- paste
-- native send
-- submit evidence
-- completion monitoring
 
-v0.5.0 was developed on `worker-orchestrator-v5`, then promoted to `main` through PR #10 after live success.
+### Session strategies
 
----
-
-## 4. Session strategy boundary
-
-`session_strategy.js` now separates future conversation/session creation behavior from the proven generation engine.
-
-### `fresh-chat`
+`fresh-chat`
 - `supported: true`
 - LIVE PASS
-- routes to the proven `MYGPT_V4_RUN_THREE` engine
 
-### `branch-thinking`
+`branch-thinking`
 - `supported: false`
 - RESERVED ONLY
-- no Branch automation in v0.5.0
 
-Future candidate:
+Do not implement Branch by adding conditionals inside the proven fresh-chat engine. Future Branch logic belongs behind the strategy boundary.
 
+---
+
+## 4. NEW runtime evidence — post-image dialogue
+
+User live evidence on 2026-08-09:
+- **Instantのみ**、画像モデルが生成を終えた後に対話モデルへ戻れることを確認。
+
+This materially expands the quality architecture.
+
+Confirmed only:
 ```text
-Instant parent preparation
--> Branch in new chat
--> verify branch context / Custom GPT identity
--> switch branch to Thinking
--> generate in branch
--> reuse compatible monitor/recovery/output layers
+Instant image generation
+-> post-image dialogue stage can resume
 ```
 
-Do not implement Branch by inserting a large conditional chain into the proven fresh-chat engine. Add a separate session engine behind the strategy boundary.
+Not yet assumed:
+- Thinking has the same behavior
+- generated image bytes are automatically available to Code Interpreter
+- generated image file references are automatically transferable to GPT Actions
 
-Architecture record:
-- `research/plans/2026-08-09-worker-orchestrator-v5-architecture.md`
+OpenAI current GPT configuration docs confirm that custom GPTs can include image generation / Code Interpreter capabilities and external API Actions; Apps and Actions are the documented mutually-exclusive pair. This makes post-generation tool orchestration a valid test direction, but image-file transport remains a separate gate.
 
----
-
-## 5. Existing-solutions review — COMPLETE
-
-Record:
-- `research/prior-art/2026-08-09-selectable-output-directory-browser-prior-art.md`
-
-Checked:
-- Chrome / VS Code Web File System Access lifecycle — ADOPTED PATTERN
-- `chrome.downloads` — Downloads-relative staging only
-- `idb-keyval` — optional helper, not needed for one-record/no-bundler scope
-- GoogleChromeLabs `browser-fs-access` — useful reference, not a drop-in permission-resume layer
-- `native-file-system-adapter` — broader portability layer, unnecessary now
-- AutoGPT 0.0.71 — output/download plumbing, no arbitrary-directory permission module to transplant
-- Autojourney Pro Downloader — desktop companion alternative, not needed while browser-native path works
-
-Do not invent another filesystem architecture without new failing evidence.
+Detailed record:
+- `research/experiments/2026-08-09-post-image-dialogue-audit-loop-reassessment.md`
 
 ---
 
-## 6. Near-frozen paths
+## 5. CURRENT identity-quality direction — closed loop
 
-新しい失敗証拠がない限り変更しない:
-- one-worker-at-a-time fresh-chat preparation
-- `OPEN_SETTLE_MS = 15000`
-- AutoGPT `DataTransfer -> input.files -> change`
-- bounded attachment retry
-- `ATTACH_SETTLE_MS = 15000`
-- MAIN-world synthetic paste
-- observer-before-trigger ordering
-- Translation Loop native click
-- Enter fallback disabled
-- positive submit evidence
-- `SLOT_COOLDOWN_MS = 5000`
-- runToken / stale async guard
-- passive completion monitoring
-- `image_collector.js`
-- `output_relocator.js` write / size verification / cleanup
-- v0.5.0 Run-time permission preflight unless new output-layer failure appears
+Decision:
+- `research/decisions/2026-08-09-identity-quality-closed-loop-direction.md`
 
-問題が出た場合は失敗した層だけ局所修正する。
+The earlier identity plan remains useful:
+- `ID-V1` canonical as edit/source image
+- `ID-V2` canonical + one worker-local pose guide
+- `ID-V4` best-of-N isolated candidates
+- `ID-V3` optional canonical-derived detail crop
+
+But these now run inside a stronger architecture:
+
+```text
+ORIGINAL CANONICAL
++ one local pose/structure condition
++ minimal text
+        |
+        v
+isolated generator
+        |
+        v
+IMAGE_READY
+        |
+        v
+post-image structured critic
+        |
+        +--> identity audit
+        +--> pose / topology audit
+        +--> optional read-only Action policy lookup
+        +--> optional machine metric after file-access gate
+        |
+        v
+ACCEPT / RETRY_REQUIRED
+        |
+        +--> ACCEPT: recover/finalize
+        |
+        +--> RETRY_REQUIRED:
+              NEW isolated worker
+              ORIGINAL canonical again
+              failed local constraints only
+```
+
+### Research reused
+
+Do not invent evaluation from scratch first.
+
+Priority reuse:
+- DreamBench++ — GPT/VLM concept-preservation and prompt-following evaluation
+- Beyond the Pixels — hierarchical feature-level identity audit
+- EditRefiner — perception -> reasoning -> localized action -> evaluation
+- MaSC — masked concept-preservation metric
+- existing MYGPT chroma removal for easy foreground masks
+
+`audit/scripts/machine_audit_board.py` remains mechanical/chroma-only; it explicitly does not judge identity.
 
 ---
 
-## 7. Remaining defensive edge cases
+## 6. Actions / Code Interpreter boundary
 
-Not separately live-tested yet:
-- explicit selected-directory permission denial before Run
-- permission revocation during an active long run
+### First Action use — image bytes NOT required
 
-The successful selected-folder baseline is accepted despite these unexercised defensive cases.
+Preferred narrow endpoints:
+
+```text
+getAuditPolicy(version)
+recordAudit(run_id, slot_id, candidate_id, audit_json)
+getRetryPolicy(failure_codes)
+```
+
+Use Actions after image generation so GitHub/policy/tool context does not enter the generation-facing packet.
+
+Do not give the generator a broad general-purpose GitHub API surface if a small read-only policy endpoint is enough.
+
+### Image metric Action — later
+
+Only after image transport is proven:
+
+```text
+runIdentityMetric(canonical, candidate)
+```
+
+Do not assume historical `openaiFileIdRefs`-style generated-image transfer works automatically.
+
+### Code Interpreter — gated
+
+Potential:
+- post-image dialogue reads versioned scripts/specs
+- run deterministic local checks
+- combine machine JSON + visual critic JSON
+
+First verify generated image is actually accessible to Code Interpreter after native image generation.
+
+If not, keep Code Interpreter out of the critical path and use external/browser image transport later.
 
 ---
 
-## 8. NEXT ONLY
+## 7. Same-worker critic vs independent judge
 
-**Worker output-folder work is closed for now.**
+### Same-worker post-image critic
 
-Return to the paused **image-difference analysis**.
+Use first because:
+- no candidate-image transport needed
+- canonical + generated result are already in context
+- lowest implementation cost
 
-Do not expand Branch/Thinking automation yet unless:
-- the user explicitly reprioritizes it, or
-- new runtime evidence makes it necessary.
+Role:
+- diagnostic structured audit only
+- no unbounded autonomous same-chat regeneration
+
+### Independent judge GPT
+
+Preferred final evaluator if self-audit is biased.
+
+Possible flow:
+
+```text
+generator worker
+-> candidate capture/recovery
+-> separate judge GPT
+   canonical + candidate
+-> structured identity verdict
+```
+
+Judge can be non-generating, so multi-image comparison does not create the generation-time 2x2/sheetification risk.
 
 ---
 
-## 9. Search / prior-art route
+## 8. NEXT ONLY — `POSTGEN-G1`
 
-Before new external search:
+Before changing quality prompts or collector logic, characterize the newly discovered runtime.
+
+Create a **separate experimental audited Custom GPT clone**. Do not alter the current production worker.
+
+Test under Instant:
+1. canonical + one local pose only
+2. generate one candidate
+3. after image generation, force a short structured text audit with no second image generation
+4. observe whether image + audit live in the same assistant turn or separate turns
+5. observe when current terminal monitor marks slot COMPLETE
+6. verify current `image_collector.js` still finds the intended generated image
+7. if Action is enabled, test a read-only text/JSON Action after generation
+8. separately test Code Interpreter only if useful; do not assume image file availability
+
+Why this is first:
+- current collector uses the **latest assistant turn** to locate the image
+- post-image audit may change what `latest assistant` means
+- runtime evidence must precede any collector/state-machine patch
+
+If separate-turn behavior requires it, future slot phases become:
+
+```text
+GENERATING
+-> IMAGE_READY
+-> AUDITING
+-> ACCEPTED / RETRY_REQUIRED
+```
+
+Do not implement that transition before `POSTGEN-G1` evidence.
+
+---
+
+## 9. After `POSTGEN-G1`
+
+If runtime structure is compatible:
+
+1. `ID-V1 + SELF-AUDIT`
+   - current reference wording vs explicit edit/source wording
+2. `ID-V2 + SELF-AUDIT`
+   - canonical + one single-pose visual guide
+3. independent judge comparison
+4. MaSC / DreamBench++ metric reuse after image transport gate
+5. best-of-2 only for hard frames / failed first pass
+6. Branch -> Thinking later; separately revalidate post-image dialogue/tool behavior there
+
+---
+
+## 10. Frozen boundaries
+
+Until contrary evidence:
+- original canonical remains sole identity source
+- generated frame is never promoted to canonical
+- one pose/state per generation-facing worker
+- no 4-pose guide or sequence context in generator
+- no F2 -> F3 -> F4 image chaining
+- fresh isolated retry
+- v0.5.0 successful fanout/recovery/output core stays intact
+
+---
+
+## 11. Search / prior-art route
+
+Before new external research:
 
 `research/SEARCH-INDEX.md`
 -> `research/chatgpt-project-practices/search-ledger.md`
 -> relevant topic note / prior-art
 
-Important existing assets include:
-- selectable output-directory browser prior art
-- China image-generation practices
-- China character-consistency prior art
-- planner/isolated-worker examples
-- OpenGPTs / Autojourney community browser automation precedent
-- public image GPT reuse research
-- AutoGPT / Translation Loop / VoiceBridge implementation maps
-
-Do not repeat broad searches already marked DONE unless product behavior or evidence changed.
+Do not repeat broad searches already marked DONE unless new runtime evidence creates a genuinely new angle.
 
 ---
 
-## 10. Repository maintenance rule
+## 12. Repository maintenance rule
 
-`research/handoffs/` is historical snapshot storage, not CURRENT.
-
-At each meaningful implementation/acceptance boundary, update without waiting for an explicit user instruction:
+At each meaningful result, update durable state without waiting for an explicit GitHub-update request:
 1. CURRENT / next action -> `PROJECT-HANDOFF.md`
 2. known issue -> `KNOWN-ISSUES.md`
-3. version PASS/FAIL -> current checkpoint + extension README + root README
-4. external/prior-art result -> `SEARCH-INDEX.md` + ledger/topic note
-5. implementation reuse result -> `reference/README.md` / relevant audit
-6. old CURRENT conflicting with later evidence -> mark superseded/historical
+3. version PASS/FAIL -> checkpoint + extension README + root README as needed
+4. external/prior-art result -> `SEARCH-INDEX.md` + topic note
+5. implementation reuse result -> `reference/README.md` / audit note
+6. stale CURRENT text -> supersede or update
 
-Do not leave stale CURRENT text after a later live result.
+Do not change frozen code merely for documentation consistency.
