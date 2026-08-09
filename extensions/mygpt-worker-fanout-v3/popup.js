@@ -26,14 +26,16 @@ let selectedFileSpec = null;
 let lastRenderedAt = 0;
 
 function allPacketsReady() { return SLOT_IDS.every((slotId) => packetEls[slotId].value.trim()); }
-function updateRunEnabled(state = null) { run.disabled = Boolean(state?.enabled) || !selectedFileSpec || !allPacketsReady(); }
+function recoveryBusy(state) { return ["PENDING", "RECOVERING"].includes(state?.recoveryPhase); }
+function updateRunEnabled(state = null) { run.disabled = Boolean(state?.enabled) || recoveryBusy(state) || !selectedFileSpec || !allPacketsReady(); }
 
 function render(state) {
   const updatedAt = Number.isFinite(state?.updatedAt) ? state.updatedAt : 0;
   if (updatedAt && updatedAt < lastRenderedAt) return;
   if (updatedAt) lastRenderedAt = updatedAt;
   const stage = state?.sequenceStage && state.sequenceStage !== "IDLE" ? ` / ${state.sequenceStage}` : "";
-  phase.textContent = `${state?.phase || "UNKNOWN"}${stage}`;
+  const recovery = state?.recoveryPhase && state.recoveryPhase !== "IDLE" ? ` | Recovery: ${state.recoveryPhase}` : "";
+  phase.textContent = `${state?.phase || "UNKNOWN"}${stage}${recovery}`;
   worker.textContent = state?.workerIdentity?.workerPath || "-";
   stateFile.textContent = state?.fileName || "-";
   errorEl.textContent = state?.error ? `${state.error.code}: ${JSON.stringify(state.error.detail || {})}` : "";
@@ -44,7 +46,10 @@ function render(state) {
     row.className = "slot";
     const text = document.createElement("div");
     text.className = "mono";
-    text.textContent = `${slotId}: ${slot.phase} | Tab ${slot.tabId ?? "-"} | attach=${slot.attachmentEvidence || "-"}${slot.attachmentUiEvidence ? `/${slot.attachmentUiEvidence}` : ""} | send=${slot.activation || "-"}/${slot.submitEvidence || "-"} | done=${slot.completionEvidence || "-"}`;
+    const imageRecovery = slot.imageRecovery || null;
+    const imageStatus = imageRecovery?.status || "-";
+    const imageName = imageRecovery?.actualFilename || imageRecovery?.filename || null;
+    text.textContent = `${slotId}: ${slot.phase} | Tab ${slot.tabId ?? "-"} | attach=${slot.attachmentEvidence || "-"}${slot.attachmentUiEvidence ? `/${slot.attachmentUiEvidence}` : ""} | send=${slot.activation || "-"}/${slot.submitEvidence || "-"} | done=${slot.completionEvidence || "-"} | image=${imageStatus}${imageName ? `/${imageName}` : ""}`;
     row.appendChild(text);
     if (Number.isInteger(slot.tabId)) {
       const button = document.createElement("button");
@@ -60,6 +65,12 @@ function render(state) {
       detail.className = "error mono";
       detail.textContent = `${slot.error.code}: ${JSON.stringify(slot.error.detail || {})}`;
       row.appendChild(detail);
+    }
+    if (imageRecovery?.error) {
+      const recoveryDetail = document.createElement("div");
+      recoveryDetail.className = "error mono";
+      recoveryDetail.textContent = `image ${imageRecovery.error.code}: ${JSON.stringify(imageRecovery.error.detail || {})}`;
+      row.appendChild(recoveryDetail);
     }
     slotsEl.appendChild(row);
   }
