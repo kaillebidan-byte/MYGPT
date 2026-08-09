@@ -2,20 +2,18 @@
 
 更新日: 2026-08-10 JST
 
-GitHub `main` をdurable stateの正本とする。未merge候補や古いhandoffをCURRENTとして扱わない。
+GitHub `main` をdurable stateの正本とする。
 
-## 次チャットで最初に読む
+## 最初に読む
 
-1. `research/PROJECT-HANDOFF.md` — このCURRENT
-2. `research/decisions/2026-08-10-post-image-critic-requires-explicit-followup-turn.md` — **POSTGEN-G1a-1後の最新runtime判断**
-3. `research/experiments/2026-08-10-postgen-g1a1-manual-result.md` — **G1a-1実機FAIL証拠**
-4. `research/plans/2026-08-09-identity-quality-closed-loop-execution-plan.md` — identity-quality全体計画
-5. `research/decisions/2026-08-09-identity-quality-closed-loop-direction.md` — closed-loop方向
-6. `research/prior-art/2026-08-09-identity-preserving-variation-isolated-workers.md` — identity研究
-7. `extensions/mygpt-worker-fanout-v3/README.md` — Worker Orchestrator v0.5.0
-8. `research/SEARCH-INDEX.md` — prior-art検索入口
-9. `research/KNOWN-ISSUES.md`
-10. `research/reference/README.md`
+1. `research/PROJECT-HANDOFF.md` — CURRENT
+2. `research/decisions/2026-08-10-post-image-critic-requires-explicit-followup-turn.md` — post-image criticの現在判断
+3. `research/experiments/2026-08-10-postgen-branch-thinking-critic-result.md` — Branch -> Thinking critic実機結果
+4. `research/plans/2026-08-10-postgen-critic-route-comparison-runbook.md` — **NEXT USER PROCEDURE**
+5. `research/plans/2026-08-09-identity-quality-closed-loop-execution-plan.md` — identity closed-loop全体計画
+6. `research/prior-art/2026-08-09-identity-preserving-variation-isolated-workers.md`
+7. `extensions/mygpt-worker-fanout-v3/README.md`
+8. `research/SEARCH-INDEX.md`
 
 ---
 
@@ -23,39 +21,33 @@ GitHub `main` をdurable stateの正本とする。未merge候補や古いhandof
 
 **Production v0 generalized PASS**
 
-Validated:
-- one canonical character
-- F1 = canonical
-- F2/F3/F4 are independent isolated generations
-- one worker sees one local static pose only
-- front-facing baseline
-- chroma background
-- generated frame is never promoted to identity source
-- failed frame retries from original canonical in a fresh isolated worker
+Frozen principles:
+- original canonical is the sole identity authority;
+- F1 = canonical;
+- F2/F3/F4 are independent isolated generations;
+- one generation-facing worker sees canonical + its own one static pose only;
+- no full motion / other slots / progress / board / sheet context;
+- generated frames are never used as the next identity source;
+- failed frame retry starts in a fresh isolated worker from original canonical.
 
-Do not expose to a generation-facing worker:
-- full motion
-- other slots
-- progress/sequence
-- board/sheet/2x2 concepts
-- previous generated frames as identity source
-
-Production worker remains unchanged:
+Current production/control worker:
 `MYGPT Single Frame Worker Test`
 
 Validated default:
 - Instant
-- Image Generation ON
+- Image generation ON
 - Web OFF
 - Code/Data Analysis OFF
 - Knowledge NONE
 - Actions NONE
 
+Do not modify the production worker while post-image experiments are open.
+
 ---
 
-## 2. Browser automation baseline
+## 2. Worker Orchestrator baseline
 
-Current extension on `main`:
+Current main extension:
 `extensions/mygpt-worker-fanout-v3/`
 
 Display/version:
@@ -63,190 +55,215 @@ Display/version:
 - manifest `0.5.0`
 
 Status:
-**SELECTED-FOLDER LIVE PASS**
+**LIVE PASS**
 
-Frozen/proven unless new evidence says otherwise:
-- one-worker-at-a-time preparation
-- 15s open settle
-- DataTransfer attachment
-- 15s attach settle
-- MAIN-world paste
-- native send click
-- positive submit evidence
-- 5s cooldown
-- passive completion monitoring
-- image recovery
-- selected-folder permission preflight
-- verified output relocation
+Proven:
+- fresh isolated fanout;
+- attachment / paste / native send;
+- positive submit evidence;
+- passive completion monitoring;
+- generated-image recovery;
+- selected-folder permission preflight;
+- selected-folder save.
 
-Do not patch `background.js`, `image_collector.js`, `output_relocator.js`, attachment/paste/send, or terminal monitoring for the current G1 result.
+Near-frozen unless new evidence requires a local patch:
+- attachment/paste/send primitives;
+- current generation/recovery core;
+- output relocation;
+- selected-folder preflight.
 
-Session strategies:
-- `fresh-chat`: supported / LIVE PASS
-- `branch-thinking`: reserved / unsupported
+Current `image_collector.js` assumes the desired generated image is in the **latest assistant turn**. Post-image audit evidence now proves this cannot be used after a later text-only audit turn exists.
 
----
-
-## 3. Identity-quality direction
-
-Goal: pet-feature-like stable visual variations from one canonical while changing pose/state.
-
-Research-supported architecture remains:
-
-```text
-identity conditioning
-separate from
-pose/structure conditioning
-separate from
-evaluation/selection
-```
-
-Longer-term candidates remain:
-- `ID-V1`: canonical as edit/source image
-- `ID-V2`: canonical + exactly one worker-local pose/structure guide
-- independent judge GPT
-- MaSC / DreamBench++ reuse after image transport gate
-- best-of-2 only for hard/failed frames
-- optional canonical-derived local crop only for persistent local drift
-- Branch -> Thinking later as an execution strategy, not identity conditioning
+Do not patch v0.5.0 main yet. Any audit-state implementation belongs in a separate experimental extension line/version.
 
 ---
 
-## 4. POSTGEN-G1a-1 — NEW LIVE RESULT
+## 3. POSTGEN runtime evidence
 
-Experimental clone:
-`MYGPT Single Frame Worker POSTGEN G1`
+### Instant same-turn auto-audit — FAIL
 
-Fixed pose:
-R2-B clear shallow bow, selected because its historical first-pass pose/identity/topology was PASS.
+Experiment:
+`research/experiments/2026-08-10-postgen-g1a1-manual-result.md`
 
-G1a-1 attempted this assumption:
-
-```text
-one user pose request
--> image generation
--> automatic ordinary assistant POSTGEN_AUDIT text
-```
-
-Live result on 2026-08-10:
+Observed:
 - image generation succeeded;
-- generated portrait returned;
-- no `POSTGEN_AUDIT` body text appeared;
-- user reported `画像生成のみで本文無`;
-- DOM observation contained the user turn and an assistant/image turn whose extracted text was only `編集`;
-- no turn contained `POSTGEN_AUDIT`.
-
-Verdict:
-**G1a-1 FAIL — Instructions alone did not force same-user-turn post-image dialogue continuation.**
-
-Evidence:
-- `research/experiments/2026-08-10-postgen-g1a1-manual-result.md`
-
-Do not run the old G1a-2 orchestrator compatibility test yet. Its prerequisite audit turn did not exist.
-
----
-
-## 5. Revised runtime decision
-
-Do not equate:
-
-```text
-image generation can be followed by dialogue-model use
-```
-
-with:
-
-```text
-image tool automatically continues into ordinary assistant text in the same user turn
-```
-
-The second behavior failed in G1a-1.
-
-CURRENT candidate architecture is now explicit-turn orchestration:
-
-```text
-USER TURN 1: local pose request
--> image generation
--> IMAGE_READY
--> bind/capture generated candidate
-
-USER TURN 2: audit-only request
--> dialogue model critic
--> structured audit JSON
--> ACCEPT / RETRY_REQUIRED
-```
+- no automatic `POSTGEN_AUDIT` text followed in the same user turn;
+- DOM had the image-bearing assistant turn but no audit assistant text.
 
 Decision:
-- `research/decisions/2026-08-10-post-image-critic-requires-explicit-followup-turn.md`
+- do not rely on same-turn automatic continuation after image generation.
 
-This fits the browser extension well because it already has proven send/observe primitives.
+### Branch -> Thinking post-image critic — SINGLE-RUN LIVE PASS
 
-Critical future ordering:
+Experiment:
+`research/experiments/2026-08-10-postgen-branch-thinking-critic-result.md`
+
+Observed response:
+
+```text
+POSTGEN_AUDIT {"identity_obvious_drift":false,"pose_obvious_error":false,"topology_obvious_error":false,"verdict":"PASS"}
+```
+
+No new image generation occurred.
+
+DOM evidence:
+- image-bearing assistant turn exists earlier;
+- later audit assistant turn contains text only and zero images.
+
+Confirmed:
+- Branch context retained enough prior visual/conversation state for Thinking to perform the structured critic task in this run;
+- Thinking can be used as a **critic without generating an image**.
+
+Not confirmed:
+- repeatability across multiple Branch -> Thinking critic runs;
+- superiority over Instant critic;
+- stable Branch/model-switch browser automation;
+- stable Thinking image generation.
+
+Important:
+**Thinking image generation remains an independent unresolved problem and is not required for the critic architecture.**
+
+---
+
+## 4. Current critic route candidates
+
+### Route A — parent Instant explicit follow-up
+
+```text
+Instant generation
+-> IMAGE_READY
+-> bind candidate
+-> second user turn in same parent conversation
+-> Instant text critic
+-> POSTGEN_AUDIT
+```
+
+Status:
+**NOT YET TESTED on the same candidate.**
+
+Advantage:
+- simplest future automation if reliable.
+
+### Route B — Branch -> Thinking critic
+
+```text
+Instant generation
+-> IMAGE_READY
+-> bind candidate in parent
+-> Branch from image-bearing context
+-> Thinking
+-> audit-only request
+-> POSTGEN_AUDIT text
+```
+
+Status:
+**SINGLE-RUN LIVE PASS.**
+
+Advantage:
+- parent generation conversation can remain image-terminal;
+- later audit text is isolated in the branch;
+- Thinking does not need to generate images.
+
+---
+
+## 5. Required ordering for any closed-loop implementation
+
+Direct DOM evidence now requires:
 
 ```text
 GENERATION_COMPLETE
--> bind generation turn + candidate image FIRST
--> persist candidate metadata
--> submit audit prompt
--> wait for audit response
--> parse audit
+-> identify/bind image-bearing generation turn
+-> persist candidate source/metadata or preserve parent tab reference
+-> only then submit audit request
+-> receive text audit in same chat or branch
+-> parse structured result
+-> ACCEPT / RETRY_REQUIRED
 ```
 
-Do not rely on generic `latest assistant` after an audit turn exists.
+Never run generic `latest assistant image` lookup after audit text without a bound generation turn.
+
+Potential future phases:
+
+```text
+GENERATING
+-> IMAGE_READY
+-> AUDITING
+-> ACCEPTED / RETRY_REQUIRED
+```
+
+Do not implement this on main until critic route is selected.
 
 ---
 
-## 6. NEXT ONLY — manual explicit follow-up critic gate
+## 6. NEXT ONLY — compare critic routes on the same candidate
 
-Use the **same G1a-1 conversation that already contains the R2-B generated image**.
+Do **not** generate another image yet.
 
-Do not regenerate.
-Do not open a new chat.
-Do not change GPT settings.
-Do not enable Action or Code Interpreter yet.
+Use the already-generated R2-B candidate.
 
-Send one second user message that explicitly says this is not an image-generation request and asks for audit-only structured text of the immediately preceding generated image against the attached canonical and R2-B target.
+Current procedure:
+`research/plans/2026-08-10-postgen-critic-route-comparison-runbook.md`
 
-PASS if:
-- no second image is generated;
-- ordinary dialogue-model text is returned;
-- result contains the requested structured audit;
-- the critic clearly evaluates the already-generated candidate in the same conversation.
+Next user action:
+1. return from the Branch to the original parent Instant conversation;
+2. keep the same generated image/canonical/context;
+3. do not regenerate or change model;
+4. send the exact audit-only explicit follow-up prompt;
+5. record the Instant `POSTGEN_AUDIT` response and whether image generation starts.
 
-If PASS:
-- next isolate Action on this explicit audit turn;
-- then Code Interpreter file access separately;
-- only after that design extension state changes.
+This gives a controlled same-candidate comparison:
 
-If FAIL:
-- same-worker post-image critic is not dependable in this form;
-- move evaluation toward an independent judge GPT using recovered candidate + canonical.
+```text
+A: parent Instant explicit follow-up critic
+B: Branch -> Thinking critic — already single-run PASS
+```
 
----
-
-## 7. Frozen boundaries
-
-Until contrary evidence:
-- original canonical is the sole identity authority
-- one pose/state per generation-facing worker
-- no generated-frame chaining
-- no multi-pose generator context
-- fresh isolated retry
-- production worker unchanged
-- Worker Orchestrator v0.5.0 unchanged
-- no autonomous unlimited regenerate/edit loop
+Decision rule:
+- if Instant works and is sufficiently accurate, prefer it first for automation simplicity;
+- if Instant fails or is materially weaker, prefer Branch -> Thinking critic;
+- human review remains acceptance authority during research.
 
 ---
 
-## 8. Repository maintenance
+## 7. After critic route selection
 
-At each meaningful result update without waiting for an explicit request:
-1. CURRENT / next action -> `PROJECT-HANDOFF.md`
-2. gate/result -> experiment note
-3. changed runtime/architecture decision -> `research/decisions/`
-4. execution order / stop condition -> current plan
-5. known bug -> `KNOWN-ISSUES.md`
-6. external research -> `SEARCH-INDEX.md` + topic note
-7. successful code baseline -> extension README/checkpoint/root README as appropriate
+Only then proceed in this order:
 
-Do not mutate frozen successful code for documentation-only reasons.
+1. critic repeatability on known PASS and known FAIL examples;
+2. narrow read-only Action from the chosen audit route;
+3. Code Interpreter generated-image file-access gate;
+4. `ID-V1` edit/source wording A/B;
+5. `ID-V2` one local pose visual guide only if needed;
+6. independent judge comparison if self-critic is biased;
+7. MaSC / DreamBench++ reuse after image transport is solved;
+8. best-of-2 only for hard/failed frames;
+9. optional canonical-derived local crop only for persistent localized drift.
+
+Thinking as an **image generator** remains a later independent execution-strategy experiment and must not block the above.
+
+---
+
+## 8. Frozen boundaries
+
+Until contrary live evidence:
+- original canonical remains sole identity source;
+- no generated-frame chaining;
+- one pose/state per generation-facing worker;
+- no 4-pose/sequence guide in generator;
+- fresh isolated retry;
+- production worker unchanged;
+- v0.5.0 successful fanout/recovery/output core unchanged;
+- no unbounded same-chat regenerate/self-correct loop.
+
+---
+
+## 9. Maintenance rule
+
+At meaningful boundaries update durable state without waiting for a separate request:
+- runtime PASS/FAIL -> experiment record;
+- architecture decision -> `research/decisions/`;
+- NEXT/gates -> this handoff + current runbook/plan;
+- extension behavior change -> checkpoint + extension README + root README;
+- prior-art changes -> SEARCH-INDEX/topic note.
+
+Do not change proven source code merely to make documentation look consistent.
