@@ -1,6 +1,6 @@
 # MYGPT known issues / limitations index
 
-更新日: 2026-08-09 19:27 JST
+更新日: 2026-08-09 19:43 JST
 
 この文書は既知不具合・制約の**索引**。詳細な再現ログや原因分析は `research/incidents/` / `research/experiments/` / `research/audits/` に置く。
 
@@ -48,8 +48,8 @@ Status: `ACTIVE`
 現在の扱い:
 - production defaultはInstantを維持
 - 将来、`Instantで準備 -> Branch -> Thinking -> image generation` を独立実験する
-- v5では`branch-thinking` strategy名だけ予約し、v0.5.0では`unsupported`
-- selected-output acceptanceや画像差分分析より先にBranch実装を始めない
+- v0.5.0では`branch-thinking` strategy名だけ予約し、`supported:false`
+- image-difference analysisより先にBranch実装を始めない unless reprioritized
 
 Evidence:
 - `research/experiments/2026-08-08-n2-branch-thinking-followup-result.md`
@@ -70,74 +70,6 @@ Status: `ACTIVE`
 Evidence:
 - `research/runtime/2026-08-08-single-frame-worker-live-snapshot.md`
 - `research/PROJECT-HANDOFF.md`
-
----
-
-## VERIFYING
-
-### KI-004 — selected output directory permission can return to `prompt`
-
-Status: `VERIFYING`
-
-v0.4.6 live observation:
-
-```text
-Phase: COMPLETE / COOLDOWN | Recovery: COMPLETE | Output: PERMISSION_REQUIRED
-F2 image=COMPLETE/...F2.png | output=-
-F3 image=COMPLETE/...F3.png | output=-
-F4 image=COMPLETE/...F4.png | output=-
-output OUTPUT_DIRECTORY_PERMISSION_REQUIRED: {"permission":"prompt"}
-```
-
-Confirmed boundary:
-- v0.4.4 fanout succeeded;
-- all three generations succeeded;
-- v0.4.5 image recovery succeeded;
-- selected-folder relocation did not begin because the stored directory handle's read/write permission was `prompt`;
-- original recovered images remained in `Downloads/MYGPT-Worker-Fanout/`.
-
-Cause class:
-- `FileSystemDirectoryHandle` persistence and permission persistence are separate;
-- a stored handle can be recovered from IndexedDB while write permission needs to be requested again;
-- that permission request requires a user gesture, so the service worker can detect `prompt` but cannot silently grant it.
-
-Prior-art result:
-- Chrome official guidance uses `queryPermission()` then `requestPermission()` for stored handles;
-- Chrome documents VS Code Web as a concrete IndexedDB persisted-handle example;
-- `chrome.downloads` remains Downloads-relative and cannot silently target an arbitrary absolute directory;
-- mature helper libraries (`browser-fs-access`, `native-file-system-adapter`, `idb-keyval`) were checked, but none should be added wholesale for the current one-directory Chromium-only requirement;
-- AutoGPT 0.0.71 does not contain a reusable arbitrary-directory permission module; Autojourney solves stronger native download management with a separate desktop Downloader.
-
-Evidence:
-- `research/prior-art/2026-08-09-selectable-output-directory-browser-prior-art.md`
-
-Main v0.4.7 state:
-- reactive popup reauthorization exists;
-- conceptually matches the standard stored-handle permission pattern;
-- remains provisional because permission is discovered after the long run reaches relocation.
-
-v0.5.0 candidate:
-- development branch: `worker-orchestrator-v5`;
-- custom-folder permission is preflighted from the **Run user gesture before generation starts**;
-- `prompt` -> `requestPermission({mode:"readwrite"})` during Run click;
-- denied/error -> abort before F2/F3/F4 worker creation;
-- granted -> existing proven fresh-chat engine starts;
-- post-run `PERMISSION_REQUIRED` remains only as a defensive fallback;
-- v0.4.4 fanout, v0.4.5 collector, and `output_relocator.js` are unchanged in the branch diff.
-
-Acceptance pending:
-- branch v0.5.0 Run resolves selected-folder permission before generation;
-- denied permission starts zero workers;
-- granted permission permits normal three-worker generation and `Recovery: COMPLETE`;
-- final `Output: COMPLETE`;
-- F2/F3/F4 `output=COMPLETE/<filename>`;
-- selected folder contains all three images;
-- temporary Downloads copies are removed only after verified relocation.
-
-Evidence:
-- `research/experiments/2026-08-09-worker-fanout-isolated-generation-recovery-output-checkpoint.md`
-- `research/plans/2026-08-09-worker-orchestrator-v5-architecture.md`
-- branch `worker-orchestrator-v5:extensions/mygpt-worker-fanout-v3/README.md`
 
 ---
 
@@ -175,11 +107,60 @@ Status: `MITIGATED`
 
 Evidence:
 - Worker Fanout v0.4.3 history
-- current Worker Fanout checkpoint
+- current Worker Orchestrator checkpoint
 
 ---
 
 ## RESOLVED
+
+### KI-004 — selected output directory permission can return to `prompt`
+
+Status: `RESOLVED` for the successful selected-folder baseline in v0.5.0
+
+Original v0.4.6 observation:
+
+```text
+Phase: COMPLETE / COOLDOWN | Recovery: COMPLETE | Output: PERMISSION_REQUIRED
+output OUTPUT_DIRECTORY_PERMISSION_REQUIRED: {"permission":"prompt"}
+```
+
+Confirmed cause class:
+- `FileSystemDirectoryHandle` persistence and permission persistence are separate
+- stored handle can remain available while write permission returns to `prompt`
+- permission acquisition must occur from a user gesture
+
+Prior-art decision:
+- adopt the Chrome / VS Code Web File System Access lifecycle
+- do not add another filesystem architecture or unnecessary third-party dependency
+
+v0.5.0 fix:
+
+```text
+Run click
+-> queryPermission({mode:"readwrite"})
+-> if needed requestPermission({mode:"readwrite"}) during user gesture
+-> granted: start proven fresh-chat engine
+-> recovery
+-> verified relocation to selected directory
+```
+
+Live result on 2026-08-09:
+- normal F2/F3/F4 test succeeded
+- selected output-folder save succeeded
+- generated files were confirmed present in the selected folder
+- v0.5.0 promoted to `main` after this success
+
+Still-unexercised defensive cases:
+- explicit permission denial before Run
+- permission revocation during an active run
+
+These remain edge-case test gaps, not an ACTIVE blocker for the successful selected-folder path.
+
+Evidence:
+- `research/prior-art/2026-08-09-selectable-output-directory-browser-prior-art.md`
+- `research/experiments/2026-08-09-worker-fanout-isolated-generation-recovery-output-checkpoint.md`
+- `extensions/mygpt-worker-fanout-v3/README.md`
+- PR #10 promotion of v0.5.0
 
 ### KI-007 — attachment UI raceを一発fatalにしていた退行
 
