@@ -39,11 +39,19 @@ Current extension:
 
 Current proven boundary:
 - **v0.4.4** — sequential isolated F2/F3/F4 fanout: LIVE PASS
-- **v0.4.5** — generated-image recovery: LIVE PASS
-- **v0.4.6** — user-selectable output folder: STATIC PASS / LIVE PENDING
+- **v0.4.5** — generated-image recovery to default Downloads: LIVE PASS
+- **v0.4.6** — selected-folder first live run: `PERMISSION_REQUIRED` FAIL isolated after successful recovery
+- **v0.4.7** — popup user-gesture reauthorization fix: IMPLEMENTED / LIVE PENDING
+
+v0.4.6 failure did **not** regress generation or recovery. The three images were recovered successfully to `Downloads/MYGPT-Worker-Fanout/`; only selected-directory relocation was blocked because the stored directory handle's write permission returned to `prompt`.
+
+v0.4.7 adds `保存先を再許可して保存` so a popup click can call `requestPermission({mode:"readwrite"})` on the existing handle and restart the unchanged relocation layer.
 
 Operational checkpoint:
 - `research/experiments/2026-08-09-worker-fanout-isolated-generation-recovery-output-checkpoint.md`
+
+Known issue:
+- `research/KNOWN-ISSUES.md` — KI-004
 
 v0.4.4/v0.4.5で実機成功した生成・送信・回収経路は、新しい失敗証拠がない限り変更しない。
 
