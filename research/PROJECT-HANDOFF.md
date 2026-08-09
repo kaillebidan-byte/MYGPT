@@ -7,13 +7,15 @@ GitHub `main` をdurable stateの正本とする。
 ## 最初に読む
 
 1. `research/PROJECT-HANDOFF.md` — CURRENT
-2. `research/decisions/2026-08-10-post-image-critic-requires-explicit-followup-turn.md` — post-image criticの現在判断
-3. `research/experiments/2026-08-10-postgen-branch-thinking-critic-result.md` — Branch -> Thinking critic実機結果
-4. `research/plans/2026-08-10-postgen-critic-route-comparison-runbook.md` — **NEXT USER PROCEDURE**
-5. `research/plans/2026-08-09-identity-quality-closed-loop-execution-plan.md` — identity closed-loop全体計画
-6. `research/prior-art/2026-08-09-identity-preserving-variation-isolated-workers.md`
-7. `extensions/mygpt-worker-fanout-v3/README.md`
-8. `research/SEARCH-INDEX.md`
+2. `research/audits/2026-08-10-custom-gpt-thinking-imagegen-existing-methods-reassessment.md` — **Thinking画像生成の既存手法再監査**
+3. `research/plans/2026-08-10-custom-gpt-thinking-imagegen-route-matrix.md` — **CURRENT NEXT USER PROCEDURE / causal route gate**
+4. `research/chatgpt-project-practices/custom-gpt-thinking-imagegen-known-issue.md` — OpenAI既知問題と過去MYGPT証拠
+5. `research/experiments/2026-08-08-n2-branch-thinking-followup-result.md` — historical Thinking image-generation success
+6. `research/decisions/2026-08-10-post-image-critic-requires-explicit-followup-turn.md` — post-image critic判断
+7. `research/experiments/2026-08-10-postgen-branch-thinking-critic-result.md` — Branch -> Thinking critic実機結果
+8. `research/plans/2026-08-09-identity-quality-closed-loop-execution-plan.md` — identity closed-loop全体計画
+9. `extensions/mygpt-worker-fanout-v3/README.md`
+10. `research/SEARCH-INDEX.md`
 
 ---
 
@@ -33,7 +35,7 @@ Frozen principles:
 Current production/control worker:
 `MYGPT Single Frame Worker Test`
 
-Validated default:
+Validated production default:
 - Instant
 - Image generation ON
 - Web OFF
@@ -41,7 +43,7 @@ Validated default:
 - Knowledge NONE
 - Actions NONE
 
-Do not modify the production worker while post-image experiments are open.
+Do not modify the production worker while Thinking-route experiments are open.
 
 ---
 
@@ -66,204 +68,241 @@ Proven:
 - selected-folder permission preflight;
 - selected-folder save.
 
-Near-frozen unless new evidence requires a local patch:
-- attachment/paste/send primitives;
-- current generation/recovery core;
-- output relocation;
-- selected-folder preflight.
+Do not modify v0.5.0 for the manual Thinking-route causal gate.
 
-Current `image_collector.js` assumes the desired generated image is in the **latest assistant turn**. Post-image audit evidence now proves this cannot be used after a later text-only audit turn exists.
+Current `image_collector.js` latest-assistant assumption remains a known issue only for later post-image audit integration; it does not need a patch for T1/T2/T3 route discovery.
 
-Do not patch v0.5.0 main yet. Any audit-state implementation belongs in a separate experimental extension line/version.
+Session strategies on main:
+- `fresh-chat`: supported / LIVE PASS
+- `branch-thinking`: reserved / unsupported
+
+Do not enable `branch-thinking` until a manual route is repeatable.
 
 ---
 
-## 3. POSTGEN runtime evidence
+## 3. Current external/product evidence — Thinking image generation
+
+Current official product behavior:
+- Images with thinking is a supported ChatGPT capability on eligible paid plans;
+- GPTs with Image Generation enabled can use the current image-generation model;
+- therefore Custom-GPT + reasoning image generation is not documented as intentionally unsupported.
+
+Current known defect:
+- OpenAI Support acknowledged a Thinking/reasoning-specific image-generation issue in **some Custom GPTs**;
+- failure can return `/mnt/data/...` only or no image despite Image Generation being enabled;
+- the official temporary workaround for this failure class is manually selecting Instant;
+- no stable Thinking-specific fix or ETA is documented.
+
+Current GPT-5.6 rollout means the visible reasoning selector/model mapping may differ from older runs. Every new test must record the exact displayed model/reasoning label instead of assuming that historical `Thinking` and current runtime are identical.
+
+Detailed audit:
+- `research/audits/2026-08-10-custom-gpt-thinking-imagegen-existing-methods-reassessment.md`
+
+---
+
+## 4. Historical MYGPT Thinking image-generation evidence
+
+### Direct Thinking failure class
+
+Historical MYGPT and current external evidence both show direct fresh Custom-GPT Thinking can fail tool routing / rendering.
+
+Treat direct Thinking as a baseline failure control, not the first new experiment.
+
+### N2 local success — important but confounded
+
+Record:
+`research/experiments/2026-08-08-n2-branch-thinking-followup-result.md`
+
+The actual successful route was:
+
+```text
+Custom GPT / Instant
+-> canonical directly attached
+-> clean non-generating seed turn
+-> Branch in new chat
+-> switch branch to Thinking
+-> single-pose image request
+-> native image generation SUCCESS
+```
+
+Output:
+- two A/B portrait alternatives;
+- canonical reference remained effective.
+
+Important correction:
+**N2 did not prove that Branch itself caused Thinking image generation to work.**
+
+The route contains at least three candidate causal factors:
+1. clean Instant seed/warm-up before image generation;
+2. switching to Thinking only after the seed exists;
+3. Branch creating a new derived conversation.
+
+These factors were never isolated.
+
+---
+
+## 5. Existing routes now worth testing
+
+Current focused plan:
+`research/plans/2026-08-10-custom-gpt-thinking-imagegen-route-matrix.md`
+
+Priority order:
+
+### T1 — same-chat warm seed -> Thinking, **NO Branch**
+
+Highest information value.
+
+```text
+new Custom-GPT chat / Instant
+-> attach canonical
+-> clean seed, explicitly no image yet
+-> switch SAME chat to Thinking/reasoning
+-> R2-B image request
+```
+
+If this works, Branch is not required for the N2-class success and the architecture becomes much simpler.
+
+### T2 — clean seed -> Branch -> Thinking
+
+Exact structural reproduction of N2.
+Run only according to the T1 decision branch.
+
+### T3 — Instant image -> first-party retry/regenerate with Thinking
+
+Current ChatGPT UI officially supports retrying responses with Thinking/Pro.
+This route has not yet been tested by MYGPT for Custom-GPT native image generation.
+It is worth testing before inventing browser-side model-switch machinery.
+
+### T0 — direct fresh Thinking
+
+Known-unreliable baseline control. Use only after a candidate route passes and needs a matched comparison.
+
+Low-priority/fallback only:
+- Images/Create Image surface — Custom-GPT context inheritance not proven;
+- prompt-only `render inline` / `no commentary` tricks — current known issue remains inconsistent under these;
+- rebuilding/minimizing capabilities — already shown not to fix the current issue generally;
+- changing browser/device/account — diagnostic variability, not architecture.
+
+---
+
+## 6. NEXT ONLY — T1 same-chat warm seed -> Thinking
+
+Do **not** run a broad 3+3 or 5+5 matrix first.
+Do **not** change extension code.
+Do **not** add Actions/Code Interpreter.
+
+Use one causal test first.
+
+### Fixed control
+
+Canonical:
+`kokyo_base_20260805.png`
+
+Seed message:
+
+```text
+この画像を、この会話で生成する人物の唯一の正本画像として扱ってください。
+まだ画像は生成しないでください。
+次に1つの静止姿勢だけを指定します。
+```
+
+After the seed response, switch the **same chat** from Instant to the current user-visible Thinking/reasoning option.
+Record the exact displayed label.
+
+Then send R2-B:
+
+```text
+人物は正面を向いたまま、両足を基準画像と同じ位置で接地させてください。腰から上の上体を前へ傾け、浅いお辞儀として明確に読める姿勢にしてください。頭部は上体と一緒に前下方へ追従させ、首だけを曲げないでください。身体を横向きや斜め横向きへ回転させず、正面基準を維持してください。両腕は新しい独立したジェスチャーを作らず、基準画像の左右関係を保ったまま身体の両側に置き、大袖は上体前傾に受動的に追従して自然に垂らしてください。膝を大きく曲げず、足の位置を変えないでください。それ以外の表情、衣装構造、装飾、体格は基準画像を維持してください。人物1体、1姿勢、全身、正面基準、縦長の1枚だけを生成してください。
+```
+
+### Return evidence
+
+Return only what is needed to route the next step:
+- exact visible model/reasoning label after switch;
+- native image generation UI started: YES/NO;
+- visible final image count;
+- exact `/mnt/data`, tool-unavailable, or text-only response if failure;
+- screenshot if output shape is ambiguous.
+
+### Decision branch
+
+If T1 PASS:
+- repeat T1 from fresh chats two more times;
+- if 3/3 PASS, provisionally treat Branch as unnecessary;
+- then run matched direct-T0 controls only as needed.
+
+If T1 FAIL:
+- proceed to T2 exact clean-seed Branch -> Thinking route.
+
+If T1 mixed after repeats:
+- compare T1 vs T2, capped at 5 attempts per competing route, not automatic 5 for every route.
+
+If T1 and T2 both fail:
+- run T3 Instant success -> retry/regenerate with Thinking.
+
+If no route reaches at least 4/5 visible native image returns:
+- stop treating Thinking as a production generator;
+- retain Instant generation and use Thinking only for critic/reasoning where useful;
+- reopen only after OpenAI runtime/product evidence changes.
+
+---
+
+## 7. POSTGEN critic evidence remains valid but is temporarily deferred
 
 ### Instant same-turn auto-audit — FAIL
 
-Experiment:
-`research/experiments/2026-08-10-postgen-g1a1-manual-result.md`
+Image generation succeeded but no automatic audit body followed in the same user turn.
 
-Observed:
-- image generation succeeded;
-- no automatic `POSTGEN_AUDIT` text followed in the same user turn;
-- DOM had the image-bearing assistant turn but no audit assistant text.
+### Branch -> Thinking critic — SINGLE-RUN LIVE PASS
 
-Decision:
-- do not rely on same-turn automatic continuation after image generation.
+Thinking successfully returned structured `POSTGEN_AUDIT` on an already-generated image without generating another image.
 
-### Branch -> Thinking post-image critic — SINGLE-RUN LIVE PASS
-
-Experiment:
-`research/experiments/2026-08-10-postgen-branch-thinking-critic-result.md`
-
-Observed response:
+This proves a useful role split is available even if Thinking image generation remains flaky:
 
 ```text
-POSTGEN_AUDIT {"identity_obvious_drift":false,"pose_obvious_error":false,"topology_obvious_error":false,"verdict":"PASS"}
+Instant = generator
+Thinking = critic
 ```
 
-No new image generation occurred.
-
-DOM evidence:
-- image-bearing assistant turn exists earlier;
-- later audit assistant turn contains text only and zero images.
-
-Confirmed:
-- Branch context retained enough prior visual/conversation state for Thinking to perform the structured critic task in this run;
-- Thinking can be used as a **critic without generating an image**.
-
-Not confirmed:
-- repeatability across multiple Branch -> Thinking critic runs;
-- superiority over Instant critic;
-- stable Branch/model-switch browser automation;
-- stable Thinking image generation.
-
-Important:
-**Thinking image generation remains an independent unresolved problem and is not required for the critic architecture.**
+The previous same-candidate Instant-vs-Thinking critic comparison is **deferred**, not cancelled, while the user-prioritized Thinking image-generation route gate is active.
 
 ---
 
-## 4. Current critic route candidates
+## 8. Identity-quality plan after routing decision
 
-### Route A — parent Instant explicit follow-up
+Thinking route availability and identity quality are separate gates.
 
-```text
-Instant generation
--> IMAGE_READY
--> bind candidate
--> second user turn in same parent conversation
--> Instant text critic
--> POSTGEN_AUDIT
-```
+Do not compare identity quality while the tool route is flaky.
 
-Status:
-**NOT YET TESTED on the same candidate.**
+After route selection:
+1. availability/repeatability accepted;
+2. then compare identity fidelity / pose / sleeve topology / output multiplicity;
+3. then resume `ID-V1` edit/source A/B;
+4. `ID-V2` single local pose guide only if needed;
+5. evaluator / MaSC / best-of-2 work follows the existing closed-loop plan.
 
-Advantage:
-- simplest future automation if reliable.
-
-### Route B — Branch -> Thinking critic
-
-```text
-Instant generation
--> IMAGE_READY
--> bind candidate in parent
--> Branch from image-bearing context
--> Thinking
--> audit-only request
--> POSTGEN_AUDIT text
-```
-
-Status:
-**SINGLE-RUN LIVE PASS.**
-
-Advantage:
-- parent generation conversation can remain image-terminal;
-- later audit text is isolated in the branch;
-- Thinking does not need to generate images.
+Current full quality plan:
+`research/plans/2026-08-09-identity-quality-closed-loop-execution-plan.md`
 
 ---
 
-## 5. Required ordering for any closed-loop implementation
-
-Direct DOM evidence now requires:
-
-```text
-GENERATION_COMPLETE
--> identify/bind image-bearing generation turn
--> persist candidate source/metadata or preserve parent tab reference
--> only then submit audit request
--> receive text audit in same chat or branch
--> parse structured result
--> ACCEPT / RETRY_REQUIRED
-```
-
-Never run generic `latest assistant image` lookup after audit text without a bound generation turn.
-
-Potential future phases:
-
-```text
-GENERATING
--> IMAGE_READY
--> AUDITING
--> ACCEPTED / RETRY_REQUIRED
-```
-
-Do not implement this on main until critic route is selected.
-
----
-
-## 6. NEXT ONLY — compare critic routes on the same candidate
-
-Do **not** generate another image yet.
-
-Use the already-generated R2-B candidate.
-
-Current procedure:
-`research/plans/2026-08-10-postgen-critic-route-comparison-runbook.md`
-
-Next user action:
-1. return from the Branch to the original parent Instant conversation;
-2. keep the same generated image/canonical/context;
-3. do not regenerate or change model;
-4. send the exact audit-only explicit follow-up prompt;
-5. record the Instant `POSTGEN_AUDIT` response and whether image generation starts.
-
-This gives a controlled same-candidate comparison:
-
-```text
-A: parent Instant explicit follow-up critic
-B: Branch -> Thinking critic — already single-run PASS
-```
-
-Decision rule:
-- if Instant works and is sufficiently accurate, prefer it first for automation simplicity;
-- if Instant fails or is materially weaker, prefer Branch -> Thinking critic;
-- human review remains acceptance authority during research.
-
----
-
-## 7. After critic route selection
-
-Only then proceed in this order:
-
-1. critic repeatability on known PASS and known FAIL examples;
-2. narrow read-only Action from the chosen audit route;
-3. Code Interpreter generated-image file-access gate;
-4. `ID-V1` edit/source wording A/B;
-5. `ID-V2` one local pose visual guide only if needed;
-6. independent judge comparison if self-critic is biased;
-7. MaSC / DreamBench++ reuse after image transport is solved;
-8. best-of-2 only for hard/failed frames;
-9. optional canonical-derived local crop only for persistent localized drift.
-
-Thinking as an **image generator** remains a later independent execution-strategy experiment and must not block the above.
-
----
-
-## 8. Frozen boundaries
+## 9. Frozen boundaries
 
 Until contrary live evidence:
 - original canonical remains sole identity source;
 - no generated-frame chaining;
 - one pose/state per generation-facing worker;
-- no 4-pose/sequence guide in generator;
-- fresh isolated retry;
-- production worker unchanged;
-- v0.5.0 successful fanout/recovery/output core unchanged;
-- no unbounded same-chat regenerate/self-correct loop.
+- no sequence/board context in generator;
+- production Instant worker unchanged;
+- Worker Orchestrator v0.5.0 unchanged;
+- no Branch/model-switch automation before a route is manually repeatable.
 
 ---
 
-## 9. Maintenance rule
+## 10. Maintenance rule
 
-At meaningful boundaries update durable state without waiting for a separate request:
-- runtime PASS/FAIL -> experiment record;
-- architecture decision -> `research/decisions/`;
-- NEXT/gates -> this handoff + current runbook/plan;
-- extension behavior change -> checkpoint + extension README + root README;
-- prior-art changes -> SEARCH-INDEX/topic note.
-
-Do not change proven source code merely to make documentation look consistent.
+At each meaningful result:
+- route PASS/FAIL -> experiment record;
+- route causal decision -> focused plan + this handoff;
+- OpenAI/runtime research -> known-issue note / audit;
+- only after route acceptance -> extension strategy implementation on a separate development line.
