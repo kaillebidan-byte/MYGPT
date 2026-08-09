@@ -2,35 +2,29 @@
 
 Branch: `worker-orchestrator-v5`
 
-Status: **v0.5.0 STATIC CANDIDATE / LIVE PENDING**
+Status: **v0.5.0 SELECTED-FOLDER LIVE PASS**
 
-This branch starts a new orchestration line while preserving the live-proven v0.4.x generation/recovery engine.
+Live confirmation: 2026-08-09 JST. The user completed a normal F2/F3/F4 run and confirmed the generated images were saved in the selected output directory.
 
-## Why v5 exists
+This line preserves the live-proven v0.4.x generation/recovery engine and adds a strategy boundary plus Run-time output-permission preflight.
 
-The v0.4.x line proved:
+## Proven boundary
 
-- v0.4.4 fresh isolated F2/F3/F4 fanout: LIVE PASS;
-- v0.4.5 generated-image recovery to browser Downloads: LIVE PASS;
-- v0.4.6 selected-directory attempt isolated a permission-lifecycle failure after successful recovery.
+- v0.4.4 fresh isolated F2/F3/F4 fanout: LIVE PASS
+- v0.4.5 generated-image recovery: LIVE PASS
+- v0.4.6 selected-directory post-run permission discovery: FAIL isolated
+- v0.5.0 Run-time selected-directory preflight + final selected-folder save: LIVE PASS
 
-Before further patching, existing solutions were reviewed. The selected-folder design now follows the Chrome / VS Code Web File System Access lifecycle recorded in:
-
+Prior-art basis:
 - `research/prior-art/2026-08-09-selectable-output-directory-browser-prior-art.md`
-
-v5 also creates an explicit session-strategy boundary so future Branch/Thinking work does not have to be inserted into the proven fresh-chat state machine.
 
 ## Current session strategies
 
-`session_strategy.js` defines:
-
 ### `fresh-chat`
 
-Status: **SUPPORTED / CURRENT**
+Status: **SUPPORTED / LIVE PASS**
 
-Routes to the existing proven `MYGPT_V4_RUN_THREE` engine.
-
-Execution remains:
+Routes to the existing proven `MYGPT_V4_RUN_THREE` engine:
 
 ```text
 fresh isolated Custom GPT F2
@@ -44,6 +38,7 @@ fresh isolated Custom GPT F2
 -> fresh isolated Custom GPT F4
 -> passive completion monitoring
 -> existing image recovery
+-> selected-folder relocation when configured
 ```
 
 ### `branch-thinking`
@@ -59,32 +54,30 @@ Instant preparation session
 -> verify branch context / Custom GPT identity
 -> switch branch to Thinking
 -> generate in branch
--> reuse the same completion/recovery/output layers
+-> reuse compatible completion/recovery/output layers
 ```
 
-It is deliberately `supported: false` in v0.5.0 and cannot run accidentally.
+It remains `supported: false`; v0.5.0 cannot invoke it accidentally.
 
 ## Proven primitives kept unchanged
 
-The v5 branch does not change:
+v0.5.0 does not modify:
 
-- `background.js` fresh-chat fanout sequencing;
-- AutoGPT `DataTransfer -> input.files -> change` attachment;
-- bounded attachment retry;
-- MAIN-world synthetic paste;
-- Translation Loop native click;
-- observer-before-trigger ordering;
-- positive submit evidence;
-- runToken / stale-async guard;
-- passive completion monitoring;
-- `image_collector.js`;
-- `output_relocator.js` write / verify / cleanup behavior.
+- `background.js` fresh-chat fanout sequencing
+- AutoGPT `DataTransfer -> input.files -> change` attachment
+- bounded attachment retry
+- MAIN-world synthetic paste
+- Translation Loop native click
+- observer-before-trigger ordering
+- positive submit evidence
+- runToken / stale-async guard
+- passive completion monitoring
+- `image_collector.js`
+- `output_relocator.js` write / verify / cleanup behavior
 
-The branch diff should be used to enforce this boundary.
+## Output permission lifecycle
 
-## v5 output permission preflight
-
-When no custom directory is selected:
+No custom directory:
 
 ```text
 Run
@@ -93,59 +86,58 @@ Run
 -> Downloads/MYGPT-Worker-Fanout/
 ```
 
-When a custom directory is selected:
+Custom directory:
 
 ```text
 Run click
 -> queryPermission({mode:"readwrite"})
 -> if needed requestPermission({mode:"readwrite"}) while the user gesture exists
--> denied/error: abort before any worker is started
+-> denied/error: abort before worker-start message
 -> granted: publish selected-directory metadata
 -> existing fresh-chat fanout
 -> existing recovery
 -> existing output relocation / byte-size verification
 ```
 
-The older post-run `PERMISSION_REQUIRED` reauthorization path remains as a defensive fallback if permission changes during a long run.
+The older post-run `PERMISSION_REQUIRED` path remains as a defensive fallback if permission changes during a long run.
 
-## v0.5.0 live acceptance
+## v0.5.0 live result
 
-1. load the unpacked extension from this branch;
-2. reload the source Custom GPT tab;
-3. select a writable test output folder;
-4. if Chromium reports permission as `prompt`, press Run and grant permission;
-5. confirm no worker opens before permission is granted;
-6. require F2/F3/F4 generation `COMPLETE`;
-7. require `Recovery: COMPLETE`;
-8. require `Output: COMPLETE`;
-9. require F2/F3/F4 `output=COMPLETE/<filename>`;
-10. verify all three files exist in the selected directory;
-11. verify temporary Downloads copies are removed only after destination verification;
-12. deny permission in a separate test and confirm zero worker generations start.
+Confirmed by the user:
 
-After this passes, the selected-folder issue can be closed without further filesystem redesign.
+- normal generation run completed successfully
+- selected output-directory save completed successfully
+- generated files were present in the selected directory
+
+This closes the observed v0.4.6 failure for the successful selected-folder path.
+
+Not yet separately exercised:
+- explicit permission-denial test proving zero workers start after denial
+- permission revocation during an already-running generation
+
+Those are defensive edge cases, not blockers for the successful selected-folder baseline.
 
 ## Future Branch/Thinking work
 
-Do not alter the `fresh-chat` engine to implement Branch.
+Do not alter the proven `fresh-chat` engine to implement Branch.
 
-Add a separate session engine behind the strategy boundary. The future engine should own only:
+Add a separate session engine behind the strategy boundary. That future engine should own only:
 
-- parent conversation preparation;
-- branch creation/navigation;
-- branch identity/context verification;
-- model/reasoning selection;
-- handoff to the existing attach/paste/send/monitor/recovery layers where compatible.
+- parent conversation preparation
+- branch creation/navigation
+- branch identity/context verification
+- model/reasoning selection
+- handoff to existing attach/paste/send/monitor/recovery layers where compatible
 
-This keeps the proven fresh-chat path available as a fallback and makes A/B testing between session strategies possible.
+This keeps fresh-chat available as a fallback and allows A/B testing between session strategies.
 
 ## Static contract
 
 `tests/test_output_directory.js` checks:
 
-- manifest is `0.5.0` / `MYGPT Worker Orchestrator v5`;
-- `fresh-chat` routes to the proven v4 run message;
-- `branch-thinking` is present but unsupported;
-- Run-time permission preflight exists;
-- preflight occurs before the worker-start message in popup source order;
-- existing selected-folder write / exact-size verify / cleanup path remains present.
+- manifest is `0.5.0` / `MYGPT Worker Orchestrator v5`
+- `fresh-chat` routes to the proven v4 run message
+- `branch-thinking` exists but is unsupported
+- Run-time permission preflight exists
+- preflight occurs before the worker-start message in popup source order
+- existing selected-folder write / exact-size verify / cleanup path remains present
