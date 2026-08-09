@@ -32,7 +32,8 @@ function render(state) {
   const updatedAt = Number.isFinite(state?.updatedAt) ? state.updatedAt : 0;
   if (updatedAt && updatedAt < lastRenderedAt) return;
   if (updatedAt) lastRenderedAt = updatedAt;
-  phase.textContent = state?.phase || "UNKNOWN";
+  const stage = state?.sequenceStage && state.sequenceStage !== "IDLE" ? ` / ${state.sequenceStage}` : "";
+  phase.textContent = `${state?.phase || "UNKNOWN"}${stage}`;
   worker.textContent = state?.workerIdentity?.workerPath || "-";
   stateFile.textContent = state?.fileName || "-";
   errorEl.textContent = state?.error ? `${state.error.code}: ${JSON.stringify(state.error.detail || {})}` : "";
