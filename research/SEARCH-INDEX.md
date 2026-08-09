@@ -1,6 +1,6 @@
 # MYGPT external research / prior-art search index
 
-更新日: 2026-08-09 19:52 JST
+更新日: 2026-08-09 20:03 JST
 Status: **CURRENT SEARCH ENTRYPOINT**
 
 この文書は、既存例・外部事例・中国語圏事例・論文・公開GPT・browser automation prior artを探すときの入口。
@@ -16,6 +16,50 @@ Status: **CURRENT SEARCH ENTRYPOINT**
 
 2. `research/chatgpt-project-practices/README.md`
    - ChatGPT Projects / image reference / orchestration-context調査群の案内。
+
+## Post-image dialogue / closed-loop identity audit
+
+Current direction:
+- `research/decisions/2026-08-09-identity-quality-closed-loop-direction.md`
+
+Detailed reassessment:
+- `research/experiments/2026-08-09-post-image-dialogue-audit-loop-reassessment.md`
+
+新しい実機事実:
+- Instantでは画像生成後に対話モデルへ戻れることを実機確認。
+- Thinkingでは未確認。
+
+これにより可能になった構造:
+
+```text
+isolated generation
+-> image ready
+-> post-image dialogue critic
+-> structured identity/pose/topology audit
+-> ACCEPT / RETRY_REQUIRED
+-> retryはoriginal canonicalからfresh isolated worker
+```
+
+対象prior art / reuse:
+- DreamBench++ — GPT/VLMによるhuman-aligned concept-preservation評価
+- Beyond the Pixels — feature-level / hierarchical identity decomposition
+- EditRefiner — perception -> reasoning -> localized action -> evaluation
+- Iterative Refinement / Idea2Img — multimodal critic loop
+- Iterative Visual Thinking — naive self-correction悪化への警告
+- MaSC — foreground-maskベースのpip-installable concept-preservation metric
+
+Action利用のCURRENT境界:
+- `getAuditPolicy` / `recordAudit`等の**画像bytes不要なnarrow Action**は優先候補。
+- generated-image bytes/file referenceをActionへ自動移送できるとはまだ扱わない。
+- image metric Actionはfile transportの実機gate後。
+
+Browser側の最初のgate:
+- `POSTGEN-G1`
+- post-image auditが同一assistant turnか別turnかを観測
+- current terminal gate / `image_collector.js`が正しい画像を捕まえ続けるか確認
+- 証拠前にcollectorを改造しない
+
+同一性の次作業を考える場合、従来のID-V1だけでなくこのclosed-loop decisionを先に読む。
 
 ## Identity-preserving variation / isolated workers
 
@@ -35,7 +79,9 @@ Status: **CURRENT SEARCH ENTRYPOINT**
 - DSH-Bench / MaSC — subject/region-aware identity evaluation
 - UNO / AnyStory / DreamO / UMO — multi-reference時のrouting / attribute confusion
 
-現在の有力実験順:
+このnoteの旧実験順はpost-image dialogue発見前のもの。CURRENT順はclosed-loop decisionを優先する。
+
+維持する候補:
 1. `ID-V1` — canonicalをsemantic referenceではなく**編集元/source image**として扱うA/B
 2. `ID-V2` — canonical + **1 worker専用のsingle-pose visual guide**
 3. `ID-V4` — same poseをbest-of-2隔離生成し、identity監査で選択
@@ -46,8 +92,6 @@ Status: **CURRENT SEARCH ENTRYPOINT**
 - 4pose board / sequence / other slotsをworkerへ見せない
 - cross-image attention論文を、generated outputs相互参照で雑に模倣しない
 - identity / pose / evaluationを別チャネルとして設計する
-
-同一性改善を検討する場合、まずこのnoteを読む。
 
 ## Browser filesystem / selectable output directory
 
@@ -165,6 +209,7 @@ prior-art部分を検索証拠として使う。
 - 旧MYGPT再編時の調査根拠
 
 これは2026-08-07時点の再構築研究であり、CURRENT production構成ではない。
+特に生成後Action/file transportの記述は、post-image dialogue発見後も**historical file-transport caveat**として読む。post-generation tool orchestration自体はCURRENTで再開している。
 
 ## ChatGPT Projects / image-generation context
 
@@ -204,7 +249,7 @@ CURRENT production判断は、外部例だけで上書きしない。
 
 1. MYGPT実機結果
 2. CURRENT decision / checkpoint
-3.一次資料・実装実物
+3. 一次資料・実装実物
 4. community実例 / secondary source
 
 ## 新しい検索を追加したら
