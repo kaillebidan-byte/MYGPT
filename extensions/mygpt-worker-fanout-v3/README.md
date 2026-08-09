@@ -1,6 +1,6 @@
 # MYGPT Worker Fanout v4
 
-Status: **v0.4.4 fanout LIVE PASS / v0.4.5 image recovery LIVE PASS / v0.4.6 selected-folder permission recovery FAIL / v0.4.7 fix STATIC candidate**
+Status: **v0.4.4 fanout LIVE PASS / v0.4.5 image recovery LIVE PASS / v0.4.6 selected-folder permission FAIL / v0.4.7 reactive fix PROVISIONAL STATIC**
 
 Current source:
 
@@ -9,6 +9,11 @@ extensions/mygpt-worker-fanout-v3/
 ```
 
 Current manifest version: `0.4.7`.
+
+Important: after the v0.4.6 permission failure, a dedicated existing-solutions review was performed before further implementation. The current v0.4.7 code contains a reactive reauthorization path, but **do not spend another generation run testing that ordering first**. The next implementation action is to align permission acquisition with the Chrome/VS Code preflight pattern described below.
+
+Prior-art record:
+- `research/prior-art/2026-08-09-selectable-output-directory-browser-prior-art.md`
 
 ## Proven generation and recovery boundary
 
@@ -66,25 +71,25 @@ The F2/F3/F4 generation-to-download path is live-proven.
 
 ## Selected output folder layer
 
-The selected-folder feature is deliberately layered after v0.4.5.
+The selected-folder feature remains a separate layer after v0.4.5.
 
-Default mode remains:
+Default mode:
 
 ```text
 Downloads/MYGPT-Worker-Fanout/
 ```
 
-Selected-folder mode uses:
+Selected-folder components:
 
 - `output_directory_store.js` — persists `FileSystemDirectoryHandle` in IndexedDB and manages permission checks;
 - `output_relocator.js` — copies recovered image bytes to the selected directory, verifies exact byte size, then removes the temporary Downloads file;
-- `popup.js` — folder selection and permission-recovery UI.
+- `popup.js` — folder selection and permission UI.
 
 `output_relocator.js` is unchanged between v0.4.6 and v0.4.7.
 
-## v0.4.6 live result — permission recovery FAIL
+## v0.4.6 live result — permission FAIL isolated
 
-The first selected-folder live run on 2026-08-09 produced:
+The first selected-folder live run produced:
 
 ```text
 Phase: COMPLETE / COOLDOWN | Recovery: COMPLETE | Output: PERMISSION_REQUIRED
@@ -99,85 +104,133 @@ Interpretation:
 - fanout succeeded;
 - all three image generations succeeded;
 - v0.4.5 download recovery succeeded;
-- failure was isolated to the selected-directory write permission;
-- the persisted directory handle still existed, but `queryPermission({mode:"readwrite"})` returned `prompt`;
-- the service worker cannot itself satisfy a permission prompt that requires a user gesture.
+- failure was isolated to selected-directory write permission;
+- the persisted directory handle still existed, but current read/write permission was `prompt`;
+- the three recovered files remained safely under `Downloads/MYGPT-Worker-Fanout/`.
 
-The original three images remained safely present in `Downloads/MYGPT-Worker-Fanout/` because relocation never reached verified completion.
+## Existing-solutions review — completed
 
-## v0.4.7 — user-gesture permission recovery
+The filesystem/permission problem was checked against mature prior art before further patching.
 
-v0.4.7 fixes only the missing permission-recovery path.
+### Preferred browser-only prior art — Chrome / VS Code Web
 
-When the selected folder is still known but permission is no longer `granted`:
+Standard lifecycle:
+
+```text
+showDirectoryPicker({mode:"readwrite"})
+-> persist FileSystemDirectoryHandle in IndexedDB
+-> later queryPermission({mode:"readwrite"})
+-> if needed requestPermission({mode:"readwrite"}) from user gesture
+-> write through File System Access API
+```
+
+This is the pattern to reuse. A persisted handle is not treated as permanently authorized.
+
+### Other candidates checked
+
+- `chrome.downloads`
+  - suitable for the proven Downloads-relative staging path;
+  - not an arbitrary absolute-folder mechanism.
+- `idb-keyval`
+  - mature tiny IndexedDB helper used by Chrome examples;
+  - not introduced yet because this extension has no bundler and stores one directory record.
+- GoogleChromeLabs `browser-fs-access`
+  - mature open/save/fallback wrapper;
+  - not a drop-in replacement for persistent selected-directory permission/resume state.
+- `native-file-system-adapter`
+  - broader ponyfill/portability layer;
+  - unnecessary for the current Chromium/Vivaldi target.
+- AutoGPT 0.0.71
+  - its browser-side `downloadImage` uses `chrome.downloads.download`;
+  - it has output URL/gallery plumbing but no audited arbitrary-directory permission module to transplant.
+- Autojourney Pro Downloader
+  - separate desktop companion that escapes browser download limitations;
+  - not adopted while the browser-native File System Access solution remains viable.
+
+Do not add a third-party filesystem dependency unless a concrete browser limitation requires it.
+
+## v0.4.7 — current reactive permission patch
+
+The existing v0.4.7 code adds:
 
 ```text
 Output: PERMISSION_REQUIRED
-        ↓
-popup button becomes
-保存先を再許可して保存
-        ↓
-user click
-        ↓
-existing FileSystemDirectoryHandle.requestPermission({mode:"readwrite"})
-        ↓
-permission granted
-        ↓
-output-directory metadata revision is renewed
-        ↓
-existing output_relocator.js observes the metadata change
-        ↓
-F2/F3/F4 relocation resumes
-        ↓
-write -> size verify -> temporary Downloads removal
+-> popup: 保存先を再許可して保存
+-> user click
+-> existing handle.requestPermission({mode:"readwrite"})
+-> metadata revision update
+-> unchanged output_relocator.js resumes
 ```
 
-The user does not need to choose a different directory merely because permission returned to `prompt`.
+This mechanism matches the standard permission API, but the **timing is provisional** because permission is discovered only after generation/recovery has already finished.
 
-If the user actually wants a different folder while permission is already valid, the same control displays `保存先フォルダを変更` and opens `showDirectoryPicker()`.
+## Next implementation action — permission preflight on Run
 
-### Why this interaction is required
+Before another live generation test, align the ordering to an editor/IDE-style permission preflight:
 
-File System Access directory handles can be stored in IndexedDB, but write permission is not guaranteed to remain granted. When permission must be requested again, `requestPermission()` must be triggered from a user interaction. Therefore a background service worker may detect `prompt`, but it cannot replace the popup click that grants access.
+```text
+user presses Run
+-> custom folder selected?
+   -> no: continue existing default flow
+   -> yes: verify write permission immediately
+       -> granted: start fanout
+       -> prompt: request permission while Run user gesture is available
+       -> denied/error: do not start generation
+-> existing v0.4.4 fanout
+-> existing v0.4.5 recovery
+-> existing relocation/write/verify
+```
+
+Keep the reactive `PERMISSION_REQUIRED` path as a defensive fallback if permission changes while a long run is active.
+
+Do **not** modify for this change:
+- `background.js` fanout sequencing;
+- attachment;
+- paste;
+- submit activation/evidence;
+- completion monitoring;
+- `image_collector.js`;
+- `output_relocator.js` write/size-verification logic unless a new failure occurs there.
 
 ## Selected-folder integrity rules
 
 These remain unchanged:
 
-- no selected directory -> `Output: DEFAULT_DOWNLOADS`;
-- existing destination names are not overwritten; `name (1).ext`, `name (2).ext`, etc. are used;
-- written file size must exactly match the source bytes;
+- no selected directory -> default Downloads staging remains valid;
+- existing destination names are not overwritten; collision names are uniquified;
+- written file size must exactly match source bytes;
 - temporary default-Downloads copy is removed only after destination verification;
-- no silent fallback to another directory after an explicitly selected directory fails;
-- no new `chrome.downloads.download()` is added to `output_relocator.js`.
+- no silent redirect to a different directory after an explicitly selected directory fails;
+- no new browser download is started by `output_relocator.js`.
 
-## v0.4.7 live acceptance
+## Live acceptance after preflight alignment
 
-After replacing/reloading the unpacked extension:
+1. reload the updated unpacked extension;
+2. reload the source Custom GPT tab;
+3. select a test output folder;
+4. press Run;
+5. if write permission is not granted, resolve the permission prompt **before F2/F3/F4 starts**;
+6. if permission is denied, no worker generation starts;
+7. if granted, require generation `COMPLETE` and `Recovery: COMPLETE`;
+8. require `Output: COMPLETE`;
+9. require F2/F3/F4 `output=COMPLETE/<filename>`;
+10. verify all three files exist in the selected folder;
+11. verify temporary Downloads copies are removed only after successful destination verification.
 
-1. reload the source Custom GPT tab because extension reload invalidates old content-script contexts;
-2. choose a test output folder;
-3. run normal F2/F3/F4 fanout;
-4. require generation `COMPLETE` and `Recovery: COMPLETE`;
-5. if `Output: PERMISSION_REQUIRED` appears, reopen the popup and click `保存先を再許可して保存`;
-6. grant write permission in the browser prompt;
-7. require `Output: COMPLETE`;
-8. require F2/F3/F4 `output=COMPLETE/<filename>`;
-9. verify the three files exist and open in the selected folder;
-10. verify temporary `Downloads/MYGPT-Worker-Fanout/` copies are removed only after successful relocation.
+After selected-folder acceptance, stop Worker Fanout feature expansion and return to the planned image-difference analysis.
 
-A permission-recovery click is acceptable behavior when Chromium has returned the stored handle to `prompt`; automatic background prompting is not treated as an acceptance requirement.
+## Static contract currently present in v0.4.7
 
-## Static contract
-
-`tests/test_output_directory.js` now requires:
+`tests/test_output_directory.js` requires:
 
 - manifest `0.4.7`;
-- selected-folder picker remains read/write;
+- selected-folder picker uses read/write mode;
 - popup contains `PERMISSION_REQUIRED` recovery logic;
 - popup exposes `保存先を再許可して保存`;
 - `output_directory_store.js` exposes `requestWritePermission()`;
 - existing `output_relocator.js` still performs write, size verification and cleanup without starting another browser download.
+
+This test must be extended for Run-time permission preflight when that change is implemented.
 
 ## External/product layers intentionally absent
 
@@ -189,4 +242,4 @@ A permission-recovery click is acceptable behavior when Chromium has returned th
 - unrelated provider adapters;
 - Bearer capture;
 - direct internal conversation polling;
-- DNR header stripping.
+- DNR header stripping;
