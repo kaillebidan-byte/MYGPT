@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MYGPT Worker Fanout v4",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "Sequential isolated Custom GPT workers: one worker tab at a time with timed settle stages, Translation Loop submit evidence, AutoGPT upload/paste, and VoiceBridge-style monitoring.",
   "permissions": [
     "storage",

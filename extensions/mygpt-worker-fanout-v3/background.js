@@ -559,15 +559,6 @@ async function handleAttachWait(token) {
     lastMonitorAt: Date.now(),
     error: null
   });
-  await guard.mutateIfToken(token, (current) => ({
-    next: {
-      ...current,
-      phase: "MONITORING",
-      sequenceStage: "WAIT_COMPLETE",
-      nextActionAt: 0
-    }
-  }));
-  await clearSequenceAlarm();
   await appendLog("slot_submitted", {
     slotId: slot.slotId,
     tabId: slot.tabId,
@@ -575,6 +566,11 @@ async function handleAttachWait(token) {
     proof: evidence.proof,
     conversationId
   });
+
+  // The sequential delay exists only to absorb ChatGPT/Vivaldi attachment and
+  // composer timing. Do not wait for image-generation completion before the
+  // next isolated worker is opened. Completion monitoring remains passive.
+  await scheduleAfterSequentialSlot(token, slot.slotId);
 }
 
 async function scheduleAfterSequentialSlot(token, slotId) {
@@ -672,9 +668,6 @@ async function processMonitorSnapshot(tabId, snapshot, source = "port") {
   if (!mutation.committed) return;
   if (complete) {
     await appendLog("slot_complete", { slotId: slot.slotId, tabId, proof, source });
-    if (runtime.activeSlotId === slot.slotId && runtime.sequenceStage === "WAIT_COMPLETE") {
-      await scheduleAfterSequentialSlot(runtime.runToken, slot.slotId);
-    }
   }
   await recomputeOverall(runtime.runToken);
 }

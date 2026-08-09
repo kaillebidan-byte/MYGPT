@@ -1,6 +1,6 @@
 # MYGPT Worker Fanout v4
 
-Status: **v0.4.3 STATIC PASS candidate — sequential one-worker-at-a-time live test pending**
+Status: **v0.4.4 STATIC PASS candidate — submit-gated sequential fanout live test pending**
 
 Current architecture:
 
@@ -12,7 +12,7 @@ AutoGPT ChatGPT upload/paste/passive observer
 VoiceBridge-style lifecycle monitor
 ```
 
-## v0.4.3 execution model
+## v0.4.4 execution model
 
 The previous v4 flow opened F2/F3/F4 tabs up front. v0.4.3 changes this to a persisted sequential state machine:
 
@@ -25,11 +25,10 @@ The previous v4 flow opened F2/F3/F4 tabs up front. v0.4.3 changes this to a per
 7. arm the passive observer before activation;
 8. submit with Translation Loop / Prompt Stacker native `button.click()`; Enter fallback remains disabled;
 9. require positive submit evidence from Translation Loop DOM evidence and/or AutoGPT passive conversation fetch evidence;
-10. monitor the same worker until terminal completion;
-11. wait about 5 seconds (`COOLDOWN`);
-12. only then open the next slot worker.
+10. once positive submit evidence is confirmed, wait about 5 seconds (`COOLDOWN`);
+11. open the next slot worker without waiting for the previous image generation to complete.
 
-Sequence waits are stored in runtime state and resumed by `chrome.alarms` (`mygpt-v4-sequence-step`). Completed worker tabs remain open for inspection; later workers are not opened early.
+The 15-second waits exist only to absorb ChatGPT/Vivaldi UI timing around tab initialization and image attachment. Generation completion monitoring remains passive and never gates opening the next worker. Sequence waits are stored in runtime state and resumed by `chrome.alarms` (`mygpt-v4-sequence-step`). Worker tabs remain open for inspection.
 
 ## Reused components
 
@@ -72,9 +71,9 @@ For a clean live test after replacing the unpacked extension, Reset/close worker
 
 Per active slot:
 
-`QUEUED -> OPENING -> OPEN_WAIT -> VERIFYING/STAGED -> ATTACHED -> ATTACH_WAIT -> SUBMITTING -> SUBMITTED/GENERATING -> SETTLING -> COMPLETE -> COOLDOWN`
+`QUEUED -> OPENING -> OPEN_WAIT -> VERIFYING/STAGED -> ATTACHED -> ATTACH_WAIT -> SUBMITTING -> SUBMITTED/GENERATING -> COOLDOWN`
 
-Then the next slot begins. Errors are slot-local and also pass through the cooldown before continuing.
+Then the next slot begins immediately after the cooldown; `SETTLING -> COMPLETE` may occur later in parallel and is informational only. Errors are slot-local and also pass through the cooldown before continuing.
 
 ## External/product layers intentionally absent
 
