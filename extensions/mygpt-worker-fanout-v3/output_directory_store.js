@@ -73,6 +73,13 @@
     catch (_) { return "error"; }
   }
 
+  async function requestWritePermission(handle) {
+    if (!handle || handle.kind !== "directory") return "missing";
+    if (typeof handle.requestPermission !== "function") return "unsupported";
+    try { return await handle.requestPermission({ mode: "readwrite" }); }
+    catch (_) { return "error"; }
+  }
+
   globalThis.MYGPTOutputDirectoryStore = Object.freeze({
     DB_NAME,
     STORE_NAME,
@@ -81,6 +88,7 @@
     getDirectoryRecord,
     getDirectoryHandle,
     clearDirectoryHandle,
-    queryWritePermission
+    queryWritePermission,
+    requestWritePermission
   });
 })();
