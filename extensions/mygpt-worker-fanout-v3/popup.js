@@ -3,6 +3,7 @@
 const STATE_KEY = "mygptV4Runtime";
 const PAYLOAD_KEY = "mygptV4Payload";
 const LEGACY_PAYLOAD_KEY = "mygptV3Payload";
+const OUTPUT_META_KEY = "mygptV4OutputDirectoryMeta";
 const SLOT_IDS = ["F2", "F3", "F4"];
 const MSG = Object.freeze({
   RUN_THREE: "MYGPT_V4_RUN_THREE",
@@ -15,6 +16,9 @@ const $ = (id) => document.getElementById(id);
 const canonical = $("canonical");
 const run = $("run");
 const reset = $("reset");
+const selectOutputDir = $("selectOutputDir");
+const clearOutputDir = $("clearOutputDir");
+const outputDirInfo = $("outputDirInfo");
 const fileInfo = $("fileInfo");
 const phase = $("phase");
 const worker = $("worker");
@@ -25,10 +29,20 @@ const packetEls = Object.fromEntries(SLOT_IDS.map((id) => [id, $(id)]));
 let selectedFileSpec = null;
 let lastRenderedAt = 0;
 let lastState = null;
+let outputDirectorySelected = false;
 
 function allPacketsReady() { return SLOT_IDS.every((slotId) => packetEls[slotId].value.trim()); }
 function recoveryBusy(state) { return ["PENDING", "RECOVERING"].includes(state?.recoveryPhase); }
-function updateRunEnabled(state = lastState) { run.disabled = Boolean(state?.enabled) || recoveryBusy(state) || !selectedFileSpec || !allPacketsReady(); }
+function outputTransferBusy(state) { return ["PENDING", "TRANSFERRING"].includes(state?.outputPhase); }
+function outputNeedsAction(state) { return ["PERMISSION_REQUIRED", "ERROR", "PARTIAL_ERROR"].includes(state?.outputPhase); }
+function updateRunEnabled(state = lastState) {
+  run.disabled = Boolean(state?.enabled) || recoveryBusy(state) ||
+    (outputDirectorySelected && (outputTransferBusy(state) || outputNeedsAction(state))) ||
+    !selectedFileSpec || !allPacketsReady();
+  const transferActive = outputDirectorySelected && outputTransferBusy(state);
+  selectOutputDir.disabled = transferActive;
+  clearOutputDir.disabled = transferActive;
+}
 
 function render(state) {
   const updatedAt = Number.isFinite(state?.updatedAt) ? state.updatedAt : 0;
@@ -37,10 +51,14 @@ function render(state) {
   lastState = state || null;
   const stage = state?.sequenceStage && state.sequenceStage !== "IDLE" ? ` / ${state.sequenceStage}` : "";
   const recovery = state?.recoveryPhase && state.recoveryPhase !== "IDLE" ? ` | Recovery: ${state.recoveryPhase}` : "";
-  phase.textContent = `${state?.phase || "UNKNOWN"}${stage}${recovery}`;
+  const output = state?.outputPhase && state.outputPhase !== "IDLE" ? ` | Output: ${state.outputPhase}` : "";
+  phase.textContent = `${state?.phase || "UNKNOWN"}${stage}${recovery}${output}`;
   worker.textContent = state?.workerIdentity?.workerPath || "-";
   stateFile.textContent = state?.fileName || "-";
-  errorEl.textContent = state?.error ? `${state.error.code}: ${JSON.stringify(state.error.detail || {})}` : "";
+  const errors = [];
+  if (state?.error) errors.push(`${state.error.code}: ${JSON.stringify(state.error.detail || {})}`);
+  if (state?.outputError) errors.push(`output ${state.outputError.code}: ${JSON.stringify(state.outputError.detail || {})}`);
+  errorEl.textContent = errors.join("\n");
   slotsEl.textContent = "";
   for (const slotId of SLOT_IDS) {
     const slot = state?.slots?.find((item) => item.slotId === slotId) || { slotId, phase: "IDLE" };
@@ -51,7 +69,10 @@ function render(state) {
     const imageRecovery = slot.imageRecovery || null;
     const imageStatus = imageRecovery?.status || "-";
     const imageName = imageRecovery?.actualFilename || imageRecovery?.filename || null;
-    text.textContent = `${slotId}: ${slot.phase} | Tab ${slot.tabId ?? "-"} | attach=${slot.attachmentEvidence || "-"}${slot.attachmentUiEvidence ? `/${slot.attachmentUiEvidence}` : ""} | send=${slot.activation || "-"}/${slot.submitEvidence || "-"} | done=${slot.completionEvidence || "-"} | image=${imageStatus}${imageName ? `/${imageName}` : ""}`;
+    const outputTransfer = slot.outputTransfer || null;
+    const outputStatus = outputTransfer?.status || "-";
+    const outputName = outputTransfer?.targetFilename || null;
+    text.textContent = `${slotId}: ${slot.phase} | Tab ${slot.tabId ?? "-"} | attach=${slot.attachmentEvidence || "-"}${slot.attachmentUiEvidence ? `/${slot.attachmentUiEvidence}` : ""} | send=${slot.activation || "-"}/${slot.submitEvidence || "-"} | done=${slot.completionEvidence || "-"} | image=${imageStatus}${imageName ? `/${imageName}` : ""} | output=${outputStatus}${outputName ? `/${outputName}` : ""}`;
     row.appendChild(text);
     if (Number.isInteger(slot.tabId)) {
       const button = document.createElement("button");
@@ -73,6 +94,12 @@ function render(state) {
       recoveryDetail.className = "error mono";
       recoveryDetail.textContent = `image ${imageRecovery.error.code}: ${JSON.stringify(imageRecovery.error.detail || {})}`;
       row.appendChild(recoveryDetail);
+    }
+    if (outputTransfer?.error) {
+      const outputDetail = document.createElement("div");
+      outputDetail.className = "error mono";
+      outputDetail.textContent = `output ${outputTransfer.error.code}: ${JSON.stringify(outputTransfer.error.detail || {})}`;
+      row.appendChild(outputDetail);
     }
     slotsEl.appendChild(row);
   }
@@ -106,6 +133,68 @@ async function loadPayload() {
     fileInfo.textContent = `${file.name} (${file.size} bytes) — storageから復元`;
   }
 }
+
+async function refreshOutputDirectoryInfo() {
+  const store = globalThis.MYGPTOutputDirectoryStore;
+  const stored = await chrome.storage.local.get(OUTPUT_META_KEY);
+  const meta = stored[OUTPUT_META_KEY] || null;
+  const record = store ? await store.getDirectoryRecord().catch(() => null) : null;
+  const handle = record?.handle?.kind === "directory" ? record.handle : null;
+  outputDirectorySelected = Boolean(meta?.mode === "directory" && handle);
+  if (!outputDirectorySelected) {
+    outputDirInfo.textContent = "既定: Downloads/MYGPT-Worker-Fanout/";
+    updateRunEnabled();
+    return;
+  }
+  const permission = await store.queryWritePermission(handle);
+  const permissionText = permission === "granted" ? "書込可" : permission === "prompt" ? "再許可が必要" : permission;
+  outputDirInfo.textContent = `選択: ${handle.name || meta.name || "folder"} — ${permissionText}`;
+  updateRunEnabled();
+}
+
+selectOutputDir.addEventListener("click", async () => {
+  errorEl.textContent = "";
+  try {
+    if (typeof window.showDirectoryPicker !== "function") throw new Error("DIRECTORY_PICKER_UNSUPPORTED");
+    const store = globalThis.MYGPTOutputDirectoryStore;
+    if (!store) throw new Error("OUTPUT_DIRECTORY_STORE_UNAVAILABLE");
+    const previous = await store.getDirectoryHandle().catch(() => null);
+    const options = { mode: "readwrite", id: "mygpt-worker-output" };
+    if (previous) options.startIn = previous;
+    const handle = await window.showDirectoryPicker(options);
+    let permission = await store.queryWritePermission(handle);
+    if (permission !== "granted" && typeof handle.requestPermission === "function") {
+      permission = await handle.requestPermission({ mode: "readwrite" });
+    }
+    if (permission !== "granted") throw new Error(`OUTPUT_DIRECTORY_PERMISSION_${String(permission).toUpperCase()}`);
+    await store.setDirectoryHandle(handle);
+    const meta = {
+      mode: "directory",
+      name: handle.name || "",
+      revision: crypto.randomUUID(),
+      selectedAt: Date.now()
+    };
+    await chrome.storage.local.set({ [OUTPUT_META_KEY]: meta });
+    await refreshOutputDirectoryInfo();
+  } catch (error) {
+    if (error?.name === "AbortError") return;
+    errorEl.textContent = error instanceof Error ? error.message : String(error);
+  }
+});
+
+clearOutputDir.addEventListener("click", async () => {
+  errorEl.textContent = "";
+  try {
+    const store = globalThis.MYGPTOutputDirectoryStore;
+    if (store) await store.clearDirectoryHandle();
+    await chrome.storage.local.remove(OUTPUT_META_KEY);
+    outputDirectorySelected = false;
+    outputDirInfo.textContent = "既定: Downloads/MYGPT-Worker-Fanout/";
+    updateRunEnabled();
+  } catch (error) {
+    errorEl.textContent = error instanceof Error ? error.message : String(error);
+  }
+});
 
 canonical.addEventListener("change", async () => {
   errorEl.textContent = "";
@@ -165,13 +254,19 @@ async function refresh() {
 }
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== "session") return;
-  const change = changes?.[STATE_KEY];
-  if (change?.newValue) render(change.newValue);
+  if (areaName === "session") {
+    const change = changes?.[STATE_KEY];
+    if (change?.newValue) render(change.newValue);
+    return;
+  }
+  if (areaName === "local" && changes?.[OUTPUT_META_KEY]) {
+    refreshOutputDirectoryInfo().catch(() => {});
+  }
 });
 
 (async () => {
   await loadPayload();
+  await refreshOutputDirectoryInfo();
   await refresh();
   updateRunEnabled();
 })().catch((error) => { errorEl.textContent = error instanceof Error ? error.message : String(error); });
