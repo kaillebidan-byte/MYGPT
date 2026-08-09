@@ -18,11 +18,16 @@
   </style>
 </head>
 <body>
-  <h1>MYGPT Worker Fanout v4.3 — sequential isolated workers</h1>
+  <h1>MYGPT Worker Fanout v4.6 — sequential isolated workers</h1>
 
   <label for="canonical">Canonical image</label>
   <input id="canonical" type="file" accept="image/*">
   <div id="fileInfo" class="small">未選択</div>
+
+  <label>Generated image output</label>
+  <button id="selectOutputDir" type="button">保存先フォルダを選択</button>
+  <button id="clearOutputDir" type="button">既定Downloadsに戻す</button>
+  <div id="outputDirInfo" class="small">既定: Downloads/MYGPT-Worker-Fanout/</div>
 
   <label for="F2">F2 packet</label>
   <textarea id="F2">[MYGPT_V4_F2_TEST]
@@ -47,6 +52,7 @@
     <div id="error" class="error"></div>
   </div>
 
+  <script src="output_directory_store.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
