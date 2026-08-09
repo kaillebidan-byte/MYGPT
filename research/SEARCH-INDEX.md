@@ -1,6 +1,6 @@
 # MYGPT external research / prior-art search index
 
-更新日: 2026-08-09 18:36 JST
+更新日: 2026-08-09 19:12 JST
 Status: **CURRENT SEARCH ENTRYPOINT**
 
 この文書は、既存例・外部事例・中国語圏事例・論文・公開GPT・browser automation prior artを探すときの入口。
@@ -16,6 +16,29 @@ Status: **CURRENT SEARCH ENTRYPOINT**
 
 2. `research/chatgpt-project-practices/README.md`
    - ChatGPT Projects / image reference / orchestration-context調査群の案内。
+
+## Browser filesystem / selectable output directory
+
+`research/prior-art/2026-08-09-selectable-output-directory-browser-prior-art.md`
+
+対象:
+- Chrome `chrome.downloads` のDownloads-relative制約
+- File System Access APIのofficial permission lifecycle
+- VS Code WebのIndexedDB persisted handle実例
+- `idb-keyval`
+- GoogleChromeLabs `browser-fs-access`
+- `native-file-system-adapter`
+- AutoGPT 0.0.71のdownload plumbing
+- Autojourney Pro Downloaderというnative companion方式
+
+現在のreuse結論:
+- arbitrary user-selected folderのbrowser-only本命は **Chrome official / VS Code Web pattern**
+- `FileSystemDirectoryHandle`をIndexedDBへ保存し、later reuse時に`queryPermission` / `requestPermission`する
+- `chrome.downloads`はv0.4.5 staging/fallbackとして維持
+- `browser-fs-access` / `native-file-system-adapter`を現時点で丸ごと追加する利益は小さい
+- permissionは長いgeneration後ではなくRun user gestureでpreflightする方向を優先
+
+保存先実装を追加修正する前に、このnoteを読む。
 
 ## 中国語圏の画像生成・一致性・pose control
 
