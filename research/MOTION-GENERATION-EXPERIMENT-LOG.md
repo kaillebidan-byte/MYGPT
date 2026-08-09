@@ -1,10 +1,10 @@
 # Motion Generation Experiment Log
 
-更新日: 2026-08-08
+更新日: 2026-08-09 18:36 JST
 
 この文書は、MYGPTのモーション画像生成について「何を試したか」「何が実機で起きたか」「なぜ次の方式へ移ったか」を残す永久ログである。
 
-新しい調整チャットで生成方式・repair方式・Project Source構成を変更する前に、`research/PROJECT-HANDOFF.md`とこの文書を先に読む。
+CURRENTの開始点は `research/PROJECT-HANDOFF.md`。このログは実験遷移を追うために使う。
 
 ## ルール
 
@@ -19,39 +19,57 @@
 
 ## 現在の結論
 
-### CURRENT: frame-first pipeline
+### CURRENT: isolated single-frame worker + browser fanout
 
 ```text
-high-quality canonical image directly attached to current chat
+high-quality canonical image = F1
         |
         v
-motion contract: F1 -> F2 -> F3 -> F4
+planner understands full motion
         |
         v
-4 image-generation jobs
-(one person / one pose / one image per job)
+planner emits F2 / F3 / F4 independent local static packets
         |
         v
-compose_keypose_board_from_frames.py
+MYGPT Worker Fanout
+        |
+        +--> fresh isolated Custom GPT worker F2
+        |      canonical + F2 only
+        +--> fresh isolated Custom GPT worker F3
+        |      canonical + F3 only
+        +--> fresh isolated Custom GPT worker F4
+               canonical + F4 only
         |
         v
-raw 1024x1536 2x2 board
-        |
-        +--> visual identity / motion review
-        +--> machine_audit_board.py
+3 independent image-generation jobs
         |
         v
-failed frames only: one repair round
+post-generation image recovery
         |
         v
-recompose / re-audit / select
+remove_chroma_key.py / deterministic compose / machine audit
 ```
 
-画像生成モデルには2×2 board、Kラベル、panel、layout guideを見せない。2×2 geometry、共通倍率、baseline、safe gap、外周余白はPythonの責務。
+Current proven browser boundary:
+- v0.4.4 isolated fanout: LIVE PASS
+- v0.4.5 generated-image recovery: LIVE PASS
+- v0.4.6 selectable output folder: STATIC PASS / LIVE PENDING
 
-Project Sourceに`four-pose-portrait.png`を置かない。
+Current checkpoint:
+- `research/experiments/2026-08-09-worker-fanout-isolated-generation-recovery-output-checkpoint.md`
 
-canonicalは、ユーザー指定がなければ利用可能な候補のうち加工前に近く、全身が見え、固有ディテールを読み取れる最高品質・高解像度画像を使う。
+生成workerへ見せない:
+- full motion
+- other pose packets
+- progress percentages
+- F1/F2/F3/F4 sequence structure
+- board / sheet / storyboard / 2x2 concepts
+- other generated frames
+
+F1はcanonicalそのもの。生成するのはF2/F3/F4の3frame。
+Generated frameを次frameのidentity sourceへ昇格しない。
+
+2×2 geometry、共通倍率、baseline、safe gap、外周余白はPythonの責務。
 
 ---
 
@@ -338,21 +356,80 @@ Status: SUPERSEDED interpretation
 ---
 
 ### E15 — frame-firstへ移行
-Status: CURRENT
+Status: SUPERSEDED AS CURRENT / IMPORTANT TRANSITION
 
-2026-08-08、Project構成を以下へ変更。
+2026-08-08、Project構成をsingle-frame前提へ変更した。
 
-- `01-character-identity.md`: 高品質canonical優先、occlusion/attachment topology強化
-- `02-motion-design.md`: F1〜F4を時間状態だけにし、2×2位置を除去
-- `03-keypose-board-spec.md`: direct board生成を廃止、single-frame outputへ変更
-- `04-imagegen-workflow.md`: `1 visual job = 1 frame`
-- `05-post-generation-audit.md`: failed-frame repairへ変更
-- `post-generation-review-test.md`: frame生成→Python compose→audit→failed-frame repairへ変更
-- `four-pose-portrait.png`: Project Sourceから退役
-- `compose_keypose_board_from_frames.py`: 4frameから1024×1536 boardを決定論的に構成
-- README / CI / researchをframe-firstへ更新
+この移行で確立した重要原則:
+- direct board生成をやめる
+- `1 visual job = 1 frame`
+- layout guideをgeneration contextから外す
+- Pythonでdeterministic composeする
+- 高解像度canonicalを直接使う
 
-次の実機試験では、高解像度canonicalを直接添付し、別モーションでF1〜F4が各1人物1画像として生成されるかを確認する。
+ただし当時の「F1〜F4を4 image-generation jobsで作る」構成は後続研究でさらに改善された。
+F1は生成せずcanonicalそのものを使い、F2/F3/F4だけを独立workerで生成するCURRENTへ進んだ。
+
+---
+
+### E16 — isolated Custom GPT / Instant workers
+Status: CONFIRMED / CURRENT GENERATION ARCHITECTURE
+
+後続のN1/N2/W1-W4/C0/R0/R1/R2検証で、以下のboundaryを確立した。
+
+- F1 = canonical itself
+- F2/F3/F4 = independent generations
+- each worker sees canonical + current one static pose only
+- worker does not see full motion / other pose packets / progress / board concepts
+- generated frame does not become next-frame canon
+- Instant = validated production default
+- failed local frame can retry from canonical without retuning all workers
+
+Production-v0 generalized result:
+- `research/decisions/2026-08-08-production-v0-generalized-verdict.md`
+
+---
+
+### E17 — browser Worker Fanout
+Status: CONFIRMED / CURRENT OPERATIONAL ARCHITECTURE
+
+Manual isolated-worker operationを、browser-side `MYGPT Worker Fanout`へ移した。
+
+v0.4.4 LIVE PASS:
+
+```text
+open F2 only
+-> 15s OPEN_WAIT
+-> canonical attachment
+-> 15s ATTACH_WAIT
+-> MAIN-world local packet paste
+-> Translation Loop native click
+-> positive submit evidence
+-> 5s COOLDOWN
+-> open F3
+-> same
+-> open F4
+```
+
+Generation completionは次worker開始をgateしない。
+
+実機結果:
+
+```text
+F2: COMPLETE | attach=autogpt-upload+visible-attachment/attachment-marker@attempt-1 | send=native-click/translation-loop-dom | done=image-turn-stable
+F3: COMPLETE | attach=autogpt-upload+visible-attachment/attachment-marker@attempt-1 | send=native-click/translation-loop-dom | done=oracle-action-bar
+F4: COMPLETE | attach=autogpt-upload+visible-attachment/attachment-marker@attempt-1 | send=native-click/translation-loop-dom | done=image-turn-stable
+```
+
+v0.4.5:
+- generated-image recoveryまでLIVE PASS。
+
+v0.4.6:
+- selectable output folderを追加。
+- STATIC PASS / LIVE PENDING。
+
+Current checkpoint:
+- `research/experiments/2026-08-09-worker-fanout-isolated-generation-recovery-output-checkpoint.md`
 
 ---
 
@@ -363,21 +440,25 @@ Status: CURRENT
 - 低解像度canonicalを高解像度正本より優先する
 - `four-pose-portrait.png`をProject Sourceへ戻す
 - 画像生成モデルへ直接2×2 boardを作らせる
+- full motion / other states / progress / board conceptsをsingle-frame workerへ見せる
+- generated frameを次frameのidentity sourceへする
 - 4つの独立repair boardから象限を寄せ集める
 - 同一turn自動image editを必須前提にする
 - repairだからという理由だけでREPAIRを採用する
 - GitHubの既知scriptをrepository searchで探す
 - identityを色・雰囲気・数個のanchorだけでPASSにする
 - 一歩前進専用の文言を一般設計へ大量追加する
+- v0.4.4/v0.4.5の実機成功経路を失敗証拠なしに再設計する
 
 ---
 
 ## 次回の開始時チェック
 
-1. `README.md`でCURRENT pipelineを確認。
-2. `research/PROJECT-HANDOFF.md`を読む。
-3. この`MOTION-GENERATION-EXPERIMENT-LOG.md`のCURRENTとREJECTEDを確認。
-4. GitHub mainの実ファイルを直接fetchしてから判断する。
-5. Project側から`four-pose-portrait.png`が削除済みか確認する。
-6. canonicalは1024×1536の高解像度加工前候補を使う。
-7. 以前の失敗方式を提案する場合は、どの新証拠で過去の棄却理由が解消されたか明示する。
+1. `research/PROJECT-HANDOFF.md` をCURRENT正本として読む。
+2. `research/KNOWN-ISSUES.md` を確認する。
+3. 外部例を探す場合は `research/SEARCH-INDEX.md` を先に読む。
+4. Worker Fanoutを触る場合はcurrent checkpointと`research/reference/README.md`を読む。
+5. このログのREJECTED/SUPERSEDEDを確認して過去方式を無根拠に復活させない。
+6. GitHub mainの実ファイルを直接fetchしてから判断する。
+7. canonicalは高解像度正本を使う。
+8. 以前の失敗方式を提案する場合は、どの新証拠で過去の棄却理由が解消されたか明示する。
