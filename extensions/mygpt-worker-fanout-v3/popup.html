@@ -18,7 +18,7 @@
   </style>
 </head>
 <body>
-  <h1>MYGPT Worker Fanout v4 — 3 isolated workers</h1>
+  <h1>MYGPT Worker Fanout v4.3 — sequential isolated workers</h1>
 
   <label for="canonical">Canonical image</label>
   <input id="canonical" type="file" accept="image/*">
@@ -36,7 +36,7 @@
   <textarea id="F4">[MYGPT_V4_F4_TEST]
 単独の1状態だけを生成。F4テスト。</textarea>
 
-  <button id="run" disabled>F2/F3/F4を隔離生成</button>
+  <button id="run" disabled>F2→F3→F4を順次隔離生成</button>
   <button id="reset">worker tabsをリセット</button>
 
   <div class="status">
