@@ -1,6 +1,6 @@
 # MYGPT external research / prior-art search index
 
-更新日: 2026-08-09 19:12 JST
+更新日: 2026-08-09 19:52 JST
 Status: **CURRENT SEARCH ENTRYPOINT**
 
 この文書は、既存例・外部事例・中国語圏事例・論文・公開GPT・browser automation prior artを探すときの入口。
@@ -16,6 +16,38 @@ Status: **CURRENT SEARCH ENTRYPOINT**
 
 2. `research/chatgpt-project-practices/README.md`
    - ChatGPT Projects / image reference / orchestration-context調査群の案内。
+
+## Identity-preserving variation / isolated workers
+
+`research/prior-art/2026-08-09-identity-preserving-variation-isolated-workers.md`
+
+目的:
+- 1枚のcanonicalから、ペット機能のような「同一subjectの別pose / 別状態差分」を高いidentity fidelityで作る方向を決める
+- isolated worker成立後に可能になったA/Bやbest-of-Nを既存研究へ対応付ける
+
+対象:
+- OpenAI current image editing / high-fidelity input direction
+- Animate Anyone / PoseAnimate — appearance/referenceとpose guiderの分離
+- BLIP-Diffusion / OminiControl / GroundingBooth — subject identityとstructure/spatial controlの分離
+- AnyDoor / SSR-Encoder / holistic identity research — global identity + local detail
+- ConsiStory / StoryDiffusion / StorySync — cross-image consistency（モデル内部機構なので直接移植不可）
+- The Chosen One — multiple candidate / consistency selectionの考え方
+- DSH-Bench / MaSC — subject/region-aware identity evaluation
+- UNO / AnyStory / DreamO / UMO — multi-reference時のrouting / attribute confusion
+
+現在の有力実験順:
+1. `ID-V1` — canonicalをsemantic referenceではなく**編集元/source image**として扱うA/B
+2. `ID-V2` — canonical + **1 worker専用のsingle-pose visual guide**
+3. `ID-V4` — same poseをbest-of-2隔離生成し、identity監査で選択
+4. `ID-V3` — 必要な局所だけcanonical-derived detail cropを追加
+
+重要:
+- generated frame chainingへ戻さない
+- 4pose board / sequence / other slotsをworkerへ見せない
+- cross-image attention論文を、generated outputs相互参照で雑に模倣しない
+- identity / pose / evaluationを別チャネルとして設計する
+
+同一性改善を検討する場合、まずこのnoteを読む。
 
 ## Browser filesystem / selectable output directory
 
