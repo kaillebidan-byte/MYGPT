@@ -30,6 +30,11 @@ same original canonical
 
 The current v0.5.0 production/fresh-chat path remains the control baseline. Do not mutate its proven worker Instructions yet.
 
+Operational execution order and gate criteria are now fixed in:
+- `research/plans/2026-08-09-identity-quality-closed-loop-execution-plan.md`
+
+Treat that plan as the current execution sequence. This decision file defines the architecture; the plan defines what to test next, acceptance criteria, stop conditions and patch boundaries.
+
 Detailed evidence/research:
 - `research/experiments/2026-08-09-post-image-dialogue-audit-loop-reassessment.md`
 - `research/prior-art/2026-08-09-identity-preserving-variation-isolated-workers.md`
@@ -179,13 +184,21 @@ rather than treating image completion as final acceptance.
 
 ## Experiment order
 
-1. `POSTGEN-G1` — observe post-image turn/tool structure under Instant.
-2. `ID-V1 + SELF-AUDIT` — current wording vs explicit canonical edit/source wording.
-3. `ID-V2 + SELF-AUDIT` — canonical + one worker-local pose guide.
-4. independent judge A/B vs same-worker audit and human review.
-5. MaSC / DreamBench++ machine-metric reuse after image transport gate.
-6. best-of-2 only for hard frames or failed first pass.
-7. Branch -> Thinking remains later; revalidate post-image dialogue/tool behavior there separately.
+The detailed order is maintained in the execution plan rather than duplicated here.
+
+Current sequence summary:
+
+1. `POSTGEN-G1` — characterize Instant post-image turn/tool structure without changing production code.
+2. `ID-V1 + SELF-AUDIT` — control wording vs explicit canonical edit/source wording on two stress classes.
+3. `ID-V2 + SELF-AUDIT` — canonical + exactly one worker-local pose/structure guide.
+4. evaluator separation — same-worker critic vs independent non-generating judge GPT.
+5. machine metric reuse — MaSC / DreamBench++ after image transport is proven.
+6. best-of-2 gated retry only for hard/failed frames.
+7. optional canonical-derived local detail crop only for persistent localized identity failures.
+8. Branch -> Thinking later as a separate execution-strategy comparison.
+
+For exact sample counts, PASS/FAIL criteria, retry caps and stop conditions, use:
+- `research/plans/2026-08-09-identity-quality-closed-loop-execution-plan.md`
 
 ## Frozen boundaries
 
