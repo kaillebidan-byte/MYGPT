@@ -1,0 +1,24 @@
+"use strict";
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const root = path.resolve(__dirname, "..");
+const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
+const worker = fs.readFileSync(path.join(root, "service_worker.js"), "utf8");
+const popup = fs.readFileSync(path.join(root, "popup.js"), "utf8");
+const store = fs.readFileSync(path.join(root, "output_directory_store.js"), "utf8");
+const relocator = fs.readFileSync(path.join(root, "output_relocator.js"), "utf8");
+
+assert.equal(manifest.version, "0.4.6");
+assert.match(worker, /background\.js.*output_directory_store\.js.*image_collector\.js.*output_relocator\.js/);
+assert.match(popup, /showDirectoryPicker\(options\)/);
+assert.match(popup, /mode: "readwrite"/);
+assert.match(store, /indexedDB\.open/);
+assert.match(store, /setDirectoryHandle/);
+assert.match(relocator, /createWritable\(\)/);
+assert.match(relocator, /getFile\(\)/);
+assert.match(relocator, /file\.size !== bytes\.byteLength/);
+assert.match(relocator, /chrome\.downloads\.removeFile/);
+assert.match(relocator, /outputPhase: "DEFAULT_DOWNLOADS"/);
+assert.doesNotMatch(relocator, /chrome\.downloads\.download\(/);
+console.log("Selectable output directory layer: PASS");
