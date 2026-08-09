@@ -1,126 +1,90 @@
 # MYGPT Worker Fanout v4
 
-Status: **v0.4.2 STATIC PASS candidate — bounded AutoGPT attachment retry live test pending**
+Status: **v0.4.3 STATIC PASS candidate — sequential one-worker-at-a-time live test pending**
 
-This version stops treating READY as the end goal. It reuses the supplied extensions as an integrated worker system:
+Current architecture:
 
 ```text
 Translation Loop control plane
         +
 AutoGPT ChatGPT upload/paste/passive observer
         +
-VoiceBridge-style long-lived monitoring
+VoiceBridge-style lifecycle monitor
 ```
 
-## One-click flow
+## v0.4.3 execution model
 
-1. active source tab must be the target Custom GPT;
-2. derive and lock the Custom GPT worker identity;
-3. open F2/F3/F4 tabs before inserting any draft;
-4. verify each is the same worker and has no restored draft;
-5. process each slot sequentially, temporarily making that worker tab active for Vivaldi reliability;
-6. reconstruct and attach the same canonical with AutoGPT's `DataTransfer -> input.files -> change` path;
-7. wait for upload activity to settle;
-8. paste the slot packet in page MAIN world with AutoGPT's synthetic ClipboardEvent path;
-9. use Translation Loop / Prompt Stacker to wait for an enabled composer-local send control;
-10. arm the passive AutoGPT-style fetch observer with a per-slot nonce **before activation**;
-11. use Translation Loop's ordinary native `button.click()` with Enter fallback disabled;
-12. accept submit only with positive evidence from Translation Loop DOM evidence and/or passive conversation fetch evidence;
-13. monitor all three tabs through VoiceBridge-style long-lived ports + 1-second scan pings + a Translation Loop-style alarm watchdog;
-14. use Translation Loop terminal classification plus image-turn stability to mark each worker COMPLETE.
+The previous v4 flow opened F2/F3/F4 tabs up front. v0.4.3 changes this to a persisted sequential state machine:
 
-## Reused directly / strongly
+1. open exactly one worker tab and make it active;
+2. wait about 15 seconds (`OPEN_WAIT`);
+3. verify the Custom GPT identity and empty composer;
+4. attach the canonical using the existing AutoGPT `DataTransfer -> input.files -> change` path and bounded retry;
+5. wait about 15 seconds (`ATTACH_WAIT`);
+6. paste only that slot packet in MAIN world;
+7. arm the passive observer before activation;
+8. submit with Translation Loop / Prompt Stacker native `button.click()`; Enter fallback remains disabled;
+9. require positive submit evidence from Translation Loop DOM evidence and/or AutoGPT passive conversation fetch evidence;
+10. monitor the same worker until terminal completion;
+11. wait about 5 seconds (`COOLDOWN`);
+12. only then open the next slot worker.
+
+Sequence waits are stored in runtime state and resumed by `chrome.alarms` (`mygpt-v4-sequence-step`). Completed worker tabs remain open for inspection; later workers are not opened early.
+
+## Reused components
 
 ### Translation Loop 0.5.1
 
-- `runtime_guard.js` — direct reuse;
-- `loop_core.js` — direct reuse of positive submission evidence;
-- `terminal_gate.js` — direct reuse of terminal classification;
-- `prompt_stacker_runner.js` — direct substantial reuse including run controller, bounded waits, composer-local send discovery and native click;
-- `background.js` patterns — content probe/reinject, bounded waits, watchdog, centralized state/log handling;
-- `content.js` patterns — visible generation signals, role-node extraction, fingerprints, action-bar/thinking checks.
+- `runtime_guard.js` — runToken/stale-run rejection/serialized mutations;
+- `prompt_stacker_runner.js` — composer-local send discovery and native click;
+- `loop_core.js` — positive submit evidence;
+- `terminal_gate.js` — completion classification;
+- background/content lifecycle patterns and watchdog behavior.
 
 Prompt Stacker-derived code remains under `LICENSE-PROMPT-STACKER`.
 
 ### AutoGPT 0.0.71
 
-- page MAIN-world ChatGPT adapter;
-- file upload primitive;
-- synthetic paste primitive;
+- MAIN-world ChatGPT adapter;
+- file input re-resolution;
+- `DataTransfer -> input.files -> change` attachment;
+- bounded attachment retry;
+- synthetic paste;
 - observer-before-trigger nonce ordering;
-- passive fetch clone/stream observation;
-- passive `ws.chatgpt.com` observation.
+- passive conversation fetch/WebSocket observation.
 
-No Bearer capture or active internal ChatGPT API calls are used.
+No Bearer capture or direct internal ChatGPT API calls are used.
 
 ### VoiceBridge 0.2.6
 
-- long-lived content/background port;
-- reconnect loop;
-- 1-second background scan ping;
-- hidden/background-tab rescan model;
-- generation and turn-state observation.
+- long-lived monitor port;
+- background scan ping;
+- generation/turn-state observation;
+- hidden/background-tab rescan model.
 
-Speech/local-service transport is not included.
+## Extension-context invalidation
 
-## Vivaldi handling
+A reloaded/updated extension invalidates old content-script contexts. v0.4.3 treats that as terminal for the old content instance: it clears reconnect/scan timers, disconnects the monitor port, disconnects the MutationObserver, removes route/page listeners, and does not reconnect.
 
-The three tabs are still isolated conversations. During upload/paste/send only the currently processed worker is temporarily made active; all tabs are opened before any draft is inserted. This avoids hidden-tab DOM/upload stalls without merging worker contexts.
+For a clean live test after replacing the unpacked extension, Reset/close worker tabs from the previous version and reload the source Custom GPT tab before starting a new run.
 
-## Runtime phases
+## Runtime sequence
 
-Per-slot:
+Per active slot:
 
-`QUEUED -> OPENING -> VERIFYING -> STAGED -> PREPARING -> SUBMITTING -> SUBMITTED/GENERATING -> SETTLING -> COMPLETE`
+`QUEUED -> OPENING -> OPEN_WAIT -> VERIFYING/STAGED -> ATTACHED -> ATTACH_WAIT -> SUBMITTING -> SUBMITTED/GENERATING -> SETTLING -> COMPLETE -> COOLDOWN`
 
-Overall:
-
-`PREPARING -> MONITORING -> COMPLETE`
-
-Partial failures become `PARTIAL_MONITORING` / `PARTIAL_COMPLETE` rather than destroying completed workers.
+Then the next slot begins. Errors are slot-local and also pass through the cooldown before continuing.
 
 ## External/product layers intentionally absent
 
 - Google Analytics;
 - membership/entitlement;
-- Autojourney services;
-- external prompt export/translation;
+- external prompt services;
 - imgbb;
+- Autojourney services;
 - unrelated provider adapters;
 - Bearer capture;
 - direct internal conversation polling;
-- download automation;
+- automatic downloads;
 - DNR header stripping.
-
-## Live test
-
-1. disable/reload older Worker Fanout versions;
-2. load this directory unpacked;
-3. open `MYGPT Single Frame Worker Test` as the active source tab;
-4. select the canonical image;
-5. put the actual F2/F3/F4 static-state packets in the three textareas;
-6. click `F2/F3/F4を隔離生成` once;
-7. expect each slot to show `native-click` plus a submit proof such as `autogpt-fetch-commit`, `autogpt-fetch-request`, or `translation-loop-dom`;
-8. generation continues in isolated tabs and each slot should eventually become `COMPLETE`.
-
-The source tab is restored after all three submits are attempted.
-
-## v0.4.2 attachment regression fix
-
-Live v0.4.1 proved F2/F3 can reach COMPLETE through native-click submission and VoiceBridge/Translation Loop monitoring, while F4 alone stopped at `ATTACHMENT_UI_NOT_CONFIRMED`. The regression was introduced after the AutoGPT upload primitive was already working: v0.3.4 turned attachment UI visibility into a one-shot fatal condition.
-
-v0.4.2 does not change the successful submit or monitor path. It keeps the exact AutoGPT `DataTransfer -> input.files -> change` primitive and adds only one bounded recovery attempt:
-
-1. re-resolve the current React file input immediately before assignment;
-2. verify the assigned file name/size/type on `input.files[0]`;
-3. dispatch exactly one bubbling `change`;
-4. wait for upload settling and positive attachment UI evidence;
-5. if UI evidence is absent, wait briefly and first accept any late-arriving evidence;
-6. only if still absent, re-resolve the input and repeat the same AutoGPT primitive once;
-7. never submit a slot unless positive attachment evidence exists.
-
-This is slot-local recovery. F2/F3 successful behavior, observer-before-click ordering, native click, submission evidence, and completion monitoring are unchanged.
-
-## v0.4.1 non-worker context fix
-
-ChatGPT-wide content-script matches remain for SPA navigation compatibility, but runtime reporting and VoiceBridge-style monitor ports are now active only while the tab is on a valid Custom GPT worker route. `/gpts` and other non-worker pages no longer send `MYGPT_V4_OBSERVED` events or keep monitor ports alive. `chrome.runtime.sendMessage` fire-and-forget reporting is also wrapped for synchronous extension-context invalidation during reload.
