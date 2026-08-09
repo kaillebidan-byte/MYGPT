@@ -1,6 +1,6 @@
 # MYGPT調整プロジェクト — CURRENT HANDOFF
 
-更新日: 2026-08-09 18:36 JST
+更新日: 2026-08-09 19:03 JST
 
 GitHub `main` を正本とする。チャット記憶、古いhandoff、superseded decisionだけを根拠に過去方式へ戻さない。
 
@@ -9,10 +9,11 @@ GitHub `main` を正本とする。チャット記憶、古いhandoff、supersed
 1. `research/PROJECT-HANDOFF.md` — このCURRENT
 2. `research/KNOWN-ISSUES.md` — 現在の既知不具合 / 制約 / 解決済み問題
 3. `research/experiments/2026-08-09-worker-fanout-isolated-generation-recovery-output-checkpoint.md` — Worker Fanout最新実機checkpoint
-4. `research/decisions/2026-08-08-production-v0-generalized-verdict.md` — generation品質の正本
-5. `research/SEARCH-INDEX.md` — 既存例 / 中国語圏 / prior-art / community検索の入口
-6. `research/reference/README.md` — 実装・再利用資料の検索入口
-7. `research/runtime/2026-08-08-single-frame-worker-live-snapshot.md` — Custom GPT worker実機snapshot
+4. `extensions/mygpt-worker-fanout-v3/README.md` — Worker Fanout現行version / acceptance
+5. `research/decisions/2026-08-08-production-v0-generalized-verdict.md` — generation品質の正本
+6. `research/SEARCH-INDEX.md` — 既存例 / 中国語圏 / prior-art / community検索の入口
+7. `research/reference/README.md` — 実装・再利用資料の検索入口
+8. `research/runtime/2026-08-08-single-frame-worker-live-snapshot.md` — Custom GPT worker実機snapshot
 
 research全体の資料地図:
 - `research/README.md`
@@ -93,7 +94,6 @@ Important supersession:
 - current Worker Fanoutはpassive evidenceを利用するが、Bearer captureやactive private APIをproduction前提にはしていない
 
 古い `research/decisions/2026-08-08-three-extension-synthesis.md` はhistorical decisionとして直接superseded化済み。
-現在の実装判断では2026-08-09のreference/audit/decisionを優先する。
 
 ---
 
@@ -107,7 +107,7 @@ Display family:
 
 ### v0.4.4 — isolated fanout LIVE PASS
 
-実機成功経路:
+Live-proven path:
 
 ```text
 F2 worker tabを1つだけ開く
@@ -125,42 +125,67 @@ F2 worker tabを1つだけ開く
 
 Generation completionは次slot開始条件ではない。各workerは送信後backgroundで生成を続ける。
 
-Live evidence:
-
-```text
-F2: COMPLETE | attach=autogpt-upload+visible-attachment/attachment-marker@attempt-1 | send=native-click/translation-loop-dom | done=image-turn-stable
-F3: COMPLETE | attach=autogpt-upload+visible-attachment/attachment-marker@attempt-1 | send=native-click/translation-loop-dom | done=oracle-action-bar
-F4: COMPLETE | attach=autogpt-upload+visible-attachment/attachment-marker@attempt-1 | send=native-click/translation-loop-dom | done=image-turn-stable
-```
-
 ### v0.4.5 — generated-image recovery LIVE PASS
 
 - all generation slots COMPLETE後に回収開始
 - latest assistant turnからgenerated-image candidateを選択
-- `chrome.downloads`で保存
+- `chrome.downloads`で `Downloads/MYGPT-Worker-Fanout/` へ保存
 - browser downloadの実完了まで監視
 - F2/F3/F4画像保存まで実機PASS
 
 v0.4.5がimage recovery baseline。
 
-### v0.4.6 — selectable output folder
+### v0.4.6 — selected output folder LIVE FAIL isolated
+
+Observed:
+
+```text
+Phase: COMPLETE / COOLDOWN | Recovery: COMPLETE | Output: PERMISSION_REQUIRED
+F2 image=COMPLETE/...F2.png | output=-
+F3 image=COMPLETE/...F3.png | output=-
+F4 image=COMPLETE/...F4.png | output=-
+output OUTPUT_DIRECTORY_PERMISSION_REQUIRED: {"permission":"prompt"}
+```
+
+Confirmed:
+- fanout PASS
+- three image generations PASS
+- v0.4.5 image recovery PASS
+- selected directory handle persisted but write permission returned to `prompt`
+- service worker correctly refused to write without permission
+- recovered files remained safely in default Downloads staging folder
+
+Therefore do not touch generation/recovery paths for this failure.
+
+### v0.4.7 — selected-folder permission recovery
 
 Status:
-**STATIC PASS / LIVE PENDING**
+**IMPLEMENTED / LIVE PENDING**
 
-追加されたのはv0.4.5後段のoutput layerだけ。
+Local patch only:
+- `output_directory_store.js` adds `requestWritePermission(handle)`
+- `popup.js` detects `PERMISSION_REQUIRED`
+- popup button becomes `保存先を再許可して保存`
+- user click requests read/write permission on the existing stored handle
+- after grant, output-directory metadata revision is renewed
+- unchanged `output_relocator.js` observes that revision and resumes relocation
+- manifest version `0.4.7`
 
-- custom folder未指定: 従来 `Downloads/MYGPT-Worker-Fanout/`
-- custom folder指定: selected directoryへcopy/write
-- written byte sizeを検証
-- 成功後のみtemporary Downloads copyを削除
-- folder handleはIndexedDBへ保存
+Unchanged:
+- `background.js`
+- `image_collector.js`
+- `output_relocator.js`
+- attachment / paste / submit / completion mechanisms
 
-v0.4.4 `background.js` とv0.4.5 `image_collector.js` は変更していない。
+Chromium permission constraint:
+- a stored FileSystem handle and its current permission are separate state
+- permission may return to `prompt`
+- re-requesting write permission requires a user gesture
 
-詳細:
-- `extensions/mygpt-worker-fanout-v3/README.md`
-- `research/experiments/2026-08-09-worker-fanout-isolated-generation-recovery-output-checkpoint.md`
+Detailed record:
+- `research/KNOWN-ISSUES.md` KI-004
+- current Worker Fanout checkpoint
+- extension README
 
 ---
 
@@ -182,6 +207,7 @@ v0.4.4 `background.js` とv0.4.5 `image_collector.js` は変更していない�
 - runToken / stale async guard
 - passive completion monitoring
 - v0.4.5 image collector
+- v0.4.6/v0.4.7 `output_relocator.js` unless relocation itself produces failing evidence
 
 問題が出た場合は、失敗した層だけ局所修正する。
 
@@ -189,24 +215,29 @@ v0.4.4 `background.js` とv0.4.5 `image_collector.js` は変更していない�
 
 ## 6. NEXT ONLY
 
-まずv0.4.6の実機acceptanceを1回行う。
+Fresh v0.4.7 live acceptanceを1回行う。
 
-PASS条件:
+Important:
+- extension Reload/updateで `chrome.storage.session` は消える
+- したがって今回すでに完了したv0.4.6 runtimeをv0.4.7へreload後に自動再開はできない
+- 今回の3画像は `Downloads/MYGPT-Worker-Fanout/` にあるので、その3枚は保持または手動移動でよい
 
-```text
-Recovery: COMPLETE
-Output: COMPLETE
-F2 output=COMPLETE/<filename>
-F3 output=COMPLETE/<filename>
-F4 output=COMPLETE/<filename>
-```
+Fresh acceptance:
 
-さらに:
-- selected folderにF2/F3/F4の3画像が存在
-- relocation成功後、temporary `Downloads/MYGPT-Worker-Fanout/` copyが削除
-- `既定Downloadsに戻す` 後もv0.4.5 default pathが維持される
+1. v0.4.7へ差し替え/Reload
+2. source Custom GPT tabをReload
+3. 保存先フォルダを選択
+4. 通常のF2/F3/F4を1回実行
+5. generation `COMPLETE`
+6. `Recovery: COMPLETE`
+7. `Output: PERMISSION_REQUIRED`ならpopupを開き `保存先を再許可して保存`
+8. browser permissionを許可
+9. `Output: COMPLETE`
+10. F2/F3/F4 `output=COMPLETE/<filename>`
+11. selected folderに3枚存在
+12. verified relocation後だけtemporary Downloads copiesが削除されること
 
-**v0.4.6がPASSしたらWorker Fanoutの機能追加を止め、画像差分の話へ戻る。**
+**v0.4.7がPASSしたらWorker Fanoutの機能追加を止め、画像差分の話へ戻る。**
 
 ---
 
@@ -228,11 +259,6 @@ F4 output=COMPLETE/<filename>
 - 公開画像生成Custom GPTのreuse調査
 
 同じ一般検索を言い換えて繰り返さない。
-
-特に:
-- `research/experiments/2026-08-08-n3-orchestration-ceiling.md` はprior-art記録として残すが、未検証結論はhistorical
-- `research/chatgpt-project-practices/planner-worker-isolation.md` は既存例surveyとして有効だが、外部API PoCを次候補とした当時の結論はCURRENTではない
-- `research/public-image-gpt-reuse/` は2026-08-07のhistorical再構築研究であり、CURRENT productionではない
 
 ---
 
@@ -257,39 +283,24 @@ Custom GPTをInstantで起動
 - canonical / Custom GPT Instructions / local packetが正しく継承されるか
 - direct Thinking failureを回避できるか
 
-v0.4.6 acceptanceや画像差分分析より先に実装しない。
+v0.4.7 acceptanceや画像差分分析より先に実装しない。
 
 ---
 
-## 9. Known issues
-
-索引:
-- `research/KNOWN-ISSUES.md`
-
-主な現在項目:
-- first-pass pose / identity drift
-- direct Thinking runtime failure case
-- image candidate multiplicity非保証
-- v0.4.6 selectable output live verification pending
-- global multi-state exposureによるsheetificationはisolationでMITIGATED
-
-詳細原因を再検討するときは、KNOWN-ISSUESから該当incident / experimentへ辿る。
-
----
-
-## 10. Handoff / repository maintenance rule
+## 9. Handoff / repository maintenance rule
 
 `research/handoffs/` は過去時点のsnapshotとして保存する。
 
-次チャット開始時に古いhandoffをCURRENTとして採用しない。まずこの `PROJECT-HANDOFF.md` を読み、必要な場合だけ過去handoffへ降りる。
+次チャット開始時に古いhandoffをCURRENTとして採用しない。まずこの `PROJECT-HANDOFF.md` を読む。
 
 ユーザーが毎回GitHub更新を明示しなくても、作業の区切りでCURRENTとの差分を確認する。
 
-更新対象:
+最低限追随するもの:
 1. CURRENT / next action変更 → `PROJECT-HANDOFF.md`
 2. known issue変更 → `KNOWN-ISSUES.md`
-3. external searchの新軸 → `SEARCH-INDEX.md` + search ledger/topic note
-4. implementation lookup変更 → `reference/README.md`
-5. old `CURRENT` documentが後続証拠と衝突 → superseded化 / historical降格
+3. version PASS/FAIL → current checkpoint + extension README + root README
+4. external searchの新軸 → `SEARCH-INDEX.md` + search ledger/topic note
+5. implementation lookup変更 → `reference/README.md`
+6. old `CURRENT` documentが後続証拠と衝突 → superseded化 / historical降格
 
 古い`CURRENT`表記を、後続実機結果と衝突したまま放置しない。
