@@ -1,0 +1,15 @@
+"use strict";
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const source = fs.readFileSync(path.resolve(__dirname, "../chatgpt_adapter.js"), "utf8");
+assert.match(source, /function fileInputReflects\(/);
+assert.match(source, /async function dispatchAttachmentAttempt\(/);
+assert.match(source, /Math\.min\(2, Math\.floor\(options\.maxAttachmentAttempts\)\)/);
+assert.match(source, /attachmentVisible\(made\.file\.name, originalSnapshot, doc\)/);
+assert.match(source, /await sleep\(options\.retryDelay \|\| 750\)/);
+assert.match(source, /attempt-1-late/);
+assert.match(source, /attachmentAttempts: attempt/);
+assert.match(source, /new Event\("change", \{ bubbles: true \}\)/);
+assert.doesNotMatch(source, /new Event\("input"/);
+console.log("Bounded AutoGPT attachment retry: PASS");
