@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>MYGPT Worker Fanout v4</title>
+  <title>MYGPT Worker Orchestrator v5</title>
   <style>
     body { font-family: system-ui, sans-serif; width: 440px; margin: 12px; color: #111; }
     h1 { font-size: 16px; margin: 0 0 10px; }
@@ -18,7 +18,11 @@
   </style>
 </head>
 <body>
-  <h1>MYGPT Worker Fanout v4.6 — sequential isolated workers</h1>
+  <h1>MYGPT Worker Orchestrator v5 — strategy shell</h1>
+
+  <label>Session strategy</label>
+  <div id="strategy" class="mono">Fresh Chat (proven)</div>
+  <div class="small">Branch → Thinking は将来strategyとして予約。現在は実行しません。</div>
 
   <label for="canonical">Canonical image</label>
   <input id="canonical" type="file" accept="image/*">
@@ -28,20 +32,21 @@
   <button id="selectOutputDir" type="button">保存先フォルダを選択</button>
   <button id="clearOutputDir" type="button">既定Downloadsに戻す</button>
   <div id="outputDirInfo" class="small">既定: Downloads/MYGPT-Worker-Fanout/</div>
+  <div class="small">保存先指定時はRunクリック時に書込権限を確認してからworkerを開始します。</div>
 
   <label for="F2">F2 packet</label>
-  <textarea id="F2">[MYGPT_V4_F2_TEST]
+  <textarea id="F2">[MYGPT_V5_F2_TEST]
 単独の1状態だけを生成。F2テスト。</textarea>
 
   <label for="F3">F3 packet</label>
-  <textarea id="F3">[MYGPT_V4_F3_TEST]
+  <textarea id="F3">[MYGPT_V5_F3_TEST]
 単独の1状態だけを生成。F3テスト。</textarea>
 
   <label for="F4">F4 packet</label>
-  <textarea id="F4">[MYGPT_V4_F4_TEST]
+  <textarea id="F4">[MYGPT_V5_F4_TEST]
 単独の1状態だけを生成。F4テスト。</textarea>
 
-  <button id="run" disabled>F2→F3→F4を順次隔離生成</button>
+  <button id="run" disabled>F2→F3→F4をFresh Chatで隔離生成</button>
   <button id="reset">worker tabsをリセット</button>
 
   <div class="status">
@@ -52,6 +57,7 @@
     <div id="error" class="error"></div>
   </div>
 
+  <script src="session_strategy.js"></script>
   <script src="output_directory_store.js"></script>
   <script src="popup.js"></script>
 </body>

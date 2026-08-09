@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "MYGPT Worker Fanout v4",
-  "version": "0.4.7",
-  "description": "Sequential isolated Custom GPT workers with proven fanout, generated-image recovery, and user-selected output folders with permission recovery.",
+  "name": "MYGPT Worker Orchestrator v5",
+  "version": "0.5.0",
+  "description": "Strategy-based isolated Custom GPT worker orchestration with proven fresh-chat fanout, generated-image recovery, and Run-time output permission preflight.",
   "permissions": [
     "storage",
     "tabs",
@@ -19,7 +19,7 @@
     "service_worker": "service_worker.js"
   },
   "action": {
-    "default_title": "MYGPT Worker Fanout v4",
+    "default_title": "MYGPT Worker Orchestrator v5",
     "default_popup": "popup.html"
   },
   "content_scripts": [

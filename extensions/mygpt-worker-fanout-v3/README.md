@@ -1,245 +1,143 @@
-# MYGPT Worker Fanout v4
+# MYGPT Worker Orchestrator v5
 
-Status: **v0.4.4 fanout LIVE PASS / v0.4.5 image recovery LIVE PASS / v0.4.6 selected-folder permission FAIL / v0.4.7 reactive fix PROVISIONAL STATIC**
+Branch: `worker-orchestrator-v5`
 
-Current source:
+Status: **v0.5.0 SELECTED-FOLDER LIVE PASS**
 
-```text
-extensions/mygpt-worker-fanout-v3/
-```
+Live confirmation: 2026-08-09 JST. The user completed a normal F2/F3/F4 run and confirmed the generated images were saved in the selected output directory.
 
-Current manifest version: `0.4.7`.
+This line preserves the live-proven v0.4.x generation/recovery engine and adds a strategy boundary plus Run-time output-permission preflight.
 
-Important: after the v0.4.6 permission failure, a dedicated existing-solutions review was performed before further implementation. The current v0.4.7 code contains a reactive reauthorization path, but **do not spend another generation run testing that ordering first**. The next implementation action is to align permission acquisition with the Chrome/VS Code preflight pattern described below.
+## Proven boundary
 
-Prior-art record:
+- v0.4.4 fresh isolated F2/F3/F4 fanout: LIVE PASS
+- v0.4.5 generated-image recovery: LIVE PASS
+- v0.4.6 selected-directory post-run permission discovery: FAIL isolated
+- v0.5.0 Run-time selected-directory preflight + final selected-folder save: LIVE PASS
+
+Prior-art basis:
 - `research/prior-art/2026-08-09-selectable-output-directory-browser-prior-art.md`
 
-## Proven generation and recovery boundary
+## Current session strategies
 
-The following path is live-proven and must not be redesigned without new failing evidence:
+### `fresh-chat`
+
+Status: **SUPPORTED / LIVE PASS**
+
+Routes to the existing proven `MYGPT_V4_RUN_THREE` engine:
 
 ```text
-open F2 only
--> 15 s OPEN_WAIT
--> AutoGPT DataTransfer attachment
--> 15 s ATTACH_WAIT
--> MAIN-world slot paste
--> Translation Loop native click
+fresh isolated Custom GPT F2
+-> attach canonical
+-> paste F2 only
+-> native send
 -> positive submit evidence
--> 5 s COOLDOWN
--> open F3
+-> cooldown
+-> fresh isolated Custom GPT F3
 -> same
--> open F4
--> passive generation completion monitoring
--> v0.4.5 image recovery
+-> fresh isolated Custom GPT F4
+-> passive completion monitoring
+-> existing image recovery
+-> selected-folder relocation when configured
 ```
 
-`background.js` owns the proven fanout. `image_collector.js` owns the proven generated-image recovery. Both remain unchanged in v0.4.7.
+### `branch-thinking`
 
-### v0.4.4 — isolated fanout LIVE PASS
+Status: **RESERVED / NOT IMPLEMENTED**
 
-All F2/F3/F4 slots reached `COMPLETE` in one live run.
-
-Frozen / near-frozen mechanisms:
-
-- one-worker-at-a-time preparation;
-- `OPEN_SETTLE_MS = 15000`;
-- AutoGPT `DataTransfer -> input.files -> change` attachment;
-- bounded attachment retry;
-- `ATTACH_SETTLE_MS = 15000`;
-- MAIN-world synthetic paste;
-- observer-before-trigger ordering;
-- Translation Loop native click;
-- Enter fallback disabled;
-- positive submit evidence;
-- `SLOT_COOLDOWN_MS = 5000`;
-- runToken / stale async guard;
-- passive completion monitoring.
-
-### v0.4.5 — image recovery LIVE PASS
-
-After all generation slots complete, `image_collector.js`:
-
-1. inspects the latest assistant turn in each worker;
-2. chooses the generated-image candidate;
-3. saves through `chrome.downloads` under `Downloads/MYGPT-Worker-Fanout/`;
-4. tracks actual browser-download completion;
-5. records `imageRecovery.status = COMPLETE` only after the download completes.
-
-The F2/F3/F4 generation-to-download path is live-proven.
-
-## Selected output folder layer
-
-The selected-folder feature remains a separate layer after v0.4.5.
-
-Default mode:
+Intended future lifecycle:
 
 ```text
-Downloads/MYGPT-Worker-Fanout/
+Instant preparation session
+-> establish required conversation state without image generation
+-> Branch in new chat
+-> verify branch context / Custom GPT identity
+-> switch branch to Thinking
+-> generate in branch
+-> reuse compatible completion/recovery/output layers
 ```
 
-Selected-folder components:
+It remains `supported: false`; v0.5.0 cannot invoke it accidentally.
 
-- `output_directory_store.js` — persists `FileSystemDirectoryHandle` in IndexedDB and manages permission checks;
-- `output_relocator.js` — copies recovered image bytes to the selected directory, verifies exact byte size, then removes the temporary Downloads file;
-- `popup.js` — folder selection and permission UI.
+## Proven primitives kept unchanged
 
-`output_relocator.js` is unchanged between v0.4.6 and v0.4.7.
+v0.5.0 does not modify:
 
-## v0.4.6 live result — permission FAIL isolated
+- `background.js` fresh-chat fanout sequencing
+- AutoGPT `DataTransfer -> input.files -> change` attachment
+- bounded attachment retry
+- MAIN-world synthetic paste
+- Translation Loop native click
+- observer-before-trigger ordering
+- positive submit evidence
+- runToken / stale-async guard
+- passive completion monitoring
+- `image_collector.js`
+- `output_relocator.js` write / verify / cleanup behavior
 
-The first selected-folder live run produced:
+## Output permission lifecycle
+
+No custom directory:
 
 ```text
-Phase: COMPLETE / COOLDOWN | Recovery: COMPLETE | Output: PERMISSION_REQUIRED
-F2: COMPLETE | image=COMPLETE/...F2.png | output=-
-F3: COMPLETE | image=COMPLETE/...F3.png | output=-
-F4: COMPLETE | image=COMPLETE/...F4.png | output=-
-output OUTPUT_DIRECTORY_PERMISSION_REQUIRED: {"permission":"prompt"}
+Run
+-> existing fresh-chat fanout
+-> existing recovery
+-> Downloads/MYGPT-Worker-Fanout/
 ```
 
-Interpretation:
-
-- fanout succeeded;
-- all three image generations succeeded;
-- v0.4.5 download recovery succeeded;
-- failure was isolated to selected-directory write permission;
-- the persisted directory handle still existed, but current read/write permission was `prompt`;
-- the three recovered files remained safely under `Downloads/MYGPT-Worker-Fanout/`.
-
-## Existing-solutions review — completed
-
-The filesystem/permission problem was checked against mature prior art before further patching.
-
-### Preferred browser-only prior art — Chrome / VS Code Web
-
-Standard lifecycle:
+Custom directory:
 
 ```text
-showDirectoryPicker({mode:"readwrite"})
--> persist FileSystemDirectoryHandle in IndexedDB
--> later queryPermission({mode:"readwrite"})
--> if needed requestPermission({mode:"readwrite"}) from user gesture
--> write through File System Access API
+Run click
+-> queryPermission({mode:"readwrite"})
+-> if needed requestPermission({mode:"readwrite"}) while the user gesture exists
+-> denied/error: abort before worker-start message
+-> granted: publish selected-directory metadata
+-> existing fresh-chat fanout
+-> existing recovery
+-> existing output relocation / byte-size verification
 ```
 
-This is the pattern to reuse. A persisted handle is not treated as permanently authorized.
+The older post-run `PERMISSION_REQUIRED` path remains as a defensive fallback if permission changes during a long run.
 
-### Other candidates checked
+## v0.5.0 live result
 
-- `chrome.downloads`
-  - suitable for the proven Downloads-relative staging path;
-  - not an arbitrary absolute-folder mechanism.
-- `idb-keyval`
-  - mature tiny IndexedDB helper used by Chrome examples;
-  - not introduced yet because this extension has no bundler and stores one directory record.
-- GoogleChromeLabs `browser-fs-access`
-  - mature open/save/fallback wrapper;
-  - not a drop-in replacement for persistent selected-directory permission/resume state.
-- `native-file-system-adapter`
-  - broader ponyfill/portability layer;
-  - unnecessary for the current Chromium/Vivaldi target.
-- AutoGPT 0.0.71
-  - its browser-side `downloadImage` uses `chrome.downloads.download`;
-  - it has output URL/gallery plumbing but no audited arbitrary-directory permission module to transplant.
-- Autojourney Pro Downloader
-  - separate desktop companion that escapes browser download limitations;
-  - not adopted while the browser-native File System Access solution remains viable.
+Confirmed by the user:
 
-Do not add a third-party filesystem dependency unless a concrete browser limitation requires it.
+- normal generation run completed successfully
+- selected output-directory save completed successfully
+- generated files were present in the selected directory
 
-## v0.4.7 — current reactive permission patch
+This closes the observed v0.4.6 failure for the successful selected-folder path.
 
-The existing v0.4.7 code adds:
+Not yet separately exercised:
+- explicit permission-denial test proving zero workers start after denial
+- permission revocation during an already-running generation
 
-```text
-Output: PERMISSION_REQUIRED
--> popup: 保存先を再許可して保存
--> user click
--> existing handle.requestPermission({mode:"readwrite"})
--> metadata revision update
--> unchanged output_relocator.js resumes
-```
+Those are defensive edge cases, not blockers for the successful selected-folder baseline.
 
-This mechanism matches the standard permission API, but the **timing is provisional** because permission is discovered only after generation/recovery has already finished.
+## Future Branch/Thinking work
 
-## Next implementation action — permission preflight on Run
+Do not alter the proven `fresh-chat` engine to implement Branch.
 
-Before another live generation test, align the ordering to an editor/IDE-style permission preflight:
+Add a separate session engine behind the strategy boundary. That future engine should own only:
 
-```text
-user presses Run
--> custom folder selected?
-   -> no: continue existing default flow
-   -> yes: verify write permission immediately
-       -> granted: start fanout
-       -> prompt: request permission while Run user gesture is available
-       -> denied/error: do not start generation
--> existing v0.4.4 fanout
--> existing v0.4.5 recovery
--> existing relocation/write/verify
-```
+- parent conversation preparation
+- branch creation/navigation
+- branch identity/context verification
+- model/reasoning selection
+- handoff to existing attach/paste/send/monitor/recovery layers where compatible
 
-Keep the reactive `PERMISSION_REQUIRED` path as a defensive fallback if permission changes while a long run is active.
+This keeps fresh-chat available as a fallback and allows A/B testing between session strategies.
 
-Do **not** modify for this change:
-- `background.js` fanout sequencing;
-- attachment;
-- paste;
-- submit activation/evidence;
-- completion monitoring;
-- `image_collector.js`;
-- `output_relocator.js` write/size-verification logic unless a new failure occurs there.
+## Static contract
 
-## Selected-folder integrity rules
+`tests/test_output_directory.js` checks:
 
-These remain unchanged:
-
-- no selected directory -> default Downloads staging remains valid;
-- existing destination names are not overwritten; collision names are uniquified;
-- written file size must exactly match source bytes;
-- temporary default-Downloads copy is removed only after destination verification;
-- no silent redirect to a different directory after an explicitly selected directory fails;
-- no new browser download is started by `output_relocator.js`.
-
-## Live acceptance after preflight alignment
-
-1. reload the updated unpacked extension;
-2. reload the source Custom GPT tab;
-3. select a test output folder;
-4. press Run;
-5. if write permission is not granted, resolve the permission prompt **before F2/F3/F4 starts**;
-6. if permission is denied, no worker generation starts;
-7. if granted, require generation `COMPLETE` and `Recovery: COMPLETE`;
-8. require `Output: COMPLETE`;
-9. require F2/F3/F4 `output=COMPLETE/<filename>`;
-10. verify all three files exist in the selected folder;
-11. verify temporary Downloads copies are removed only after successful destination verification.
-
-After selected-folder acceptance, stop Worker Fanout feature expansion and return to the planned image-difference analysis.
-
-## Static contract currently present in v0.4.7
-
-`tests/test_output_directory.js` requires:
-
-- manifest `0.4.7`;
-- selected-folder picker uses read/write mode;
-- popup contains `PERMISSION_REQUIRED` recovery logic;
-- popup exposes `保存先を再許可して保存`;
-- `output_directory_store.js` exposes `requestWritePermission()`;
-- existing `output_relocator.js` still performs write, size verification and cleanup without starting another browser download.
-
-This test must be extended for Run-time permission preflight when that change is implemented.
-
-## External/product layers intentionally absent
-
-- Google Analytics;
-- membership/entitlement;
-- external prompt services;
-- imgbb;
-- Autojourney services;
-- unrelated provider adapters;
-- Bearer capture;
-- direct internal conversation polling;
-- DNR header stripping;
+- manifest is `0.5.0` / `MYGPT Worker Orchestrator v5`
+- `fresh-chat` routes to the proven v4 run message
+- `branch-thinking` exists but is unsupported
+- Run-time permission preflight exists
+- preflight occurs before the worker-start message in popup source order
+- existing selected-folder write / exact-size verify / cleanup path remains present

@@ -6,11 +6,13 @@ const LEGACY_PAYLOAD_KEY = "mygptV3Payload";
 const OUTPUT_META_KEY = "mygptV4OutputDirectoryMeta";
 const SLOT_IDS = ["F2", "F3", "F4"];
 const MSG = Object.freeze({
-  RUN_THREE: "MYGPT_V4_RUN_THREE",
   RESET: "MYGPT_V4_RESET",
   GET_STATE: "MYGPT_V4_GET_STATE",
   FOCUS_SLOT: "MYGPT_V4_FOCUS_SLOT"
 });
+
+const strategyRegistry = globalThis.MYGPTSessionStrategyRegistry;
+const currentStrategy = strategyRegistry?.current?.() || null;
 
 const $ = (id) => document.getElementById(id);
 const canonical = $("canonical");
@@ -19,6 +21,7 @@ const reset = $("reset");
 const selectOutputDir = $("selectOutputDir");
 const clearOutputDir = $("clearOutputDir");
 const outputDirInfo = $("outputDirInfo");
+const strategyEl = $("strategy");
 const fileInfo = $("fileInfo");
 const phase = $("phase");
 const worker = $("worker");
@@ -51,7 +54,8 @@ function updateOutputDirectoryButton(state = lastState) {
     : "保存先フォルダを変更";
 }
 function updateRunEnabled(state = lastState) {
-  run.disabled = Boolean(state?.enabled) || recoveryBusy(state) ||
+  run.disabled = !currentStrategy?.supported || !currentStrategy?.runMessage ||
+    Boolean(state?.enabled) || recoveryBusy(state) ||
     (outputDirectorySelected && (outputTransferBusy(state) || outputNeedsAction(state))) ||
     !selectedFileSpec || !allPacketsReady();
   const transferActive = outputDirectorySelected && outputTransferBusy(state);
@@ -177,7 +181,7 @@ async function refreshOutputDirectoryInfo() {
   }
   outputDirectoryPermission = await store.queryWritePermission(handle);
   const permissionText = outputDirectoryPermission === "granted" ? "書込可" :
-    outputDirectoryPermission === "prompt" ? "再許可が必要" : outputDirectoryPermission;
+    outputDirectoryPermission === "prompt" ? "Run時に再許可" : outputDirectoryPermission;
   outputDirInfo.textContent = `選択: ${handle.name || meta.name || "folder"} — ${permissionText}`;
   updateRunEnabled();
 }
@@ -191,6 +195,26 @@ async function reauthorizeCurrentOutputDirectory(store) {
   outputDirectoryPermission = permission;
   await store.setDirectoryHandle(handle);
   await publishOutputDirectoryMeta(handle);
+}
+
+async function preflightOutputDirectoryForRun() {
+  if (!outputDirectorySelected) return { mode: "default-downloads" };
+  const store = globalThis.MYGPTOutputDirectoryStore;
+  if (!store) throw new Error("OUTPUT_DIRECTORY_STORE_UNAVAILABLE");
+  const handle = outputDirectoryHandle;
+  if (!handle || handle.kind !== "directory") throw new Error("OUTPUT_DIRECTORY_HANDLE_MISSING");
+
+  let permission = await store.queryWritePermission(handle);
+  if (permission !== "granted") permission = await store.requestWritePermission(handle);
+  if (permission !== "granted") {
+    throw new Error(`OUTPUT_DIRECTORY_PREFLIGHT_${String(permission).toUpperCase()}`);
+  }
+
+  outputDirectoryPermission = permission;
+  await store.setDirectoryHandle(handle);
+  await publishOutputDirectoryMeta(handle);
+  await refreshOutputDirectoryInfo();
+  return { mode: "selected-directory", name: handle.name || "" };
 }
 
 selectOutputDir.addEventListener("click", async () => {
@@ -274,10 +298,18 @@ run.addEventListener("click", async () => {
   run.disabled = true;
   errorEl.textContent = "";
   try {
+    if (!currentStrategy?.supported || !currentStrategy?.runMessage) throw new Error("SESSION_STRATEGY_NOT_AVAILABLE");
     if (!selectedFileSpec) throw new Error("CANONICAL_NOT_SELECTED");
     if (!allPacketsReady()) throw new Error("PACKET_EMPTY");
+
+    await preflightOutputDirectoryForRun();
     await persistPayload();
-    const response = await chrome.runtime.sendMessage({ type: MSG.RUN_THREE, sourceTabId: await activeTabId() });
+
+    const response = await chrome.runtime.sendMessage({
+      type: currentStrategy.runMessage,
+      sourceTabId: await activeTabId(),
+      orchestrationStrategy: currentStrategy.id
+    });
     if (response?.state) render(response.state);
     if (!response?.ok) throw new Error(response?.error || "RUN_FAILED");
   } catch (error) {
@@ -309,6 +341,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 });
 
 (async () => {
+  strategyEl.textContent = currentStrategy?.label || "Strategy unavailable";
   await loadPayload();
   await refreshOutputDirectoryInfo();
   await refresh();
