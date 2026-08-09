@@ -1,6 +1,7 @@
 # Custom GPT Thinking image generation known issue / Instant quality question
 
 Date: 2026-08-08
+Updated: 2026-08-10
 
 ## Confirmed current platform issue
 
@@ -46,6 +47,83 @@ See:
 This supersedes any project-level statement that Custom-GPT Thinking is inherently unable to generate images.
 It does **not** prove that Branch caused Thinking availability, nor that Thinking is as reliable as Instant.
 
+## 2026-08-10 re-search — existing workaround patterns
+
+Current official product documentation says:
+- ChatGPT Images 2.0 supports `images with thinking` on paid plans that include Thinking;
+- GPTs with Image Generation enabled in Capabilities can use the current ChatGPT image-generation model;
+- users can manually switch a Custom GPT conversation to another available model even when the GPT has a recommended model.
+
+Therefore the observed failures are not documented as an intended capability prohibition.
+
+Existing workaround patterns found in OpenAI-hosted sources:
+
+### W1 — Manually use Instant inside the Custom GPT
+
+OpenAI Support's explicit temporary workaround for the known `Thinking -> /mnt/data or no image` pattern.
+
+Verdict:
+- strongest support / most established workaround;
+- not a Thinking solution;
+- this is MYGPT's current production default.
+
+### W2 — Retry the same image request in Thinking
+
+OpenAI Developer Community reports ordinary ChatGPT Thinking image generation sometimes fails once and succeeds on retry with the same valid concept.
+
+Verdict:
+- evidence that the failure can be transient;
+- weak as production strategy because success is nondeterministic;
+- not enough to call Thinking stable.
+
+### W3 — Use the Images/Create Image surface instead of ordinary chat routing
+
+OpenAI's current Images documentation supports creating images through the Images surface / Create Image flow. Community reports describe cases where the Images page works while a normal Thinking chat fails.
+
+Verdict:
+- plausible route to force image-generation UX/tool routing;
+- not demonstrated to preserve a Custom GPT's Instructions/Knowledge/Actions context;
+- therefore not directly suitable for MYGPT worker production without an explicit inheritance test.
+
+### W4 — Clean seed -> Branch -> switch branch to Thinking -> image request
+
+MYGPT local evidence:
+- fresh/clean Custom-GPT seed with canonical attached;
+- Branch in new chat;
+- switch branched conversation from Instant to Thinking;
+- native image generation succeeded once and returned A/B alternatives.
+
+Verdict:
+- strongest local Thinking success path;
+- causal mechanism unproven;
+- only one successful image-generation sample, so reliability remains unknown.
+
+### W5 — Use regular ChatGPT instead of the Custom GPT and reproduce the worker protocol in prompt/context
+
+A community workaround suggested copying the Custom GPT's instruction protocol into a normal ChatGPT session because ordinary ChatGPT image generation was more reliable for some users.
+
+Verdict:
+- useful fallback for owner-only workflows;
+- loses the direct Custom-GPT configuration boundary unless the orchestrator reproduces it;
+- not preferred while MYGPT depends on Custom GPT worker configuration and future Actions.
+
+### W6 — Different client/browser/account/session
+
+Community evidence shows substantial variability across browsers/devices/accounts/sessions, including Custom GPT image generation working for some users on iPad and web while others fail.
+
+Verdict:
+- diagnostic fallback only;
+- not a controllable architecture-level solution.
+
+## Current ranking for MYGPT
+
+For production stability:
+1. `Custom GPT + Instant` — proven local production path and OpenAI Support workaround.
+2. `Instant generation -> Branch/Thinking critic` — current promising role split; Thinking does not need to generate.
+3. `clean seed -> Branch -> Thinking image generation` — only if a controlled reliability test shows it is materially better than direct Thinking.
+4. direct `Custom GPT + Thinking image generation` — research-only until repeatability is demonstrated.
+5. Images/Create Image surface or normal-chat protocol copy — fallback experiments, because Custom-GPT context inheritance is not established.
+
 ## Separate unresolved question: Instant output quality
 
 The above workaround only establishes tool availability. It does NOT establish that Instant produces image outputs suitable for MYGPT.
@@ -77,6 +155,12 @@ To separate Custom-GPT effects from model-mode effects, compare the same canonic
 - Custom GPT / Instant
 
 Use fresh conversations and direct canonical attachment in every condition.
+
+For the Branch hypothesis, add a separate controlled pair:
+- Custom GPT / direct Thinking from fresh chat
+- Custom GPT / clean-seed Branch -> switch to Thinking
+
+Do not infer Branch causality from one successful counterexample.
 
 ## Evaluation axes
 
