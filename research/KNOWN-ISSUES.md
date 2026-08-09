@@ -1,12 +1,12 @@
 # MYGPT known issues / limitations index
 
-更新日: 2026-08-09 JST
+更新日: 2026-08-09 19:03 JST
 
 この文書は既知不具合・制約の**索引**。詳細な再現ログや原因分析は `research/incidents/` / `research/experiments/` / `research/audits/` に置く。
 
 Status:
 - `ACTIVE` — 現在も発生し得る
-- `VERIFYING` — 実装済みだが実機acceptance未完了
+- `VERIFYING` — 修正済みだが実機acceptance未完了
 - `MITIGATED` — 原因/条件が分かり、現行architectureで回避中
 - `RESOLVED` — 現行baselineでは修正済み
 
@@ -48,7 +48,7 @@ Status: `ACTIVE`
 現在の扱い:
 - production defaultはInstantを維持
 - 将来、`Instantで準備 -> Branch -> Thinking -> image generation` を独立実験する
-- Worker Fanout v0.4.6 acceptance前には実装しない
+- selected-output acceptanceや画像差分分析より先に実装しない
 
 Evidence:
 - `research/experiments/2026-08-08-n2-branch-thinking-followup-result.md`
@@ -74,25 +74,47 @@ Evidence:
 
 ## VERIFYING
 
-### KI-004 — v0.4.6 selectable output folder
+### KI-004 — selected output directory permission can return to `prompt`
 
 Status: `VERIFYING`
 
-実装状態:
-- user-selected directory handleをIndexedDBへ保存
-- v0.4.5の成功済みdownload後にselected folderへrelocate
-- destination size verification後のみtemporary Downloads copyを削除
-- custom folder未指定時は従来Downloads経路を維持
+v0.4.6 live observation:
 
-未完了:
-- Vivaldi実機でF2/F3/F4の `Output: COMPLETE` acceptance
+```text
+Phase: COMPLETE / COOLDOWN | Recovery: COMPLETE | Output: PERMISSION_REQUIRED
+F2 image=COMPLETE/...F2.png | output=-
+F3 image=COMPLETE/...F3.png | output=-
+F4 image=COMPLETE/...F4.png | output=-
+output OUTPUT_DIRECTORY_PERMISSION_REQUIRED: {"permission":"prompt"}
+```
 
-Acceptance:
-- `Recovery: COMPLETE`
-- `Output: COMPLETE`
-- selected folderにF2/F3/F4の3画像が存在
-- relocation成功後、temporary Downloads copyが削除
-- default Downloads modeへ戻して従来経路も維持
+Confirmed boundary:
+- v0.4.4 fanout succeeded;
+- all three generations succeeded;
+- v0.4.5 image recovery succeeded;
+- selected-folder relocation did not begin because the stored directory handle's read/write permission was `prompt`;
+- original recovered images remained in `Downloads/MYGPT-Worker-Fanout/`.
+
+Cause class:
+- `FileSystemDirectoryHandle` persistence and permission persistence are separate;
+- a stored handle can be recovered from IndexedDB while write permission needs to be requested again;
+- that permission request requires a user gesture, so the service worker can detect `prompt` but cannot silently grant it.
+
+v0.4.7 fix:
+- popup retains the selected handle in memory;
+- `Output: PERMISSION_REQUIRED` changes the control to `保存先を再許可して保存`;
+- user click calls `requestPermission({mode:"readwrite"})` on the existing handle;
+- permission success renews output-directory metadata revision;
+- unchanged `output_relocator.js` observes the revision change and resumes relocation;
+- no regeneration is required for a still-live v0.4.7 runtime.
+
+Acceptance pending:
+- fresh v0.4.7 run reaches generation `COMPLETE` and `Recovery: COMPLETE`;
+- if Chromium returns `prompt`, one popup reauthorization click is sufficient;
+- final `Output: COMPLETE`;
+- F2/F3/F4 `output=COMPLETE/<filename>`;
+- selected folder contains all three images;
+- temporary Downloads copies are removed only after verified relocation.
 
 Evidence:
 - `research/experiments/2026-08-09-worker-fanout-isolated-generation-recovery-output-checkpoint.md`
