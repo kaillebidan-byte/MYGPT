@@ -8,8 +8,12 @@ const LEGACY_PAYLOAD_KEY = "mygptV3Payload";
 const SLOT_IDS = Object.freeze(["F2", "F3", "F4"]);
 const MONITOR_PORT = "mygpt-worker-monitor";
 const SCAN_ALARM = "mygpt-v4-scan-watchdog";
+const SEQUENCE_ALARM = "mygpt-v4-sequence-step";
 const SCAN_PERIOD_MINUTES = 0.5;
 const SUBMIT_VERIFY_TIMEOUT_MS = 12000;
+const OPEN_SETTLE_MS = 15000;
+const ATTACH_SETTLE_MS = 15000;
+const SLOT_COOLDOWN_MS = 5000;
 
 const MSG = Object.freeze({
   RUN_THREE: "MYGPT_V4_RUN_THREE",
@@ -64,6 +68,9 @@ function emptyRuntime() {
     workerIdentity: null,
     fileName: null,
     fileSize: null,
+    activeSlotId: null,
+    sequenceStage: "IDLE",
+    nextActionAt: 0,
     slots: SLOT_IDS.map(emptySlot),
     error: null,
     startedAt: null,
@@ -149,6 +156,21 @@ async function clearScanAlarm() {
   await chrome.alarms.clear(SCAN_ALARM).catch(() => {});
 }
 
+async function clearSequenceAlarm() {
+  await chrome.alarms.clear(SEQUENCE_ALARM).catch(() => {});
+}
+
+async function scheduleSequenceAlarm(token, stage, delayMs) {
+  const when = Date.now() + Math.max(0, Number(delayMs) || 0);
+  const mutation = await guard.mutateIfToken(token, (runtime) => ({
+    next: { ...runtime, sequenceStage: stage, nextActionAt: when }
+  }));
+  if (!mutation.committed) return false;
+  await clearSequenceAlarm();
+  chrome.alarms.create(SEQUENCE_ALARM, { when });
+  return true;
+}
+
 async function ensureMainRuntime(tabId) {
   let available = false;
   try {
@@ -217,7 +239,7 @@ async function waitForIdentity(tabId, timeoutMs = 20000) {
 async function openSlotTab(token, sourceIdentity, slotId) {
   if (!(await guard.isCurrent(token))) return { ok: false, slotId, error: "STALE_RUN" };
   let tab;
-  try { tab = await chrome.tabs.create({ url: sourceIdentity.workerUrl, active: false }); }
+  try { tab = await chrome.tabs.create({ url: sourceIdentity.workerUrl, active: true }); }
   catch (error) {
     await mutateSlot(token, slotId, { phase: "ERROR", error: { code: "TAB_CREATE_FAILED", detail: String(error) } });
     return { ok: false, slotId, error: "TAB_CREATE_FAILED" };
@@ -255,7 +277,7 @@ async function activateTab(tabId) {
   await new Promise((resolve) => setTimeout(resolve, 250));
 }
 
-async function prepareInMain(tabId, args) {
+async function attachInMain(tabId, args) {
   await ensureMainRuntime(tabId);
   const execution = await chrome.scripting.executeScript({
     target: { tabId }, world: "MAIN",
@@ -270,16 +292,38 @@ async function prepareInMain(tabId, args) {
       if (generationActive()) return { ok: false, reason: "GENERATION_ALREADY_ACTIVE" };
       if (adapter.composerDraftText(document)) return { ok: false, reason: "COMPOSER_NOT_EMPTY" };
       const attachment = await adapter.attachFile(input.file, {
-        document, composerTimeout: 15000, uploadTimeout: 90000, uploadInterval: 250, attachmentUiTimeout: 10000
+        document,
+        composerTimeout: 15000,
+        uploadTimeout: 90000,
+        uploadInterval: 250,
+        attachmentUiTimeout: 10000,
+        maxAttachmentAttempts: 2,
+        retryDelay: 750
       });
       if (!attachment.ok) return { ...attachment, submitted: false };
-      const pasted = await adapter.pastePrompt(input.packet, { document, window, editorTimeout: 15000, reflectTimeout: 5000 });
-      if (!pasted.ok) return { ...pasted, attachment, submitted: false };
-      return { ok: true, attachment, pasted, submitted: false, executionWorld: "MAIN" };
+      return { ok: true, attachment, submitted: false, executionWorld: "MAIN" };
     },
     args: [args]
   });
-  return execution?.[0]?.result || { ok: false, reason: "MAIN_PREPARE_NO_RESULT" };
+  return execution?.[0]?.result || { ok: false, reason: "MAIN_ATTACH_NO_RESULT" };
+}
+
+async function pasteInMain(tabId, args) {
+  await ensureMainRuntime(tabId);
+  const execution = await chrome.scripting.executeScript({
+    target: { tabId }, world: "MAIN",
+    func: async (input) => {
+      const adapter = globalThis.MYGPTChatGPTAdapter;
+      if (!adapter) return { ok: false, reason: "MAIN_ADAPTER_UNAVAILABLE" };
+      const pasted = await adapter.pastePrompt(input.packet, {
+        document, window, editorTimeout: 15000, reflectTimeout: 5000
+      });
+      if (!pasted.ok) return { ...pasted, submitted: false };
+      return { ok: true, pasted, submitted: false, executionWorld: "MAIN" };
+    },
+    args: [args]
+  });
+  return execution?.[0]?.result || { ok: false, reason: "MAIN_PASTE_NO_RESULT" };
 }
 
 async function activateSendInMain(tabId, args) {
@@ -296,7 +340,6 @@ async function activateSendInMain(tabId, args) {
       const button = await stacker.waitFor(() => runner.getSendButton(editor), { timeout: 10000, interval: 100 });
       if (!button) { runner.stop(); return { ok: false, reason: "SEND_BUTTON_NOT_READY" }; }
 
-      // AutoGPT observer-before-trigger sequencing. Translation Loop supplies native click.
       window.dispatchEvent(new CustomEvent("MYGPT_V3_ARM_PAGE_OBSERVER", {
         detail: {
           nonce: input.nonce,
@@ -337,78 +380,177 @@ async function waitForSubmitEvidence(tabId, packet, nonce, before) {
   return { committed: false, network: pageEvidenceByNonce.get(nonce) || {}, dom: lastDomEvidence, after: lastAfter };
 }
 
-async function prepareSubmitSlot(token, sourceIdentity, payload, staged) {
-  if (!staged?.ok || !Number.isInteger(staged.tabId)) return staged;
-  const { slotId, tabId } = staged;
-  if (!(await guard.isCurrent(token))) return { ok: false, slotId, tabId, error: "STALE_RUN" };
-  await mutateSlot(token, slotId, { phase: "PREPARING" });
+async function failSequentialSlot(token, slotId, code, detail = null) {
+  await mutateSlot(token, slotId, {
+    phase: "ERROR",
+    error: { code, detail }
+  });
+  await appendLog("slot_error", { slotId, code, detail });
+  const runtime = await readRuntime();
+  if (runtime.runToken !== token) return;
+  if (runtime.activeSlotId === slotId) {
+    await guard.mutateIfToken(token, (current) => ({
+      next: { ...current, activeSlotId: null, phase: "PREPARING" }
+    }));
+  }
+  await scheduleSequenceAlarm(token, "COOLDOWN", SLOT_COOLDOWN_MS);
+}
 
-  try { await activateTab(tabId); }
-  catch (error) {
-    await mutateSlot(token, slotId, { phase: "ERROR", error: { code: "TAB_ACTIVATION_FAILED", detail: String(error) } });
-    return { ok: false, slotId, tabId, error: "TAB_ACTIVATION_FAILED" };
+async function beginNextSequentialSlot(token) {
+  const runtime = await readRuntime();
+  if (!runtime.enabled || runtime.runToken !== token || runtime.activeSlotId) return false;
+  const next = runtime.slots.find((slot) => slot.phase === "QUEUED");
+  if (!next) {
+    await recomputeOverall(token);
+    return false;
+  }
+  const opened = await openSlotTab(token, runtime.workerIdentity, next.slotId);
+  if (!opened?.ok) {
+    await failSequentialSlot(token, next.slotId, opened?.error || "TAB_CREATE_FAILED", opened || null);
+    return false;
+  }
+  await guard.mutateIfToken(token, (current) => ({
+    next: { ...current, activeSlotId: next.slotId, phase: "PREPARING" }
+  }));
+  await appendLog("slot_opened", { slotId: next.slotId, tabId: opened.tabId, openSettleMs: OPEN_SETTLE_MS });
+  await scheduleSequenceAlarm(token, "OPEN_WAIT", OPEN_SETTLE_MS);
+  return true;
+}
+
+async function handleOpenWait(token) {
+  const runtime = await readRuntime();
+  if (!runtime.enabled || runtime.runToken !== token || runtime.sequenceStage !== "OPEN_WAIT") return;
+  const slot = runtime.slots.find((item) => item.slotId === runtime.activeSlotId);
+  if (!slot || !Number.isInteger(slot.tabId)) return;
+
+  const staged = await verifySlotTab(token, runtime.workerIdentity, {
+    ok: true, slotId: slot.slotId, tabId: slot.tabId
+  });
+  if (!staged?.ok) {
+    await failSequentialSlot(token, slot.slotId, staged?.error || "VERIFY_FAILED", staged || null);
+    return;
   }
 
-  const baseline = await captureTab(tabId).catch(() => null);
+  const baseline = staged.snapshot || await captureTab(slot.tabId).catch(() => null);
   if (!baseline) {
-    await mutateSlot(token, slotId, { phase: "ERROR", error: { code: "PREPARE_BASELINE_CAPTURE_FAILED" } });
-    return { ok: false, slotId, tabId, error: "PREPARE_BASELINE_CAPTURE_FAILED" };
+    await failSequentialSlot(token, slot.slotId, "PREPARE_BASELINE_CAPTURE_FAILED");
+    return;
   }
 
-  let prepared;
+  const payload = await getPayload();
+  if (!payloadValid(payload)) {
+    await failSequentialSlot(token, slot.slotId, "PAYLOAD_NOT_READY");
+    return;
+  }
+
+  let attached;
   try {
-    prepared = await prepareInMain(tabId, { slotId, runToken: token, file: payload.file, packet: payload.packets[slotId] });
+    attached = await attachInMain(slot.tabId, {
+      slotId: slot.slotId,
+      runToken: token,
+      file: payload.file
+    });
   } catch (error) {
-    prepared = { ok: false, reason: "MAIN_PREPARE_FAILED", detail: String(error) };
+    attached = { ok: false, reason: "MAIN_ATTACH_FAILED", detail: String(error) };
   }
-  if (!prepared?.ok) {
-    await mutateSlot(token, slotId, { phase: "ERROR", error: { code: prepared?.reason || "PREPARE_FAILED", detail: prepared || null } });
-    return { ok: false, slotId, tabId, error: prepared?.reason || "PREPARE_FAILED" };
+  if (!attached?.ok) {
+    await failSequentialSlot(token, slot.slotId, attached?.reason || "ATTACH_FAILED", attached || null);
+    return;
   }
 
-  // Reset/new-run can invalidate the operation after a slow upload/paste. Do not click unless still current.
-  if (!(await guard.isCurrent(token))) return { ok: false, slotId, tabId, error: "STALE_BEFORE_SUBMIT" };
-  const before = await captureTab(tabId).catch(() => null);
+  await mutateSlot(token, slot.slotId, {
+    phase: "ATTACHED",
+    assistantBaselineCount: Number(baseline.assistantCount || 0),
+    attachmentEvidence: attached.attachment?.evidence || null,
+    attachmentUiEvidence: attached.attachment?.attachmentUiEvidence || null,
+    error: null
+  });
+  await appendLog("slot_attached", {
+    slotId: slot.slotId,
+    tabId: slot.tabId,
+    evidence: attached.attachment?.evidence || null,
+    ui: attached.attachment?.attachmentUiEvidence || null,
+    attachSettleMs: ATTACH_SETTLE_MS
+  });
+  await scheduleSequenceAlarm(token, "ATTACH_WAIT", ATTACH_SETTLE_MS);
+}
+
+async function handleAttachWait(token) {
+  const runtime = await readRuntime();
+  if (!runtime.enabled || runtime.runToken !== token || runtime.sequenceStage !== "ATTACH_WAIT") return;
+  const slot = runtime.slots.find((item) => item.slotId === runtime.activeSlotId);
+  if (!slot || !Number.isInteger(slot.tabId)) return;
+
+  const payload = await getPayload();
+  if (!payloadValid(payload)) {
+    await failSequentialSlot(token, slot.slotId, "PAYLOAD_NOT_READY");
+    return;
+  }
+  if (!(await guard.isCurrent(token))) return;
+
+  let pasted;
+  try {
+    pasted = await pasteInMain(slot.tabId, {
+      slotId: slot.slotId,
+      runToken: token,
+      packet: payload.packets[slot.slotId]
+    });
+  } catch (error) {
+    pasted = { ok: false, reason: "MAIN_PASTE_FAILED", detail: String(error) };
+  }
+  if (!pasted?.ok) {
+    await failSequentialSlot(token, slot.slotId, pasted?.reason || "PASTE_FAILED", pasted || null);
+    return;
+  }
+
+  if (!(await guard.isCurrent(token))) return;
+  const before = await captureTab(slot.tabId).catch(() => null);
   if (!before) {
-    await mutateSlot(token, slotId, { phase: "ERROR", error: { code: "PRE_SUBMIT_CAPTURE_FAILED" } });
-    return { ok: false, slotId, tabId, error: "PRE_SUBMIT_CAPTURE_FAILED" };
+    await failSequentialSlot(token, slot.slotId, "PRE_SUBMIT_CAPTURE_FAILED");
+    return;
   }
 
   const nonce = crypto.randomUUID();
-  await mutateSlot(token, slotId, {
+  await mutateSlot(token, slot.slotId, {
     phase: "SUBMITTING",
     submitNonce: nonce,
-    assistantBaselineCount: Number(baseline.assistantCount || 0),
-    attachmentEvidence: prepared.attachment?.evidence || null,
-    attachmentUiEvidence: prepared.attachment?.attachmentUiEvidence || null,
-    insertionMethod: prepared.pasted?.method || null,
+    insertionMethod: pasted.pasted?.method || null,
     terminalGateState: TranslationLoopTerminalGate.createGateState(Date.now())
   });
 
-  if (!(await guard.isCurrent(token))) return { ok: false, slotId, tabId, error: "STALE_BEFORE_ACTIVATION" };
   let activation;
-  try { activation = await activateSendInMain(tabId, { packet: payload.packets[slotId], nonce }); }
-  catch (error) { activation = { ok: false, reason: "MAIN_ACTIVATION_FAILED", detail: String(error) }; }
-
+  try {
+    activation = await activateSendInMain(slot.tabId, {
+      packet: payload.packets[slot.slotId],
+      nonce
+    });
+  } catch (error) {
+    activation = { ok: false, reason: "MAIN_ACTIVATION_FAILED", detail: String(error) };
+  }
   if (!activation?.ok || activation.submitted !== true || activation.activation?.activation !== "native-click") {
-    await mutateSlot(token, slotId, { phase: "ERROR", error: { code: activation?.reason || "SUBMIT_FAILED", detail: activation || null } });
-    return { ok: false, slotId, tabId, error: activation?.reason || "SUBMIT_FAILED" };
+    await failSequentialSlot(token, slot.slotId, activation?.reason || "SUBMIT_FAILED", activation || null);
+    return;
   }
 
-  const evidence = await waitForSubmitEvidence(tabId, payload.packets[slotId], nonce, before);
+  const evidence = await waitForSubmitEvidence(
+    slot.tabId,
+    payload.packets[slot.slotId],
+    nonce,
+    before
+  );
   if (!evidence.committed) {
-    await mutateSlot(token, slotId, {
-      phase: "ERROR", activation: activation.activation?.activation || null,
-      error: { code: "SUBMIT_EVIDENCE_TIMEOUT", detail: evidence }
+    await mutateSlot(token, slot.slotId, {
+      activation: activation.activation?.activation || null
     });
-    return { ok: false, slotId, tabId, error: "SUBMIT_EVIDENCE_TIMEOUT" };
+    await failSequentialSlot(token, slot.slotId, "SUBMIT_EVIDENCE_TIMEOUT", evidence);
+    return;
   }
 
   const after = evidence.after || {};
   const conversationId = evidence.network?.conversationId || after.conversationId || null;
-  await mutateSlot(token, slotId, {
+  await mutateSlot(token, slot.slotId, {
     phase: after.generationActive ? "GENERATING" : "SUBMITTED",
-    packetChars: prepared.pasted?.observedChars || payload.packets[slotId].length,
+    packetChars: pasted.pasted?.observedChars || payload.packets[slot.slotId].length,
     activation: activation.activation.activation,
     submitEvidence: evidence.proof,
     conversationId,
@@ -417,8 +559,48 @@ async function prepareSubmitSlot(token, sourceIdentity, payload, staged) {
     lastMonitorAt: Date.now(),
     error: null
   });
-  await appendLog("slot_submitted", { slotId, tabId, nonce, proof: evidence.proof, conversationId });
-  return { ok: true, slotId, tabId, nonce };
+  await guard.mutateIfToken(token, (current) => ({
+    next: {
+      ...current,
+      phase: "MONITORING",
+      sequenceStage: "WAIT_COMPLETE",
+      nextActionAt: 0
+    }
+  }));
+  await clearSequenceAlarm();
+  await appendLog("slot_submitted", {
+    slotId: slot.slotId,
+    tabId: slot.tabId,
+    nonce,
+    proof: evidence.proof,
+    conversationId
+  });
+}
+
+async function scheduleAfterSequentialSlot(token, slotId) {
+  const runtime = await readRuntime();
+  if (!runtime.enabled || runtime.runToken !== token || runtime.activeSlotId !== slotId) return;
+  await guard.mutateIfToken(token, (current) => ({
+    next: { ...current, activeSlotId: null, phase: "PREPARING" }
+  }));
+  await scheduleSequenceAlarm(token, "COOLDOWN", SLOT_COOLDOWN_MS);
+}
+
+async function handleSequenceAlarm() {
+  const runtime = await readRuntime();
+  if (!runtime.enabled || !runtime.runToken) return;
+  const token = runtime.runToken;
+  if (runtime.sequenceStage === "OPEN_WAIT") {
+    await handleOpenWait(token);
+    return;
+  }
+  if (runtime.sequenceStage === "ATTACH_WAIT") {
+    await handleAttachWait(token);
+    return;
+  }
+  if (runtime.sequenceStage === "COOLDOWN") {
+    await beginNextSequentialSlot(token);
+  }
 }
 
 function monitorContentKey(snapshot) {
@@ -429,7 +611,7 @@ async function processMonitorSnapshot(tabId, snapshot, source = "port") {
   const runtime = await readRuntime();
   if (!runtime.enabled || !runtime.runToken) return;
   const slot = runtime.slots.find((item) => item.tabId === tabId);
-  if (!slot || ["IDLE", "QUEUED", "OPENING", "VERIFYING", "STAGED", "PREPARING", "SUBMITTING", "ERROR", "COMPLETE"].includes(slot.phase)) return;
+  if (!slot || ["IDLE", "QUEUED", "OPENING", "VERIFYING", "STAGED", "PREPARING", "ATTACHED", "SUBMITTING", "ERROR", "COMPLETE"].includes(slot.phase)) return;
   if (!MYGPTWorkerRoute.sameWorkerIdentity(runtime.workerIdentity, snapshot.identity)) return;
 
   const now = Date.now();
@@ -488,7 +670,12 @@ async function processMonitorSnapshot(tabId, snapshot, source = "port") {
     lastMonitorAt: now
   });
   if (!mutation.committed) return;
-  if (complete) await appendLog("slot_complete", { slotId: slot.slotId, tabId, proof, source });
+  if (complete) {
+    await appendLog("slot_complete", { slotId: slot.slotId, tabId, proof, source });
+    if (runtime.activeSlotId === slot.slotId && runtime.sequenceStage === "WAIT_COMPLETE") {
+      await scheduleAfterSequentialSlot(runtime.runToken, slot.slotId);
+    }
+  }
   await recomputeOverall(runtime.runToken);
 }
 
@@ -496,7 +683,7 @@ async function recomputeOverall(token) {
   const mutation = await guard.mutateIfToken(token, (runtime) => {
     const completeCount = runtime.slots.filter((slot) => slot.phase === "COMPLETE").length;
     const errorCount = runtime.slots.filter((slot) => slot.phase === "ERROR").length;
-    const activeCount = runtime.slots.filter((slot) => ["SUBMITTED", "GENERATING", "SETTLING", "SUBMITTING", "PREPARING"].includes(slot.phase)).length;
+    const activeCount = runtime.slots.filter((slot) => ["OPENING", "VERIFYING", "STAGED", "PREPARING", "ATTACHED", "SUBMITTING", "SUBMITTED", "GENERATING", "SETTLING"].includes(slot.phase)).length;
     if (activeCount > 0) {
       return { next: { ...runtime, phase: errorCount ? "PARTIAL_MONITORING" : "MONITORING" } };
     }
@@ -514,7 +701,14 @@ async function recomputeOverall(token) {
     }
     return { next: runtime };
   });
-  if (mutation.value?.finished) await clearScanAlarm();
+  if (mutation.value?.finished) {
+    await clearScanAlarm();
+    await clearSequenceAlarm();
+    const sourceTabId = mutation.runtime?.sourceTabId;
+    if (Number.isInteger(sourceTabId)) {
+      await chrome.tabs.update(sourceTabId, { active: true }).catch(() => {});
+    }
+  }
   return mutation.runtime;
 }
 
@@ -537,49 +731,35 @@ async function startThree(message) {
     const token = guard.newToken();
     return {
       next: {
-        ...emptyRuntime(), enabled: true, runToken: token, phase: "PREPARING", sourceTabId,
-        workerIdentity: sourceIdentity, fileName: payload.file.name || null,
+        ...emptyRuntime(),
+        enabled: true,
+        runToken: token,
+        phase: "PREPARING",
+        sourceTabId,
+        workerIdentity: sourceIdentity,
+        fileName: payload.file.name || null,
         fileSize: Number.isFinite(payload.file.size) ? payload.file.size : null,
-        slots: SLOT_IDS.map((slotId) => ({ ...emptySlot(slotId), phase: "QUEUED", packetChars: payload.packets[slotId].length })),
+        activeSlotId: null,
+        sequenceStage: "STARTING",
+        nextActionAt: 0,
+        slots: SLOT_IDS.map((slotId) => ({
+          ...emptySlot(slotId),
+          phase: "QUEUED",
+          packetChars: payload.packets[slotId].length
+        })),
         startedAt: Date.now()
-      }, value: token
+      },
+      value: token
     };
   });
   if (!start.committed || !start.value) return { ok: false, error: "RUN_START_REJECTED", state: start.runtime };
+
   const token = start.value;
   await ensureScanAlarm();
-
-  const opened = [];
-  for (const slotId of SLOT_IDS) {
-    if (!(await guard.isCurrent(token))) break;
-    opened.push(await openSlotTab(token, sourceIdentity, slotId));
-  }
-  const staged = [];
-  for (const item of opened) {
-    if (!(await guard.isCurrent(token))) break;
-    staged.push(await verifySlotTab(token, sourceIdentity, item));
-  }
-  const results = [];
-  for (const item of staged) {
-    if (!(await guard.isCurrent(token))) break;
-    results.push(await prepareSubmitSlot(token, sourceIdentity, payload, item));
-  }
-
-  await chrome.tabs.update(sourceTabId, { active: true }).catch(() => {});
-  const latest = await readRuntime();
-  const submitted = latest.slots.filter((slot) => ["SUBMITTED", "GENERATING", "SETTLING", "COMPLETE"].includes(slot.phase)).length;
-  const errors = latest.slots.filter((slot) => slot.phase === "ERROR").length;
-  if (submitted === 0) {
-    const final = await guard.mutateIfToken(token, (runtime) => ({
-      next: { ...runtime, enabled: false, runToken: null, phase: "ERROR", error: { code: "NO_SLOT_SUBMITTED", detail: { errors } } }
-    }));
-    await clearScanAlarm();
-    return { ok: false, error: "NO_SLOT_SUBMITTED", state: final.runtime, results };
-  }
-  const monitored = await guard.mutateIfToken(token, (runtime) => ({
-    next: { ...runtime, phase: errors ? "PARTIAL_MONITORING" : "MONITORING", error: errors ? { code: "ONE_OR_MORE_SLOTS_FAILED", detail: { submitted, errors } } : null }
-  }));
-  return { ok: true, state: monitored.runtime, results };
+  await clearSequenceAlarm();
+  await beginNextSequentialSlot(token);
+  const state = await readRuntime();
+  return { ok: true, state };
 }
 
 async function resetRuntime() {
@@ -588,6 +768,7 @@ async function resetRuntime() {
   for (const tabId of ids) { try { await chrome.tabs.remove(tabId); } catch (_) {} }
   pageEvidenceByNonce.clear();
   await clearScanAlarm();
+  await clearSequenceAlarm();
   const state = await saveRuntime(emptyRuntime());
   return { ok: true, state };
 }
@@ -635,6 +816,10 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === SEQUENCE_ALARM) {
+    handleSequenceAlarm().catch(() => {});
+    return;
+  }
   if (alarm.name !== SCAN_ALARM) return;
   readRuntime().then(async (runtime) => {
     if (!runtime.enabled || !runtime.runToken) return;
@@ -667,6 +852,9 @@ chrome.tabs.onRemoved.addListener((tabId) => {
     const slot = state.slots.find((item) => item.tabId === tabId);
     if (!slot || ["COMPLETE", "ERROR"].includes(slot.phase)) return;
     await mutateSlot(state.runToken, slot.slotId, { phase: "ERROR", error: { code: "WORKER_TAB_CLOSED", detail: { tabId } } });
+    if (state.activeSlotId === slot.slotId) {
+      await scheduleAfterSequentialSlot(state.runToken, slot.slotId);
+    }
     await recomputeOverall(state.runToken);
   }).catch(() => {});
 });
