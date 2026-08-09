@@ -10,7 +10,7 @@ GitHub `main` を正本とする。古い実験記録や過去handoffより、CU
 2. `research/KNOWN-ISSUES.md` — **既知不具合 / 制約 / 回避策 / 解決済み問題の索引**
 3. `research/SEARCH-INDEX.md` — **既存例検索 / 中国語圏調査 / prior art / community browser automation / 公開GPT調査の入口**
 4. `research/README.md` — **research全体の資料地図と読み順**
-5. `extensions/mygpt-worker-fanout-v3/README.md` — **Worker Fanout現行実装**
+5. `extensions/mygpt-worker-fanout-v3/README.md` — **main上のWorker Fanout現行実装**
 
 実装内部を探す場合は `research/reference/README.md` から入る。
 外部例を探す場合は `research/SEARCH-INDEX.md` から入る。
@@ -32,20 +32,20 @@ GitHub `main` を正本とする。古い実験記録や過去handoffより、CU
 Generation品質の正本:
 - `research/decisions/2026-08-08-production-v0-generalized-verdict.md`
 
-### Worker Fanout
+### Worker Fanout — main baseline
 
-Current extension:
+Current extension on `main`:
 - `extensions/mygpt-worker-fanout-v3/`
 
 Current proven boundary:
 - **v0.4.4** — sequential isolated F2/F3/F4 fanout: LIVE PASS
 - **v0.4.5** — generated-image recovery to default Downloads: LIVE PASS
 - **v0.4.6** — selected-folder first live run: `PERMISSION_REQUIRED` FAIL isolated after successful recovery
-- **v0.4.7** — reactive popup reauthorization patch exists, but is **PROVISIONAL STATIC** pending alignment with reviewed prior art before another generation test
+- **v0.4.7** — reactive popup reauthorization patch exists, but is **PROVISIONAL STATIC**; do not spend another generation run on this ordering first
 
 v0.4.6 failure did **not** regress generation or recovery. The three images were recovered successfully to `Downloads/MYGPT-Worker-Fanout/`; only selected-directory relocation was blocked because the stored directory handle's write permission returned to `prompt`.
 
-Existing-solutions / prior-art review is now complete:
+Existing-solutions / prior-art review is complete:
 - Chrome official / VS Code Web: persisted `FileSystemDirectoryHandle` in IndexedDB + `queryPermission` / `requestPermission`
 - `chrome.downloads`: Downloads-relative staging only
 - `idb-keyval`: optional tiny persistence helper, not required for current one-record no-bundler extension
@@ -57,12 +57,6 @@ Existing-solutions / prior-art review is now complete:
 Prior-art record:
 - `research/prior-art/2026-08-09-selectable-output-directory-browser-prior-art.md`
 
-Current next Worker Fanout action:
-- do **not** spend another generation run on the reactive-only v0.4.7 flow first;
-- preflight selected-directory write permission on the popup **Run user gesture** before starting F2/F3/F4;
-- keep post-run `PERMISSION_REQUIRED` only as a defensive fallback;
-- do not alter v0.4.4 fanout, v0.4.5 collector, or relocation/write verification without new failing evidence.
-
 Operational checkpoint:
 - `research/experiments/2026-08-09-worker-fanout-isolated-generation-recovery-output-checkpoint.md`
 
@@ -70,6 +64,30 @@ Known issue:
 - `research/KNOWN-ISSUES.md` — KI-004
 
 v0.4.4/v0.4.5で実機成功した生成・送信・回収経路は、新しい失敗証拠がない限り変更しない。
+
+### Worker Orchestrator v5 — active development branch
+
+Development branch:
+- `worker-orchestrator-v5`
+
+Status:
+- **v0.5.0 STATIC CANDIDATE / LIVE PENDING**
+- mainのv0.4.x baselineは未変更
+
+v5 purpose:
+- Chrome / VS Code Web型permission lifecycleに合わせ、custom output folderの書込権限を**Runクリック時にpreflight**する
+- future `Instant preparation -> Branch -> Thinking generation` をfresh-chat state machineへ直接埋め込まず、session strategyとして分離する
+
+Current strategies:
+- `fresh-chat` — SUPPORTED。既存の実機成功済み`MYGPT_V4_RUN_THREE` engineをそのまま利用
+- `branch-thinking` — RESERVED / `supported:false`。将来用でv0.5.0では実行不可
+
+v5 branch diffでは、`background.js`、`image_collector.js`、`output_relocator.js`、attach/paste/send/monitor primitiveは変更していない。
+
+Architecture record:
+- `research/plans/2026-08-09-worker-orchestrator-v5-architecture.md`
+
+Do not merge or call v5 production-proven until selected-folder live acceptance passes. Branch/Thinking automation itselfはまだ未実装。
 
 ## Source-of-truth order
 
