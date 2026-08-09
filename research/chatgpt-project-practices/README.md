@@ -1,11 +1,14 @@
 # ChatGPT Projects 実運用調査
 
 初回調査日: 2026-08-07
-更新日: 2026-08-08
+更新日: 2026-08-09
 
 ChatGPT Projectsを実際に使っている人の運用例、失敗例、回避策を集める。
 
 このディレクトリは単なる読み物置き場ではなく、MYGPT調整で**同じWeb検索を繰り返さず、既確認事項を土台に別角度へ進むためのdurable research state**として使う。
+
+外部調査全体の入口:
+- `research/SEARCH-INDEX.md`
 
 新しいWeb調査を始める前に、まず`search-ledger.md`を読む。
 該当topicが既に`DONE`なら、仕様更新や新実機証拠がない限り同じ一般検索を繰り返さない。
@@ -17,16 +20,26 @@ ChatGPT Projectsを実際に使っている人の運用例、失敗例、回避�
 - `patterns-and-pitfalls.md` — 複数資料から見える運用パターンと失敗
 - `image-reference-notes.md` — キャラクター画像参照に直接関係する実例とMYGPT実機結果
 - `imagegen-orchestration-context.md` — motion orchestration contextが単独frameをmulti-panel / sequence sheetへ崩す問題の外部調査と次回隔離テスト設計
+- `planner-worker-isolation.md` — planner / isolated image workerの既存実装・論文例のsurvey。後続Worker Fanout実機成功より前の設計結論なので、既存例調査として使う
 - `china-imagegen-practices.md` — 中国語圏の角色一致性、姿势控制、多图参考、分镜、multi-round editingに関する別角度の調査
+
+中国圏character-consistency論文の別資料:
+- `research/prior-art/2026-08-08-cn-character-consistency-recovered.md`
+
+browser automationの中国/community prior art:
+- `research/experiments/2026-08-08-n3-orchestration-ceiling.md`
+
+このN3文書の当時の未検証結論はhistorical。OpenGPTs / Autojourney等のprior-art部分を調査証拠として使い、CURRENT実装は2026-08-09 Worker Fanout checkpointを優先する。
 
 ## 調査の優先順位
 
 1. GitHub内の既存research / incident / experiment logを読む。
-2. `search-ledger.md`で既に検索済みか確認する。
-3. 公式一次資料を優先する。
-4. 公式資料で公開されていない挙動だけDeveloper Community、Reddit、実践記事、論文で補助する。
-5. Web情報とMYGPT実機結果が衝突した場合、MYGPTのproduction判断では実機結果を優先し、外部情報は仮説生成に使う。
-6. 調査後は「何を確認したか」だけでなく「何は確認できなかったか」「次に検索する別角度」をGitHubへ残す。
+2. `research/SEARCH-INDEX.md` で既存topic noteの所在を確認する。
+3. `search-ledger.md`で既に検索済みか確認する。
+4. 公式一次資料を優先する。
+5. 公式資料で公開されていない挙動だけDeveloper Community、Reddit、実践記事、論文で補助する。
+6. Web情報とMYGPT実機結果が衝突した場合、MYGPTのproduction判断では実機結果を優先し、外部情報は仮説生成に使う。
+7. 調査後は「何を確認したか」だけでなく「何は確認できなかったか」「次に検索する別角度」をGitHubへ残す。
 
 ## 現時点で繰り返し見つかった傾向
 
@@ -41,4 +54,4 @@ ChatGPT Projectsを実際に使っている人の運用例、失敗例、回避�
 9. GPT Imageはmulti-panel composition自体を対応用途として持つ。motion / sequence / storyboard等のglobal contextと単独frame要求が同居するときは、multi-panelへの再解釈を実機で切り分ける必要がある。
 10. 中国語圏のproduction-oriented AIGCでは、identity / pose / scene / style / structureを別referenceやvisual control channelへ分離する運用が目立つ。これはsingle-pose visual guideの将来試験候補になる。
 
-これらは外部資料の観察とMYGPT実機結果を区別して扱う。production仕様の正本は`research/PROJECT-HANDOFF.md`、`research/MOTION-GENERATION-EXPERIMENT-LOG.md`、各incident記録を優先する。
+これらは外部資料の観察とMYGPT実機結果を区別して扱う。production仕様の正本は`research/PROJECT-HANDOFF.md`、CURRENT decision/checkpoint、各incident記録を優先する。
