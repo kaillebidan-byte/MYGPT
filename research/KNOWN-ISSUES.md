@@ -1,12 +1,12 @@
 # MYGPT known issues / limitations index
 
-更新日: 2026-08-09 19:03 JST
+更新日: 2026-08-09 19:12 JST
 
 この文書は既知不具合・制約の**索引**。詳細な再現ログや原因分析は `research/incidents/` / `research/experiments/` / `research/audits/` に置く。
 
 Status:
 - `ACTIVE` — 現在も発生し得る
-- `VERIFYING` — 修正済みだが実機acceptance未完了
+- `VERIFYING` — 修正/方針ありだが実機acceptance未完了
 - `MITIGATED` — 原因/条件が分かり、現行architectureで回避中
 - `RESOLVED` — 現行baselineでは修正済み
 
@@ -100,17 +100,32 @@ Cause class:
 - a stored handle can be recovered from IndexedDB while write permission needs to be requested again;
 - that permission request requires a user gesture, so the service worker can detect `prompt` but cannot silently grant it.
 
-v0.4.7 fix:
-- popup retains the selected handle in memory;
-- `Output: PERMISSION_REQUIRED` changes the control to `保存先を再許可して保存`;
-- user click calls `requestPermission({mode:"readwrite"})` on the existing handle;
-- permission success renews output-directory metadata revision;
-- unchanged `output_relocator.js` observes the revision change and resumes relocation;
-- no regeneration is required for a still-live v0.4.7 runtime.
+Prior-art result:
+- Chrome's official File System Access guidance uses `queryPermission()` then `requestPermission()` for stored handles;
+- Chrome documents VS Code Web as a concrete IndexedDB persisted-handle example;
+- `chrome.downloads` remains Downloads-relative and cannot silently target an arbitrary absolute directory;
+- mature helper libraries (`browser-fs-access`, `native-file-system-adapter`, `idb-keyval`) were checked, but none should be added wholesale for the current one-directory Chromium-only requirement;
+- AutoGPT 0.0.71 does not contain a reusable arbitrary-directory permission module; Autojourney solves stronger native download management with a separate desktop Downloader.
 
-Acceptance pending:
-- fresh v0.4.7 run reaches generation `COMPLETE` and `Recovery: COMPLETE`;
-- if Chromium returns `prompt`, one popup reauthorization click is sufficient;
+Evidence:
+- `research/prior-art/2026-08-09-selectable-output-directory-browser-prior-art.md`
+
+v0.4.7 current state:
+- reactive popup reauthorization is implemented;
+- its stored-handle + `requestPermission({mode:"readwrite"})` concept matches the standard pattern;
+- treat it as provisional because permission is currently discovered only after the long run reaches relocation.
+
+Next fix boundary:
+- preflight selected-directory write permission on the **Run user gesture before generation starts**;
+- if permission is `prompt`, request it then;
+- if denied/error, do not start F2/F3/F4;
+- retain post-run `PERMISSION_REQUIRED` as a defensive fallback if permission changes during a run;
+- do not modify v0.4.4 fanout, v0.4.5 collector, or relocation/write verification without new failing evidence.
+
+Acceptance pending after preflight alignment:
+- Run resolves selected-folder permission before generation;
+- denied permission starts no workers;
+- granted permission permits normal three-worker generation and `Recovery: COMPLETE`;
 - final `Output: COMPLETE`;
 - F2/F3/F4 `output=COMPLETE/<filename>`;
 - selected folder contains all three images;
@@ -119,6 +134,7 @@ Acceptance pending:
 Evidence:
 - `research/experiments/2026-08-09-worker-fanout-isolated-generation-recovery-output-checkpoint.md`
 - `extensions/mygpt-worker-fanout-v3/README.md`
+- `research/prior-art/2026-08-09-selectable-output-directory-browser-prior-art.md`
 
 ---
 
