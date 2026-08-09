@@ -1,21 +1,22 @@
 {
   "manifest_version": 3,
   "name": "MYGPT Worker Fanout v4",
-  "version": "0.4.4",
-  "description": "Sequential isolated Custom GPT workers: one worker tab at a time with timed settle stages, Translation Loop submit evidence, AutoGPT upload/paste, and VoiceBridge-style monitoring.",
+  "version": "0.4.5",
+  "description": "Sequential isolated Custom GPT workers with proven v0.4.4 fanout plus post-generation recovery of each slot's generated image.",
   "permissions": [
     "storage",
     "tabs",
     "scripting",
     "unlimitedStorage",
-    "alarms"
+    "alarms",
+    "downloads"
   ],
   "host_permissions": [
     "https://chatgpt.com/*",
     "https://chat.openai.com/*"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "service_worker.js"
   },
   "action": {
     "default_title": "MYGPT Worker Fanout v4",
